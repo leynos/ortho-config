@@ -10,9 +10,10 @@ use rstest_bdd_macros::then;
 use serde_json::Value;
 
 use super::profile_redaction_assertions::{
-    assert_ordinary_ir_examples, assert_public_ir_fields, cli_possible_values, command_name,
-    context_enum_values, find_redaction, redaction_records, require_context_enum_values,
-    require_context_input_default, require_profiles_supported, require_records, section_examples,
+    RedactionExpectation, assert_ordinary_ir_examples, assert_public_ir_fields,
+    cli_possible_values, command_name, context_enum_values, find_redaction, redaction_records,
+    require_context_enum_values, require_context_input_default, require_profiles_supported,
+    require_records, section_examples,
 };
 use super::profile_redaction_support::{
     ARTEFACT_LOCALES, PRE_CHANGE_CACHE_SENTINEL, UNSUPPORTED_SENTINELS, all_protected_sentinels,
@@ -26,12 +27,32 @@ use super::steps::{OrthoHelpContext, StepResult};
 ///
 /// The table is the positive half of the disclosure contract: these identities
 /// stay visible, each with the classification its author declared.
-const EXPECTED_REDACTION: [(&[&str], &str, &str); 5] = [
-    (&["redaction_fixture"], "token", "secret"),
-    (&["redaction_fixture"], "locator", "reference_only"),
-    (&["redaction_fixture"], "api_key", "secret"),
-    (&["redaction_fixture"], "credential_file", "reference_only"),
-    (&["redaction_fixture", "rotate"], "replacement", "secret"),
+const EXPECTED_REDACTION: [RedactionExpectation; 5] = [
+    RedactionExpectation {
+        command_path: &["redaction_fixture"],
+        field: "token",
+        exposure: "secret",
+    },
+    RedactionExpectation {
+        command_path: &["redaction_fixture"],
+        field: "locator",
+        exposure: "reference_only",
+    },
+    RedactionExpectation {
+        command_path: &["redaction_fixture"],
+        field: "api_key",
+        exposure: "secret",
+    },
+    RedactionExpectation {
+        command_path: &["redaction_fixture"],
+        field: "credential_file",
+        exposure: "reference_only",
+    },
+    RedactionExpectation {
+        command_path: &["redaction_fixture", "rotate"],
+        field: "replacement",
+        exposure: "secret",
+    },
 ];
 
 // ---------------------------------------------------------------------------
@@ -73,12 +94,20 @@ fn context_declares_both_classifications(
 ) -> StepResult<()> {
     let context = read_out_json(orthohelp_context, "agent-context.json")?;
     let records = redaction_records(&context)?;
-    for (path, field, exposure) in EXPECTED_REDACTION {
-        let record = find_redaction(records, path, field)
-            .ok_or_else(|| format!("missing redaction record for {} {field}", path.join(" ")))?;
+    for expected in &EXPECTED_REDACTION {
+        let record = find_redaction(records, expected).ok_or_else(|| {
+            format!(
+                "missing redaction record for {} {}",
+                expected.command_path.join(" "),
+                expected.field
+            )
+        })?;
         require(
-            record.get("exposure").and_then(Value::as_str) == Some(exposure),
-            format!("{field} should be classified {exposure}"),
+            record.get("exposure").and_then(Value::as_str) == Some(expected.exposure),
+            format!(
+                "{} should be classified {}",
+                expected.field, expected.exposure
+            ),
         )?;
     }
     require(
@@ -256,8 +285,14 @@ fn no_unsupported_sentinel_in_any_artefact(
 fn redaction_list_names_both_fields(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
     let context = read_stdout_json(orthohelp_context)?;
     let records = redaction_records(&context)?;
-    require_records(records, "api_key", "secret")?;
-    require_records(records, "credential_file", "reference_only")
+    let hidden = ["api_key", "credential_file"];
+    for expected in EXPECTED_REDACTION
+        .iter()
+        .filter(|expected| hidden.contains(&expected.field))
+    {
+        require_records(records, expected)?;
+    }
+    Ok(())
 }
 
 #[then("neither field is an invocable input")]

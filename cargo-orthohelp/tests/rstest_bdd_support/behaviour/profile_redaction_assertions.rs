@@ -20,6 +20,17 @@ pub(super) fn require_profiles_supported(context: &Value) -> StepResult<()> {
     )
 }
 
+/// One record the fixture must publish in `profiles.redaction`.
+///
+/// The three facets belong together: a caller that passes them as loose
+/// arguments can transpose the field name and the exposure label, and the
+/// failure would then read as a missing record rather than a wrong one.
+pub(super) struct RedactionExpectation {
+    pub(super) command_path: &'static [&'static str],
+    pub(super) field: &'static str,
+    pub(super) exposure: &'static str,
+}
+
 pub(super) fn redaction_records(context: &Value) -> StepResult<&[Value]> {
     context
         .get("profiles")
@@ -31,14 +42,13 @@ pub(super) fn redaction_records(context: &Value) -> StepResult<&[Value]> {
 
 pub(super) fn find_redaction<'a>(
     records: &'a [Value],
-    path: &[&str],
-    field: &str,
+    expected: &RedactionExpectation,
 ) -> Option<&'a Value> {
     records.iter().find(|record| {
         record
             .get("field_name")
             .and_then(Value::as_str)
-            .is_some_and(|name| name == field)
+            .is_some_and(|name| name == expected.field)
             && record
                 .get("command_path")
                 .and_then(Value::as_array)
@@ -46,17 +56,28 @@ pub(super) fn find_redaction<'a>(
                     actual
                         .iter()
                         .filter_map(Value::as_str)
-                        .eq(path.iter().copied())
+                        .eq(expected.command_path.iter().copied())
                 })
     })
 }
 
-pub(super) fn require_records(records: &[Value], field: &str, exposure: &str) -> StepResult<()> {
-    let record = find_redaction(records, &["redaction_fixture"], field)
-        .ok_or_else(|| format!("missing redaction record for {field}"))?;
+pub(super) fn require_records(
+    records: &[Value],
+    expected: &RedactionExpectation,
+) -> StepResult<()> {
+    let record = find_redaction(records, expected).ok_or_else(|| {
+        format!(
+            "missing redaction record for {} {}",
+            expected.command_path.join(" "),
+            expected.field
+        )
+    })?;
     require(
-        record.get("exposure").and_then(Value::as_str) == Some(exposure),
-        format!("{field} should be classified {exposure}"),
+        record.get("exposure").and_then(Value::as_str) == Some(expected.exposure),
+        format!(
+            "{} should be classified {}",
+            expected.field, expected.exposure
+        ),
     )
 }
 
