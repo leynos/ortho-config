@@ -14,4 +14,13 @@ help: the trait `RequiredConfigSchema` is implemented for `Root`
    |
 15 | #[derive(Debug, Deserialize, Serialize, OrthoConfig)]
    |                                         ^^^^^^^^^^^
+note: required by a bound in `SchemaChildren::compose`
+  --> src/required_values/schema.rs
+   |
+   | impl SchemaChildren {
+...
+   |     pub fn compose<T>(stack: &mut RequiredSchemaStack) -> Result<Self, RequiredSchemaError>
+   |     where
+   |         T: RequiredConfigSchema + ?Sized,
+   |            ^^^^^^^^^^^^^^^^^^^^ required by this bound in `SchemaChildren::compose`
    = note: this error originates in the derive macro `OrthoConfig` (in Nightly builds, run with -Z macro-backtrace for more info)

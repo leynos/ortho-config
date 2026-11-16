@@ -10,13 +10,16 @@ use quote::quote;
 use syn::ext::IdentExt;
 use syn::{Field, Ident};
 
+use self::requiredness::{ActivationFacts, is_optional};
 use crate::derive::build::CliFieldMetadata;
 use crate::derive::parse::{
     FieldAttrs, SerdeRenameAll, StructAttrs, nested_schema_type, option_inner,
-    serde_deserialized_field_key, serde_field_aliases, serde_field_has_custom_deserializer,
-    serde_field_is_flattened, serde_field_skips_deserialization, serde_has_default,
-    serde_rename_rules,
+    serde_container_is_transparent, serde_deserialized_field_key, serde_field_aliases,
+    serde_field_has_custom_deserializer, serde_field_is_flattened,
+    serde_field_skips_deserialization, serde_has_default, serde_rename_rules,
 };
+
+mod requiredness;
 
 /// Parsed inputs needed to emit one required-value schema implementation.
 pub(crate) struct RequiredSchemaArgs<'a> {
@@ -35,6 +38,12 @@ pub(crate) struct RequiredSchemaArgs<'a> {
     /// Whether the container carries `#[serde(default)]`, making every field
     /// optional at the deserializer.
     pub container_default: bool,
+    /// Whether the container is `#[serde(transparent)]`, so its fields describe
+    /// the inner value rather than the object a parent key holds.
+    pub container_transparent: bool,
+    /// Whether this derive also emits the loader that materializes declared
+    /// defaults, which only [`crate::derive::OrthoConfig`] does.
+    pub materializes_defaults: bool,
     /// Resolved CLI flags, used only for fields whose key matches the parser.
     pub cli_metadata: &'a [CliFieldMetadata],
     /// Resolved crate path for downstream macro expansion.
@@ -60,6 +69,9 @@ pub(crate) struct RequiredSchemaSource<'a> {
     pub container_attrs: &'a [syn::Attribute],
     /// Resolved CLI flags, used only for fields whose key matches the parser.
     pub cli_metadata: &'a [CliFieldMetadata],
+    /// Whether the companion derive also emits the loader that materializes
+    /// declared defaults.
+    pub materializes_defaults: bool,
     /// Resolved crate path for downstream macro expansion.
     pub krate: &'a TokenStream,
 }
@@ -81,6 +93,8 @@ impl RequiredSchemaSource<'_> {
             struct_attrs: self.struct_attrs,
             deserialize_rename_all: rules.deserialize,
             container_default: serde_has_default(self.container_attrs)?,
+            container_transparent: serde_container_is_transparent(self.container_attrs)?,
+            materializes_defaults: self.materializes_defaults,
             cli_metadata: self.cli_metadata,
             krate: self.krate,
         })
@@ -96,7 +110,13 @@ impl RequiredSchemaSource<'_> {
 pub(crate) fn generate_required_schema_impl(
     args: &RequiredSchemaArgs<'_>,
 ) -> syn::Result<TokenStream> {
-    let statements = field_statements(args)?;
+    let statements = if args.container_transparent {
+        // A transparent container reads its inner value from the parent's key,
+        // so nothing here is a key of the containing object.
+        Vec::new()
+    } else {
+        field_statements(args)?
+    };
     let hints = cli_hints(args)?;
     let prefix = prefix_tokens(args.struct_attrs);
     let ident = args.ident;
@@ -114,6 +134,14 @@ pub(crate) fn generate_required_schema_impl(
         }
     };
 
+    let declares_nested_object = args.container_transparent.then(|| {
+        quote! {
+            fn declares_nested_object() -> bool {
+                false
+            }
+        }
+    });
+
     Ok(quote! {
         impl #impl_generics #krate::RequiredConfigSchema for #ident #ty_generics
         #where_clause
@@ -130,6 +158,8 @@ pub(crate) fn generate_required_schema_impl(
                 stack.leave::<Self>();
                 ::std::result::Result::Ok(fields)
             }
+
+            #declares_nested_object
 
             fn required_route_hints() -> #krate::RouteHints {
                 #krate::RouteHints {
@@ -172,15 +202,24 @@ fn field_statements(args: &RequiredSchemaArgs<'_>) -> syn::Result<Vec<TokenStrea
 fn flatten_statement(args: &RequiredSchemaArgs<'_>, field: &Field) -> TokenStream {
     let krate = args.krate;
     let ty = nested_schema_type(&field.ty);
+    // A transparent child composes nothing: flattening one forwards to an
+    // inner value whose keys this schema does not record, so composing would
+    // name keys the loader never reads.
     let composed = quote! {
-        <#ty as #krate::RequiredConfigSchema>::collect_required_schema(stack)?
+        #krate::SchemaChildren::compose::<#ty>(stack)?
     };
     if option_inner(&field.ty).is_some() {
         return quote! {
-            fields.extend(#composed.into_iter().map(#krate::SchemaField::optional_subtree));
+            if let #krate::SchemaChildren::Nested(children) = #composed {
+                fields.extend(children.into_iter().map(#krate::SchemaField::optional_subtree));
+            }
         };
     }
-    quote! { fields.extend(#composed); }
+    quote! {
+        if let #krate::SchemaChildren::Nested(children) = #composed {
+            fields.extend(children);
+        }
+    }
 }
 
 /// Build the statement that appends one leaf or nested requirement.
@@ -197,6 +236,7 @@ fn push_statement(
         attrs,
         &ActivationFacts {
             container_default: args.container_default,
+            materializes_defaults: args.materializes_defaults,
             key,
             aliases: &aliases,
         },
@@ -208,11 +248,7 @@ fn push_statement(
     };
     let children = if composes_children(field, attrs)? {
         let ty = nested_schema_type(&field.ty);
-        quote! {
-            #krate::SchemaChildren::Nested(
-                <#ty as #krate::RequiredConfigSchema>::collect_required_schema(stack)?,
-            )
-        }
+        quote! { #krate::SchemaChildren::compose::<#ty>(stack)? }
     } else {
         quote! { #krate::SchemaChildren::Leaf }
     };
@@ -253,62 +289,6 @@ fn participates(field: &Field, attrs: &FieldAttrs) -> syn::Result<bool> {
 /// and no requirement is invented beneath it.
 fn composes_children(field: &Field, attrs: &FieldAttrs) -> syn::Result<bool> {
     Ok(attrs.nested && !serde_field_has_custom_deserializer(&field.attrs)?)
-}
-
-/// The declared facts that decide whether a field's absence is an error.
-///
-/// The key and aliases travel together with the container default because
-/// they answer one question: which merged keys can supply this field.
-struct ActivationFacts<'a> {
-    /// Whether the container carries `#[serde(default)]`.
-    container_default: bool,
-    /// The key the loader reads for this field.
-    key: &'a str,
-    /// Alternative spellings the loader accepts for the same value.
-    aliases: &'a [String],
-}
-
-/// Classify a field as optional or required.
-///
-/// The checks mirror the layers that can supply a value: an `Option` type, an
-/// explicit or inferred default, or a Serde default at either level.
-///
-/// A default that `ortho_config` materializes is serialized under the Rust
-/// identifier, so it only supplies the value when the loader reads that
-/// identifier; a renamed field whose identifier is not an alias stays required
-/// even though it declares a default.
-///
-/// An `Option` type is optional only because Serde's `missing_field` helper
-/// yields `None` for it — and `expr_is_missing` consults a field's custom
-/// deserializer *instead* of that helper, returning `missing_field` directly.
-/// A default is checked before the deserializer, so it still makes the field
-/// optional. Without one, `Option<T>` is required.
-fn is_optional(
-    field: &Field,
-    attrs: &FieldAttrs,
-    facts: &ActivationFacts<'_>,
-) -> syn::Result<bool> {
-    let is_optional_by_serde = serde_has_default(&field.attrs)? || facts.container_default;
-    let default_reaches = default_reaches_field(field, facts.key, facts.aliases);
-    let is_optional_by_default =
-        (attrs.default.is_some() || attrs.inferred_clap_default.is_some()) && default_reaches;
-    let is_optional_by_type =
-        option_inner(&field.ty).is_some() && !serde_field_has_custom_deserializer(&field.attrs)?;
-    Ok(is_optional_by_type || is_optional_by_serde || is_optional_by_default)
-}
-
-/// Report whether a materialized default reaches the key the loader reads.
-///
-/// The generated defaults struct serializes every field under its Rust
-/// identifier, while Serde reads the field under its renamed key. A default
-/// therefore supplies the value only when the identifier is the key itself or
-/// one of the field's accepted aliases.
-fn default_reaches_field(field: &Field, key: &str, aliases: &[String]) -> bool {
-    let Some(ident) = field.ident.as_ref() else {
-        return false;
-    };
-    let identifier = ident.to_string();
-    identifier == key || aliases.contains(&identifier)
 }
 
 /// Decide whether a field is shaped so the parser can populate it from a flag.

@@ -25,6 +25,45 @@ pub enum SchemaChildren {
     Nested(Vec<SchemaField>),
 }
 
+impl SchemaChildren {
+    /// Compose a child type's requirements, or report it as an opaque leaf.
+    ///
+    /// This is what generated code calls for a field marked
+    /// `#[ortho_config(nested)]`. The child decides whether its keys describe
+    /// one object through [`RequiredConfigSchema::declares_nested_object`]; a
+    /// type that answers `false` composes nothing, so its field stays a leaf
+    /// under the parent's own key.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RequiredSchemaError::CyclicSchema`] when the child's own
+    /// composition chain reaches the child again.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use ortho_config::{RequiredConfigSchema, RequiredSchemaStack, SchemaChildren};
+    ///
+    /// #[derive(RequiredConfigSchema)]
+    /// struct Database {
+    ///     host: String,
+    /// }
+    ///
+    /// let mut stack = RequiredSchemaStack::new();
+    /// let children = SchemaChildren::compose::<Database>(&mut stack).expect("compose Database");
+    /// assert!(matches!(children, SchemaChildren::Nested(_)));
+    /// ```
+    pub fn compose<T>(stack: &mut RequiredSchemaStack) -> Result<Self, RequiredSchemaError>
+    where
+        T: RequiredConfigSchema + ?Sized,
+    {
+        if !T::declares_nested_object() {
+            return Ok(Self::Leaf);
+        }
+        Ok(Self::Nested(T::collect_required_schema(stack)?))
+    }
+}
+
 /// One declared configuration requirement.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SchemaField {
@@ -150,6 +189,20 @@ pub trait RequiredConfigSchema {
     fn collect_required_schema(
         stack: &mut RequiredSchemaStack,
     ) -> Result<Vec<SchemaField>, RequiredSchemaError>;
+
+    /// Report whether this type's recorded fields are one nested object's keys.
+    ///
+    /// A normal struct answers `true`: the value stored under a parent field's
+    /// key is an object carrying exactly the keys this schema names. A
+    /// `#[serde(transparent)]` container answers `false`, because it reads and
+    /// writes its single inner value, so the keys this schema would name sit
+    /// one level below the key the parent owns. A parent therefore reports such
+    /// a field as an opaque leaf under its own key rather than inventing
+    /// children no loader reads.
+    #[must_use]
+    fn declares_nested_object() -> bool {
+        true
+    }
 
     /// Describe the routes this type's loader really accepts.
     #[must_use]

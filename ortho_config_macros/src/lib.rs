@@ -84,6 +84,7 @@ fn expand_ortho_config(derive_input: &DeriveInput) -> syn::Result<proc_macro2::T
         struct_attrs: &struct_attrs,
         container_attrs: &derive_input.attrs,
         cli_metadata: &components.cli_field_metadata,
+        materializes_defaults: true,
         krate: &krate,
     }
     .generate()?;
@@ -148,6 +149,7 @@ fn expand_required_config_schema(
         struct_attrs: &struct_attrs,
         container_attrs: &derive_input.attrs,
         cli_metadata: &[],
+        materializes_defaults: false,
         krate: &krate,
     }
     .generate()

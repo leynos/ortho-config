@@ -265,7 +265,17 @@ pub(crate) fn serde_field_has_custom_deserializer(attrs: &[Attribute]) -> syn::R
     Ok(found)
 }
 
-/// Detects whether any of `flags` appears as a bare Serde field option.
+/// Returns true if the container deserializes as its single inner value.
+///
+/// Serde's `#[serde(transparent)]` reads and writes the one non-skipped field
+/// directly, so the keys this type's own field schema names sit one level below
+/// the key a containing type owns. Requirement composition must stop at the
+/// container instead of naming children no loader ever reads.
+pub(crate) fn serde_container_is_transparent(attrs: &[Attribute]) -> syn::Result<bool> {
+    serde_field_has_bare_flag(attrs, &["transparent"])
+}
+
+/// Detects whether any of `flags` appears as a bare Serde option.
 fn serde_field_has_bare_flag(attrs: &[Attribute], flags: &[&str]) -> syn::Result<bool> {
     let mut found = false;
     for attr in attrs.iter().filter(|attr| attr.path().is_ident("serde")) {

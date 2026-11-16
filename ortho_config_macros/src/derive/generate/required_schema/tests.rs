@@ -15,6 +15,8 @@ use crate::derive::generate::required_schema::RequiredSchemaSource;
 
 #[path = "tests_deserializers.rs"]
 mod deserializers;
+#[path = "tests_requiredness.rs"]
+mod requiredness;
 #[path = "tests_serde_keys.rs"]
 mod serde_keys;
 
@@ -24,7 +26,28 @@ fn normalize(tokens: &proc_macro2::TokenStream) -> String {
 }
 
 /// Emit the schema implementation for `input`, with optional CLI metadata.
+///
+/// This mirrors `#[derive(OrthoConfig)]`: the schema is emitted beside the
+/// loader, so declared defaults are materialized at run time.
 fn emit(input: &DeriveInput, metadata: &[CliFieldMetadata]) -> Result<String> {
+    emit_with(input, metadata, true)
+}
+
+/// Emit with no CLI metadata, matching the schema-only derive.
+///
+/// A type deriving the schema alone has no loader, so nothing materializes its
+/// declared defaults.
+fn emit_plain(input: &DeriveInput) -> Result<String> {
+    emit_with(input, &[], false)
+}
+
+/// Emit one schema implementation, choosing whether a loader materializes
+/// declared defaults.
+fn emit_with(
+    input: &DeriveInput,
+    metadata: &[CliFieldMetadata],
+    materializes_defaults: bool,
+) -> Result<String> {
     let (ident, fields, struct_attrs, field_attrs) =
         crate::derive::parse::parse_input(input).map_err(|error| anyhow!("{error}"))?;
     let krate = crate::derive::crate_path::resolve(struct_attrs.crate_path.as_ref());
@@ -36,16 +59,12 @@ fn emit(input: &DeriveInput, metadata: &[CliFieldMetadata]) -> Result<String> {
         struct_attrs: &struct_attrs,
         container_attrs: &input.attrs,
         cli_metadata: metadata,
+        materializes_defaults,
         krate: &krate,
     }
     .generate()
     .map_err(|error| anyhow!("{error}"))?;
     Ok(normalize(&tokens))
-}
-
-/// Emit with no CLI metadata, matching the schema-only derive.
-fn emit_plain(input: &DeriveInput) -> Result<String> {
-    emit(input, &[])
 }
 
 /// A CLI hint for `field_name` with the same long spelling.
@@ -106,14 +125,12 @@ fn nested_fields_compose_the_child_schema() -> Result<()> {
     };
     let tokens = emit_plain(&input)?;
     ensure!(
-        tokens.contains(
-            "<Databaseasortho_config::RequiredConfigSchema>::collect_required_schema(stack)?"
-        ),
-        "expected the child schema call: {tokens}"
+        tokens.contains("SchemaChildren::compose::<Database>(stack)?"),
+        "expected the child schema composition: {tokens}"
     );
     ensure!(
-        tokens.contains("SchemaChildren::Nested("),
-        "expected the nested children variant: {tokens}"
+        !tokens.contains("SchemaChildren::Leaf"),
+        "a marked nested field must not stay a leaf: {tokens}"
     );
     ensure!(
         tokens.contains("Activation::Required"),
@@ -132,7 +149,7 @@ fn optional_nested_parent_strips_wrappers_for_the_child_schema() -> Result<()> {
     };
     let tokens = emit_plain(&input)?;
     ensure!(
-        tokens.contains("<Databaseasortho_config::RequiredConfigSchema>"),
+        tokens.contains("SchemaChildren::compose::<Database>(stack)?"),
         "expected both wrappers stripped: {tokens}"
     );
     ensure!(
@@ -178,8 +195,9 @@ fn assert_flatten_composes_unchanged(input: &DeriveInput, demotion: Demotion) ->
     let tokens = emit_plain(input)?;
     ensure!(
         tokens.contains(concat!(
-            "fields.extend(<Extraasortho_config::RequiredConfigSchema>",
-            "::collect_required_schema(stack)?);"
+            "ifletortho_config::SchemaChildren::Nested(children)=",
+            "ortho_config::SchemaChildren::compose::<Extra>(stack)?",
+            "{fields.extend(children);}"
         )),
         "a flatten must compose the child unchanged, not {}: {tokens}",
         demotion.description()
@@ -239,51 +257,12 @@ fn optional_flatten_downgrades_the_child_requirements() -> Result<()> {
     let tokens = emit_plain(&input)?;
     ensure!(
         tokens.contains(concat!(
-            "fields.extend(<Extraasortho_config::RequiredConfigSchema>",
-            "::collect_required_schema(stack)?.into_iter().map(",
-            "ortho_config::SchemaField::optional_subtree));"
+            "ifletortho_config::SchemaChildren::Nested(children)=",
+            "ortho_config::SchemaChildren::compose::<Extra>(stack)?",
+            "{fields.extend(children.into_iter().map(",
+            "ortho_config::SchemaField::optional_subtree));}"
         )),
         "an absent optional flatten must demote every composed requirement: {tokens}"
-    );
-    Ok(())
-}
-
-#[test]
-fn defaults_and_options_are_optional() -> Result<()> {
-    let input: DeriveInput = syn::parse_quote! {
-        struct Nested {
-            #[ortho_config(default = 8080)]
-            port: u16,
-            #[serde(default)]
-            note: String,
-            optional: Option<String>,
-        }
-    };
-    let tokens = emit_plain(&input)?;
-    ensure!(
-        tokens.matches("Activation::Optional").count() == 3,
-        "expected three optional fields: {tokens}"
-    );
-    ensure!(
-        !tokens.contains("Activation::Required"),
-        "no field is required"
-    );
-    Ok(())
-}
-
-#[test]
-fn container_default_makes_every_field_optional() -> Result<()> {
-    let input: DeriveInput = syn::parse_quote! {
-        #[serde(default)]
-        struct Nested {
-            host: String,
-            port: u16,
-        }
-    };
-    let tokens = emit_plain(&input)?;
-    ensure!(
-        tokens.matches("Activation::Optional").count() == 2,
-        "expected the container default to apply to every field: {tokens}"
     );
     Ok(())
 }

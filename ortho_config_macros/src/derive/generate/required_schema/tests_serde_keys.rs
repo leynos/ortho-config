@@ -113,3 +113,32 @@ fn fields_serde_never_reads_are_not_inspected(#[case] case: UnreadField) -> Resu
     );
     Ok(())
 }
+
+/// A transparent container has no keys of its own to contribute.
+///
+/// `#[serde(transparent)]` reads and writes the single inner value from the
+/// parent's key, so the field names this type records belong to that inner
+/// value, not to the object a parent field holds. The schema therefore emits no
+/// keyed child and answers `declares_nested_object() == false`, which keeps the
+/// parent field an opaque leaf. The plain case is the control: the same fields
+/// are recorded when the attribute is absent, so the difference is the
+/// attribute's effect rather than the fixture's shape.
+#[rstest]
+#[case::transparent("#[serde(transparent)]", false)]
+#[case::plain("", true)]
+fn a_transparent_container_declares_no_nested_object(
+    #[case] attr: &str,
+    #[case] composes: bool,
+) -> Result<()> {
+    let input: DeriveInput = syn::parse_str(&format!("{attr} struct Wrapper {{ inner: String }}"))?;
+    let tokens = emit_plain(&input)?;
+    ensure!(
+        tokens.contains("fndeclares_nested_object()->bool{false}") != composes,
+        "expected the nested-object answer to follow the attribute: {tokens}"
+    );
+    ensure!(
+        tokens.contains(r#"String::from("inner")"#) == composes,
+        "a transparent container must record no keyed child: {tokens}"
+    );
+    Ok(())
+}
