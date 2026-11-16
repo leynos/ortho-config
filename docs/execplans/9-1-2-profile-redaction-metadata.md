@@ -816,9 +816,9 @@ operator. Never modify the installation or `dylint.toml` to buy a green gate.
 - [x] (2026-11-16) Rebase onto `main` at `d11a0797` before publication. Two
   files conflicted. In `docs/contents.md`, main had taken ADR-0018 through
   ADR-0022 while this branch had used ADR-0018 for the redaction contract. In
-  `ortho_config_macros/src/derive/parse/field_attrs.rs`, main had extracted each
-  attribute case into a `set_*` helper. The resolution keeps main's ADR list,
-  routes `profile_field` through the same helper shape, and keeps main's
+  `ortho_config_macros/src/derive/parse/field_attrs.rs`, main had extracted
+  each attribute case into a `set_*` helper. The resolution keeps main's ADR
+  list, routes `profile_field` through the same helper shape, and keeps main's
   extracted `cache_tests.rs`, whose pinned cache-key vector was recomputed for
   the disclosure salt (`v1-9a0f5582851e611582e4dd0ddf4ea78e`). The redaction
   record is renumbered ADR-0023 and every reference follows it. No delivered
