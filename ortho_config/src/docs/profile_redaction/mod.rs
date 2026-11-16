@@ -229,13 +229,15 @@ mod proptests;
 #[cfg(test)]
 mod tests;
 
-/// Counts command-node visits so tests can pin the projection to a constant
-/// number of linear traversals instead of one projection per subtree.
-///
-/// The counter is thread-local: tests run concurrently, and a shared counter
-/// would count another test's projections as well.
 #[cfg(test)]
 pub(crate) mod traversal_probe {
+    //! Counts command-node visits so tests can pin the projection to a
+    //! constant number of linear traversals instead of one projection per
+    //! subtree.
+    //!
+    //! The counter is thread-local: tests run concurrently, and a shared
+    //! counter would count another test's projections as well.
+
     use std::cell::Cell;
 
     thread_local! {
