@@ -22,16 +22,38 @@ const EXIT_FAILURE: i32 = 1;
 
 /// Process status for Clap's argument and dispatch rejection.
 const EXIT_USAGE: i32 = 2;
+
+use camino::Utf8Path;
+use cap_std::ambient_authority;
+use cap_std::fs_utf8::Dir;
+use insta::assert_snapshot;
+use rstest::rstest;
+use std::error::Error;
+use std::process::{Command, Output};
+use std::time::Duration;
+
+/// Budget for one spawned `cargo-orthohelp` invocation.
+///
+/// The nextest base tier terminates a test after ten 60-second periods, so a
+/// command that hangs is reported here first, with its own description, rather
+/// than as an unexplained test timeout.
+const SUBPROCESS_DEADLINE: Duration = Duration::from_secs(480);
 use camino::Utf8Path;
 use cap_std::ambient_authority;
 use cap_std::fs_utf8::Dir;
 
+
 fn run_direct(args: &[&str]) -> Result<Output, Box<dyn Error + Send + Sync>> {
     let exe = fixtures::cargo_orthohelp_exe()?;
-    Ok(Command::new(exe.as_str())
+    let mut command = Command::new(exe.as_str());
+    command
         .current_dir(fixtures::workspace_root()?.as_std_path())
-        .args(args)
-        .output()?)
+        .args(args);
+    Ok(test_helpers::process::run_with_deadline(
+        command,
+        SUBPROCESS_DEADLINE,
+        "cargo-orthohelp direct invocation",
+    )?)
 }
 
 fn run_cargo_dispatch(args: &[&str]) -> Result<Output, Box<dyn Error + Send + Sync>> {
@@ -45,15 +67,20 @@ fn run_cargo_dispatch(args: &[&str]) -> Result<Output, Box<dyn Error + Send + Sy
         std::iter::once(bin_dir.as_std_path().to_path_buf()).chain(std::env::split_paths(&path));
     let joined_path = std::env::join_paths(paths)?;
 
-    Ok(Command::new("cargo")
+    let mut command = Command::new("cargo");
+    command
         .current_dir(fixtures::workspace_root()?.as_std_path())
         .env("PATH", joined_path)
         // Dispatch only finds and runs the subcommand binary; it builds
         // nothing, and the offline setting states that for Concordat NC-007.
         .env("CARGO_NET_OFFLINE", "true")
         .arg("orthohelp")
-        .args(args)
-        .output()?)
+        .args(args);
+    Ok(test_helpers::process::run_with_deadline(
+        command,
+        SUBPROCESS_DEADLINE,
+        "cargo-dispatched orthohelp invocation",
+    )?)
 }
 
 fn stdout(output: &Output) -> String {
@@ -348,10 +375,19 @@ fn metadata_root_type_injection_is_rejected() -> Result<(), Box<dyn Error + Send
     write_injection_fixture(&dir, &ortho_config_path, &root_type)?;
 
     let exe = fixtures::cargo_orthohelp_exe()?;
-    let output = Command::new(exe.as_str())
-        .current_dir(package_dir.path())
-        .args(["orthohelp", "--format", "agent-context", "--out-dir", "out"])
-        .output()?;
+    let mut command = Command::new(exe.as_str());
+    command.current_dir(package_dir.path()).args([
+        "orthohelp",
+        "--format",
+        "agent-context",
+        "--out-dir",
+        "out",
+    ]);
+    let output = test_helpers::process::run_with_deadline(
+        command,
+        SUBPROCESS_DEADLINE,
+        "cargo-orthohelp metadata injection probe",
+    )?;
 
     assert_root_type_rejected(&output, "metadata root type injection should fail")?;
     assert_marker_absent(&dir)

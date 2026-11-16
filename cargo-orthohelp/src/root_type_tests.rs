@@ -14,7 +14,10 @@ use rstest::rstest;
 #[case::leading_space_bare_name("  Config  ", "demo", "demo::Config")]
 fn parses_root_type(#[case] raw: &str, #[case] crate_ident: &str, #[case] expected: &str) {
     let parsed = parse_root_type(raw, crate_ident).expect("root type should parse");
-    assert_eq!(parsed, expected);
+    assert_eq!(
+        parsed, expected,
+        "{raw:?} should render as {expected:?} in crate {crate_ident:?}"
+    );
 }
 
 #[rstest]

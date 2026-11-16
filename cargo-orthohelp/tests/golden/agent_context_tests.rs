@@ -7,9 +7,17 @@ use insta::{assert_snapshot, with_settings};
 use rstest::rstest;
 use std::error::Error;
 use std::process::{Command, Output};
+use std::time::Duration;
 use tempfile::TempDir;
 
 use crate::fixtures;
+
+/// Budget for one `cargo-orthohelp` run, which builds a bridge crate.
+///
+/// The nextest base tier terminates a test after ten 60-second periods, so a
+/// stalled nested build is reported here, naming the package, before that
+/// outer timeout.
+const AGENT_CONTEXT_DEADLINE: Duration = Duration::from_secs(480);
 
 #[rstest]
 #[case::simple(
@@ -84,5 +92,9 @@ fn run_agent_context(
     if let Some(selected_root_type) = root_type {
         command.arg("--root-type").arg(selected_root_type);
     }
-    Ok(command.output()?)
+    Ok(test_helpers::process::run_with_deadline(
+        command,
+        AGENT_CONTEXT_DEADLINE,
+        &format!("agent-context generation for {package_name}"),
+    )?)
 }
