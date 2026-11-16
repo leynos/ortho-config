@@ -720,6 +720,19 @@ stopping and reporting.
         `argument_conflict_message_names_the_conflict_shape`.
       - Compile admission queued several compiles during the run. A queued
         build is not a failure, and no gate was duplicated or retried.
+- [x] (2026-11-16) Hosted CI on the published head `6d421d5f` is fully green,
+      and the dispatch-only publish check no longer fails.
+      - Pull-request run `43792388534`: all eight jobs succeeded, with the Linux
+        job's `Lint` (21) green so `Workflow contract tests` (23), both
+        coverage steps (29, 31), `Verify the Linux coverage target root` (34)
+        and `Merge coverage results` (35) ran rather than being skipped.
+      - `workflow_dispatch` run `43796595772` on the same commit exercises the
+        job's `Publish dry run` step, which a pull-request run skips by
+        condition: step 38 is green on `build-test (linux)` and step 37 on
+        `build-test (windows)`. The release-ordering failure seen on
+        `f891f86b` in run `43740038649` is not reproducible here.
+      - The seven review threads of `5912818894` each have a disposition reply
+        on this head, and the ExecPlan records the repairs those replies name.
 
 ## Surprises & discoveries
 
@@ -1021,11 +1034,15 @@ byte-identical to `origin/main`, and main answered it in `1f4a5775`; the branch
 took main's version by merging rather than duplicating the refactor, so no
 branch-owned source carries the finding.
 
-One blocker remains, and it is outside the acceptance criteria. The
-dispatch-only `Publish dry run` fails on Windows for a release-ordering reason
-this branch cannot own: `cargo-orthohelp` verifies against the registry's
-published `ortho_config` 0.10.0, which predates the agent-context policy types.
-It is recorded rather than papered over.
+No acceptance blocker remains, and the last recorded one has cleared. The
+dispatch-only `Publish dry run` passes on both platforms: on `6d421d5f`, run
+`43796595772` completed `build-test (linux)` with step 38 green and
+`build-test (windows)` with step 37 green, alongside the fully green
+pull-request run `43792388534` on the same commit. The release-ordering failure
+recorded in earlier rounds — `cargo-orthohelp` verifying against the registry's
+then-published `ortho_config`, which predated the agent-context policy types —
+was red on `f891f86b` in run `43740038649` and is not reproducible on this
+head. The earlier record is superseded rather than deleted.
 
 The local wall-clock reds recorded in earlier rounds are superseded. Every one
 was a deadline or allowance kill with no assertion, output or exit-status
