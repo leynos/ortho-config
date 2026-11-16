@@ -61,14 +61,16 @@ pub(crate) fn all_protected_sentinels() -> Vec<&'static str> {
         .collect()
 }
 
-/// Checks the catalogue is internally consistent.
-///
-/// Each integration test target includes this module through `tests::fixtures`
-/// but reads only the constants its own suite needs. Reading all of them here
-/// keeps every target free of dead-code warnings and proves the aggregate view
-/// has not drifted from the per-classification lists.
 #[cfg(test)]
 mod tests {
+    //! Checks the catalogue is internally consistent.
+    //!
+    //! Each integration test target includes this module through
+    //! `tests::fixtures` but reads only the constants its own suite needs.
+    //! Reading all of them here keeps every target free of dead-code warnings
+    //! and proves the aggregate view has not drifted from the per-classification
+    //! lists.
+
     use super::*;
 
     #[test]
