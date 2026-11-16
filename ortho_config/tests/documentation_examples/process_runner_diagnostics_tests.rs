@@ -10,7 +10,7 @@ use std::time::{Duration, Instant};
 
 #[test]
 fn safe_environment_presence_does_not_expose_secret_values() -> Result<()> {
-    let mut command = Command::new("cargo");
+    let mut command = Command::new("child-under-test");
     command
         .env("RUSTC_WRAPPER", "/private/toolchain/rustc-wrapper")
         .env("CARGO_HOME", "/private/cache")
@@ -55,7 +55,7 @@ fn safe_environment_presence_does_not_expose_secret_values() -> Result<()> {
 /// The production boundary reports the injected directory when the query works.
 #[test]
 fn a_successful_working_directory_query_names_the_inherited_directory() -> Result<()> {
-    let command = Command::new("cargo");
+    let command = Command::new("child-under-test");
 
     let identity =
         super::workspace_identity(&command, || Ok(PathBuf::from("/inherited/workspace")));
@@ -70,7 +70,7 @@ fn a_successful_working_directory_query_names_the_inherited_directory() -> Resul
 /// environmental change makes `std::env::current_dir` fail on demand.
 #[test]
 fn a_failed_working_directory_query_is_reported_explicitly() {
-    let command = Command::new("cargo");
+    let command = Command::new("child-under-test");
 
     let identity = super::workspace_identity(&command, || {
         Err(io::Error::from(io::ErrorKind::PermissionDenied))
@@ -95,7 +95,7 @@ fn a_failed_working_directory_query_is_reported_explicitly() {
 /// which proves the branch never depended on the query's result.
 #[test]
 fn a_command_directory_overrides_the_inherited_workspace() -> Result<()> {
-    let mut command = Command::new("cargo");
+    let mut command = Command::new("child-under-test");
     command.current_dir(PathBuf::from("/private/command/directory"));
     let was_queried = Cell::new(false);
 

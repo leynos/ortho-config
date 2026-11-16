@@ -25,7 +25,7 @@ fn exercise_public_api() -> Result<(), Box<dyn std::error::Error>> {
     let _kill_attempted = guard.kill_attempted();
     let _kill_error = guard.kill_error();
 
-    let mut command = Command::new("cargo");
+    let mut command = Command::new("child-under-test");
     command.stdout(Stdio::piped());
     let mut child = command.spawn()?;
     let stdout = child
@@ -43,12 +43,12 @@ fn exercise_public_api() -> Result<(), Box<dyn std::error::Error>> {
     let _detached = reader.detach_if_running();
 
     let _output = run_with_deadline(
-        Command::new("cargo"),
+        Command::new("child-under-test"),
         Duration::from_secs(1),
         "compile-pass fixture",
     )?;
     let _output = run_with_deadline_until(
-        Command::new("cargo"),
+        Command::new("child-under-test"),
         Duration::from_secs(1),
         Instant::now() + Duration::from_secs(1),
         "compile-pass fixture",
