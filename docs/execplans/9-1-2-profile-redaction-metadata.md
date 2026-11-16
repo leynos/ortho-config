@@ -795,7 +795,7 @@ operator. Never modify the installation or `dylint.toml` to buy a green gate.
     2.2.1 of the cargo-orthohelp design records the wire additions, the
     structural boundary, and the model-to-production relationship; section 6.7
     of the agent-native design carries the `profiles.redaction` shape and the
-    public-text limitation; ADR-0018 gains a Formal evidence subsection
+    public-text limitation; ADR-0026 gains a Formal evidence subsection
     covering the flat preorder encoding and the residual boundary; the design
     decision log records the decision; the developers' guide replaces the empty
     production inventory with the registered Verus entry, its obligations,
@@ -1002,7 +1002,7 @@ all, and the plan allowed the lemma boundaries to be revised while verification
 conditions were discovered. The encoding is total for topology and for slot
 reachability, so V1 and V2 keep their full strength; only the traversal shape
 is modelled differently, and the correspondence to the production recursion
-stays with the differential tests recorded in ADR-0018.
+stays with the differential tests recorded in ADR-0026.
 
 ## Outcomes & retrospective
 

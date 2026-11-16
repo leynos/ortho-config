@@ -61,7 +61,7 @@
 //! and an explicit size measure crashes the verifier with ill-typed AIR. The
 //! recursive traversal itself is therefore covered by the differential property
 //! tests, whose model walks the nested production type; the division is recorded
-//! in ADR-0018 as a residual testing boundary.
+//! in ADR-0026 as a residual testing boundary.
 
 use vstd::prelude::*;
 
