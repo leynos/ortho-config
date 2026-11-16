@@ -965,8 +965,6 @@ Schema v1 history:
 
 The design and roadmap updates must address these known gaps:
 
-- the improved `MissingRequiredValues` diagnostic is reconciled as proposed
-  phase 7 work, but is not yet implemented;
 - `cargo-orthohelp` has no structured `--json` result mode;
 - `cargo-orthohelp` does not yet enumerate all valid choices in errors;
 - generated file writes are not specified as atomic;
