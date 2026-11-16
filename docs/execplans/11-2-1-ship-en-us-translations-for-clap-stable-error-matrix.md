@@ -649,6 +649,54 @@ stopping and reporting.
         to main. The run was stopped once the release made the candidate
         stale rather than spending the remaining gates on it.
 
+- [x] (2026-11-16) Review `5912818894` raised seven inline findings on
+      `f891f86b` and was left in `CHANGES_REQUESTED` without dispositions.
+      Each was verified against the source before repair; all seven are
+      addressed in one candidate.
+      - **The demo README named the wrong override.** It said the catalogue
+        overrides `clap-error-missing-subcommand` and described "missing
+        subcommands", but `examples/hello_world/locales/en-US/messages.ftl`
+        overrides `clap-error-missing-argument` and
+        `clap-error-invalid-subcommand`, and an unknown subcommand is what
+        reaches the second. The paragraph now names those two keys and says
+        which path exercises each.
+      - **The build-lock regression test contended on the suite's shared
+        lock.** A sibling case may hold that lock for its whole 600-second
+        build budget, so the test's 200-millisecond expectation depended on
+        another process. `fixture_build_lock::acquire_at` takes the path, and
+        the test stages its own lock file in a `TempDir`.
+      - **A failing assertion could leave the lock holder blocked.** The
+        holder waited on a channel the test signal after the assertion, so a
+        regression panicked with the holder still in `recv` and the scope
+        never joined. The attempt now resolves before the release is sent.
+      - **Nine near-identical refusal tests** became one `#[rstest]` table on
+        `module_tree_is_refused`, each case keeping its own fixture and its own
+        expected refusal text.
+      - **A symlink alias was read as a second declaration.** The inventory
+        filtered on the `.rs` extension alone, so `alias.rs` pointing at
+        `error.rs` was parsed twice and refused as a duplicate definition. It
+        now requires `file_type.is_file()`, and a unix-only control stages the
+        alias at test time because a committed symlink does not survive a
+        Windows checkout.
+      - **`ValueValidation` dropped the parser's rejection reason.** `clap`
+        keeps it on the error's `std::error::Error::source`, so the pipeline
+        now supplies it as `reason` and the en-US message renders it.
+      - **`ArgumentConflict` misdescribed a repeated flag.** A flag supplied
+        twice and two distinct conflicting arguments are the same `ErrorKind`
+        and differ only in whether the offending argument is also the prior
+        one. The pipeline now supplies `prior` and `conflict_kind`, and the
+        message selects on the latter, so a repeat reports "cannot be used
+        multiple times" and a collision names both arguments.
+      - The fixture gained `--debug`, `--trace` and a `--count` value parser
+        whose error carries a reason, and three end-to-end cases assert the
+        translated text in the child process, including that a repeated flag
+        does not mention a collision and vice versa. A unit case asserts both
+        select branches directly, and the snapshot recorded the two intended
+        message changes; no other snapshot line moved.
+      - The four focused targets pass: `clap_error_cli` (9), the rendering and
+        translation suite (48), `clap_error_coverage` (24), and
+        `clap_error_matrix` (25).
+
 ## Surprises & discoveries
 
 The plan first incorporated merged PR #651 at
