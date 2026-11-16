@@ -297,7 +297,7 @@ fn transform_omits_missing_or_blank_summaries(
 }
 
 #[path = "tests_support.rs"]
-mod support;
+pub(crate) mod support;
 use support::*;
 
 #[path = "tests_nested_support.rs"]

@@ -8,6 +8,7 @@ mod boolean_override;
 
 #[path = "documentation_examples/cargo_flows.rs"]
 mod cargo_flows;
+
 mod documentation_examples;
 
 #[path = "documentation_examples/env_alias_chain.rs"]
@@ -24,6 +25,7 @@ mod migration_flows;
 
 #[path = "documentation_examples/process_runner_test_support.rs"]
 mod process_runner;
+
 #[path = "documentation_examples/process_runner_execution_policy.rs"]
 mod process_runner_execution_policy;
 
@@ -74,6 +76,7 @@ const STANDARD_RUST_EXAMPLES: &[&str] = &[
     "api-guide-agent-context-constructor",
     "api-guide-agent-context-json",
     "guide-boolean-override",
+    "guide-skill-validation",
 ];
 
 /// Compiles and runs the public Rust examples, checking their documented contracts.

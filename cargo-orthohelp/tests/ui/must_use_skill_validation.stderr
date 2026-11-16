@@ -1,0 +1,59 @@
+error: unused return value of `SkillValidationReport::is_complete` that must be used
+  --> tests/ui/must_use_skill_validation.rs:42:5
+   |
+42 |     report.is_complete();
+   |     ^^^^^^^^^^^^^^^^^^^^
+   |
+note: the lint level is defined here
+  --> tests/ui/must_use_skill_validation.rs:8:9
+   |
+ 8 | #![deny(unused_must_use)]
+   |         ^^^^^^^^^^^^^^^
+help: use `let _ = ...` to ignore the resulting value
+   |
+42 |     let _ = report.is_complete();
+   |     +++++++
+
+error: unused return value of `SkillValidationReport::has_structural_findings` that must be used
+  --> tests/ui/must_use_skill_validation.rs:43:5
+   |
+43 |     report.has_structural_findings();
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+help: use `let _ = ...` to ignore the resulting value
+   |
+43 |     let _ = report.has_structural_findings();
+   |     +++++++
+
+error: unused return value of `SkillValidationReport::has_policy_findings` that must be used
+  --> tests/ui/must_use_skill_validation.rs:44:5
+   |
+44 |     report.has_policy_findings();
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+help: use `let _ = ...` to ignore the resulting value
+   |
+44 |     let _ = report.has_policy_findings();
+   |     +++++++
+
+error: unused return value of `skill_validation::surface::<impl EffectiveCommandSurface>::from_agent_context` that must be used
+  --> tests/ui/must_use_skill_validation.rs:45:5
+   |
+45 |     EffectiveCommandSurface::from_agent_context(&AgentContext::new("tool"), &[]);
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+help: use `let _ = ...` to ignore the resulting value
+   |
+45 |     let _ = EffectiveCommandSurface::from_agent_context(&AgentContext::new("tool"), &[]);
+   |     +++++++
+
+error: unused return value of `concept_for_long_name` that must be used
+  --> tests/ui/must_use_skill_validation.rs:46:5
+   |
+46 |     concept_for_long_name("--color");
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+help: use `let _ = ...` to ignore the resulting value
+   |
+46 |     let _ = concept_for_long_name("--color");
+   |     +++++++

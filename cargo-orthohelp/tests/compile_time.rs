@@ -7,6 +7,7 @@
 use std::{ffi::OsString, path::Path, process::Command, time::Duration};
 
 const TRYBUILD_CHILD_ENV: &str = "ORTHOHELP_TRYBUILD_CHILD";
+
 /// Child budget that must expire before nextest's own 960 s tier does.
 ///
 /// The tier is eight 120 s warning periods. A child killed by nextest reports
@@ -15,8 +16,11 @@ const TRYBUILD_CHILD_ENV: &str = "ORTHOHELP_TRYBUILD_CHILD";
 /// and `must_use_compile_tests` was killed at 600.2 s while still cold, so the
 /// budget is set well above both while leaving a minute for reporting.
 const TRYBUILD_CHILD_DEADLINE: Duration = Duration::from_secs(900);
+
 const RUSTFLAGS_SEPARATOR: char = '\u{1f}';
+
 const CARGO_CONFIG: &str = include_str!("../../.cargo/config.toml");
+
 const DEV_FAST_RUSTFLAGS: [&str; 5] = [
     "-Zthreads=8",
     "-Zcodegen-backend=cranelift",
@@ -302,6 +306,8 @@ fn must_use_compile_tests() -> Result<(), Box<dyn std::error::Error>> {
     t.compile_fail("tests/ui/must_use_bridge_ir.rs");
     t.pass("tests/ui/policy_public_api.rs");
     t.compile_fail("tests/ui/must_use_policy_evaluate.rs");
+    t.compile_fail("tests/ui/must_use_skill_validation.rs");
+    t.pass("tests/ui/skill_validation_public_api.rs");
     t.compile_fail("tests/ui/policy_inputs_non_exhaustive.rs");
     Ok(())
 }

@@ -6,6 +6,7 @@
 
 use anyhow::{Context, Result, ensure};
 
+use crate::documentation_examples::documented_example;
 use crate::workspace::{ExampleId, ExampleWorkspace};
 
 /// A documented example whose contract is its standard output for fixed
@@ -137,23 +138,46 @@ const SIMPLE_RUNS: &[SimpleRun] = &[
 pub(super) fn assert_simple_runs(workspace: &mut ExampleWorkspace) -> Result<()> {
     SIMPLE_RUNS
         .iter()
-        .try_for_each(|run| assert_simple_run(workspace, run))
+        .try_for_each(|run| assert_simple_run(workspace, run))?;
+    assert_skill_validation_transcript(workspace)
+}
+
+/// Asserts the skill-validation example against its published transcript.
+///
+/// This example's expected output is the fence beside it in the users' guide,
+/// so the document is loaded rather than restated here: a copy would let the
+/// published transcript and the tested text drift apart.
+fn assert_skill_validation_transcript(workspace: &mut ExampleWorkspace) -> Result<()> {
+    const ID: &str = "guide-skill-validation";
+    let published = documented_example("guide-skill-validation-output")?;
+    let actual = run_stdout(workspace, ID, &[])?;
+    ensure!(
+        actual == published.body,
+        "{ID} stdout differed from the published transcript: \
+         expected {:?}, got {actual:?}",
+        published.body
+    );
+    Ok(())
 }
 
 /// Runs one [`SimpleRun`] and asserts its standard output.
 fn assert_simple_run(workspace: &mut ExampleWorkspace, run: &SimpleRun) -> Result<()> {
     let SimpleRun { id, args, stdout } = run;
+    let actual = run_stdout(workspace, id, args)?;
+    ensure!(
+        actual == *stdout,
+        "{id} stdout differed: expected {stdout:?}, got {actual:?}"
+    );
+    Ok(())
+}
+
+/// Runs one built example and returns its standard output.
+fn run_stdout(workspace: &mut ExampleWorkspace, id: &'static str, args: &[&str]) -> Result<String> {
     let output = workspace.run(ExampleId(id), args.iter())?;
     ensure!(
         output.status.success(),
         "{id} failed:\n{}",
         String::from_utf8_lossy(&output.stderr)
     );
-    let actual =
-        String::from_utf8(output.stdout).with_context(|| format!("{id} stdout is UTF-8"))?;
-    ensure!(
-        actual == *stdout,
-        "{id} stdout differed: expected {stdout:?}, got {actual:?}"
-    );
-    Ok(())
+    String::from_utf8(output.stdout).with_context(|| format!("{id} stdout is UTF-8"))
 }

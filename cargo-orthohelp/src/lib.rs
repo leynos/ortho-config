@@ -12,5 +12,6 @@ pub mod policy;
 pub mod powershell;
 pub mod roff;
 pub mod schema;
+pub mod skill_validation;
 #[cfg(test)]
 mod test_support;

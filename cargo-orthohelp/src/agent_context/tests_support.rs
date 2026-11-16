@@ -1,4 +1,9 @@
 //! Builders and assertion helpers for the agent-context bridge tests.
+//!
+//! The IR builders are crate-visible because the skill-validation bridge
+//! regression drives the real bridge before the surface adapter; sharing them
+//! keeps one definition of a valid `DocMetadata` fixture rather than a second,
+//! drifting copy.
 
 use ortho_config::{LocalizationArgs, Localizer};
 use std::collections::BTreeMap;
@@ -10,7 +15,7 @@ use crate::schema::{
 
 /// Projects a generated command into the path, canonical verb, and summary
 /// compared by bridge tests.
-pub(super) fn command_summary(
+pub(crate) fn command_summary(
     command: &ortho_config::AgentCommand,
 ) -> (Vec<String>, Option<String>, Option<String>) {
     (
@@ -21,7 +26,7 @@ pub(super) fn command_summary(
 }
 
 /// Builds root documentation metadata containing the supplied subcommands.
-pub(super) fn metadata_with_subcommands(subcommands: Vec<DocMetadata>) -> DocMetadata {
+pub(crate) fn metadata_with_subcommands(subcommands: Vec<DocMetadata>) -> DocMetadata {
     doc(DocSpec {
         app_name: "demo",
         bin_name: Some("demo-bin"),
@@ -34,7 +39,7 @@ pub(super) fn metadata_with_subcommands(subcommands: Vec<DocMetadata>) -> DocMet
 
 /// Asserts that a command contains only the visible, invocable fixture inputs
 /// in their canonical order.
-pub(super) fn assert_visible_inputs(command: &ortho_config::AgentCommand) {
+pub(crate) fn assert_visible_inputs(command: &ortho_config::AgentCommand) {
     let inputs: Vec<_> = command.inputs.iter().map(input_summary).collect();
 
     assert_eq!(
@@ -61,7 +66,7 @@ pub(super) fn assert_visible_inputs(command: &ortho_config::AgentCommand) {
 }
 
 /// Projects an agent input into the fields compared by bridge tests.
-pub(super) fn input_summary(
+pub(crate) fn input_summary(
     input: &ortho_config::AgentInput,
 ) -> (
     String,
@@ -81,19 +86,19 @@ pub(super) fn input_summary(
     )
 }
 
-pub(super) struct DocSpec {
-    pub(super) app_name: &'static str,
-    pub(super) bin_name: Option<&'static str>,
-    pub(super) about_id: &'static str,
-    pub(super) fields: Vec<FieldMetadata>,
-    pub(super) subcommands: Vec<DocMetadata>,
-    pub(super) behaviour: Option<BehaviourMetadata>,
+pub(crate) struct DocSpec {
+    pub(crate) app_name: &'static str,
+    pub(crate) bin_name: Option<&'static str>,
+    pub(crate) about_id: &'static str,
+    pub(crate) fields: Vec<FieldMetadata>,
+    pub(crate) subcommands: Vec<DocMetadata>,
+    pub(crate) behaviour: Option<BehaviourMetadata>,
 }
 
 impl DocSpec {
     /// Creates an empty child-command specification with the given command and
     /// localization identifiers.
-    pub(super) fn child(app_name: &'static str, about_id: &'static str) -> Self {
+    pub(crate) fn child(app_name: &'static str, about_id: &'static str) -> Self {
         Self {
             app_name,
             bin_name: None,
@@ -105,7 +110,7 @@ impl DocSpec {
     }
 
     /// Creates the standard root-command specification without fields.
-    pub(super) fn root_without_fields() -> Self {
+    pub(crate) fn root_without_fields() -> Self {
         Self {
             app_name: "demo",
             bin_name: Some("demo-bin"),
@@ -118,7 +123,7 @@ impl DocSpec {
 }
 
 /// Expands a compact test specification into documentation metadata.
-pub(super) fn doc(spec: DocSpec) -> DocMetadata {
+pub(crate) fn doc(spec: DocSpec) -> DocMetadata {
     DocMetadata {
         ir_version: crate::schema::ORTHO_DOCS_IR_VERSION.to_owned(),
         app_name: spec.app_name.to_owned(),
@@ -136,7 +141,7 @@ pub(super) fn doc(spec: DocSpec) -> DocMetadata {
 }
 
 /// Builds the stable section-heading metadata shared by bridge fixtures.
-pub(super) fn sections() -> SectionsMetadata {
+pub(crate) fn sections() -> SectionsMetadata {
     SectionsMetadata {
         headings_ids: HeadingIds {
             name: "heading.name".to_owned(),
@@ -159,24 +164,24 @@ pub(super) fn sections() -> SectionsMetadata {
     }
 }
 
-pub(super) struct FieldSpec<'a> {
-    pub(super) name: &'a str,
-    pub(super) long: Option<&'a str>,
-    pub(super) short: Option<char>,
-    pub(super) takes_value: bool,
-    pub(super) hide_in_help: bool,
-    pub(super) value: Option<ValueType>,
-    pub(super) default: Option<&'a str>,
-    pub(super) required: bool,
+pub(crate) struct FieldSpec<'a> {
+    pub(crate) name: &'a str,
+    pub(crate) long: Option<&'a str>,
+    pub(crate) short: Option<char>,
+    pub(crate) takes_value: bool,
+    pub(crate) hide_in_help: bool,
+    pub(crate) value: Option<ValueType>,
+    pub(crate) default: Option<&'a str>,
+    pub(crate) required: bool,
 }
 
 /// Builds CLI-backed field metadata without enumerated possible values.
-pub(super) fn cli_field(spec: FieldSpec<'_>) -> FieldMetadata {
+pub(crate) fn cli_field(spec: FieldSpec<'_>) -> FieldMetadata {
     cli_field_with_possible_values(spec, [])
 }
 
 /// Builds CLI-backed field metadata and records the supplied possible values.
-pub(super) fn cli_field_with_possible_values<const N: usize>(
+pub(crate) fn cli_field_with_possible_values<const N: usize>(
     spec: FieldSpec<'_>,
     possible_values: [&str; N],
 ) -> FieldMetadata {
@@ -199,7 +204,7 @@ pub(super) fn cli_field_with_possible_values<const N: usize>(
 }
 
 /// Builds field metadata with no CLI invocation contract.
-pub(super) fn non_cli_field(name: &str) -> FieldMetadata {
+pub(crate) fn non_cli_field(name: &str) -> FieldMetadata {
     field(FieldParts {
         name,
         value: None,
@@ -209,16 +214,16 @@ pub(super) fn non_cli_field(name: &str) -> FieldMetadata {
     })
 }
 
-pub(super) struct FieldParts<'a> {
-    pub(super) name: &'a str,
-    pub(super) value: Option<ValueType>,
-    pub(super) default: Option<&'a str>,
-    pub(super) required: bool,
-    pub(super) cli: Option<CliMetadata>,
+pub(crate) struct FieldParts<'a> {
+    pub(crate) name: &'a str,
+    pub(crate) value: Option<ValueType>,
+    pub(crate) default: Option<&'a str>,
+    pub(crate) required: bool,
+    pub(crate) cli: Option<CliMetadata>,
 }
 
 /// Expands field fixture parts into complete documentation field metadata.
-pub(super) fn field(parts: FieldParts<'_>) -> FieldMetadata {
+pub(crate) fn field(parts: FieldParts<'_>) -> FieldMetadata {
     FieldMetadata {
         name: parts.name.to_owned(),
         help_id: format!("field.{}.help", parts.name),
@@ -239,7 +244,7 @@ pub(super) fn field(parts: FieldParts<'_>) -> FieldMetadata {
 }
 
 /// Builds a fully declared behaviour block for bridge test fixtures.
-pub(super) fn declared_behaviour(
+pub(crate) fn declared_behaviour(
     interaction: InteractionKind,
     mutation: MutationKind,
     bypass: Option<&str>,
@@ -253,13 +258,13 @@ pub(super) fn declared_behaviour(
     }
 }
 
-pub(super) struct StaticLocalizer {
+pub(crate) struct StaticLocalizer {
     messages: BTreeMap<String, String>,
 }
 
 impl StaticLocalizer {
     /// Creates a deterministic localizer from fixed identifier-message pairs.
-    pub(super) fn new<const N: usize>(entries: [(&str, &str); N]) -> Self {
+    pub(crate) fn new<const N: usize>(entries: [(&str, &str); N]) -> Self {
         let messages = entries
             .into_iter()
             .map(|(id, message)| (id.to_owned(), message.to_owned()))
@@ -268,7 +273,7 @@ impl StaticLocalizer {
     }
 
     /// Creates a localizer containing one optional message for omission tests.
-    pub(super) fn maybe(id: &str, message: Option<&str>) -> Self {
+    pub(crate) fn maybe(id: &str, message: Option<&str>) -> Self {
         message.map_or_else(
             || Self {
                 messages: BTreeMap::new(),
