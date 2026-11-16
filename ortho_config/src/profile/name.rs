@@ -3,6 +3,8 @@
 use std::fmt;
 use std::sync::Arc;
 
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
 use crate::{OrthoError, OrthoResult};
 
 /// A validated profile name.
@@ -60,6 +62,19 @@ pub(crate) fn name_valid(name: &str) -> bool {
 impl fmt::Display for ProfileName {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&self.value)
+    }
+}
+
+impl Serialize for ProfileName {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.as_str())
+    }
+}
+
+impl<'de> Deserialize<'de> for ProfileName {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let raw = String::deserialize(deserializer)?;
+        Self::new(&raw).map_err(serde::de::Error::custom)
     }
 }
 

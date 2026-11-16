@@ -56,7 +56,7 @@ pub fn generate_agent_context_if_requested(
         return Ok(());
     }
     log_agent_context_started(context);
-    let agent_context = build_agent_context(context);
+    let agent_context = build_agent_context(context)?;
     log_agent_context_bridged(&agent_context);
     output::write_agent_context(context.out_dir.as_path(), &agent_context)?;
     if !args.check_agent_native {
@@ -72,7 +72,9 @@ pub fn generate_agent_context_if_requested(
 /// enables `tracing`'s `log` bridge, Cargo's feature unification expands every
 /// event into a branch ladder that counts against the workspace's
 /// cognitive-complexity ceiling.
-fn build_agent_context(context: &GenerationContext<'_>) -> ortho_config::AgentContext {
+fn build_agent_context(
+    context: &GenerationContext<'_>,
+) -> Result<ortho_config::AgentContext, OrthohelpError> {
     let summary_localizer = context
         .en_us_localizer
         .map(|(_, resolved_localizer)| resolved_localizer as &dyn Localizer);
@@ -80,14 +82,15 @@ fn build_agent_context(context: &GenerationContext<'_>) -> ortho_config::AgentCo
         context.doc_metadata,
         &context.selection.package_name,
         summary_localizer,
-    );
+    )
+    .map_err(|err| OrthohelpError::Message(err.to_string()))?;
     let policy_config = context
         .selection
         .policy
         .as_ref()
         .map(policy::config::PolicyConfig::from);
     agent_context::apply_policy_to_context(&mut agent_context, policy_config.as_ref());
-    agent_context
+    Ok(agent_context)
 }
 
 /// Report that the requested format does not need agent-context output.

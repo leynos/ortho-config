@@ -246,7 +246,9 @@ const fn error_category(error: &OrthoError) -> &'static str {
         OrthoError::UnknownProfile { .. }
         | OrthoError::InvalidProfileName { .. }
         | OrthoError::ReservedProfileName { .. }
-        | OrthoError::ProfileForbiddenKey { .. } => CATEGORY_PROFILE,
+        | OrthoError::ProfileForbiddenKey { .. }
+        | OrthoError::DuplicateProfileRedaction { .. }
+        | OrthoError::ProfileMetadataOnUnsupported { .. } => CATEGORY_PROFILE,
         OrthoError::Aggregate(_) => CATEGORY_AGGREGATE,
     }
 }

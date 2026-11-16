@@ -681,6 +681,16 @@ provides runner evidence, not installed-state or feature-proof evidence for a
 new worktree. Never report a missing-input failure or fixture pass as proof of
 redaction.
 
+Medium severity, realized on 2026-11-15: the rolling Whitaker dylint suite
+changed underneath the branch. Its shared object was replaced at 21:24 and
+`make lint-whitaker` went from two findings to 22
+`multiple_nested_conditional_logic` diagnostics, 21 of which sit in files
+byte-identical to `main` (verified with `git diff --quiet main -- <path>`, 12
+paths SAME-AS-MAIN; the one changed path carries a finding that predates this
+branch's arms). Mitigation: certify M1 with `lint-clippy` and record the
+byte-identity evidence, leave `lint-whitaker` excluded, and escalate to the
+operator. Never modify the installation or `dylint.toml` to buy a green gate.
+
 ## Progress
 
 - [x] (2026-10-14) Inspect prerequisite, branch, and projection paths with two
@@ -701,6 +711,30 @@ redaction.
   implementation request named this plan and instructed implementation to
   proceed, which supplies execution approval for M1–M3.
 - [ ] M1: complete disclosure boundary.
+  - [x] (2026-11-15) Consolidate schema ownership: `cargo-orthohelp::schema`
+    re-exports `ortho_config::docs`; the four mirror modules are deleted.
+  - [x] (2026-11-15) Add `ProfileFieldExposure`, the `profile_field` IR field,
+    the single `redacted_for_output` projection, and its unit tests.
+  - [x] (2026-11-15) Parse and emit `profile_field = "secret"|"reference_only"`,
+    rejecting unknown and duplicate labels and marked flattened containers.
+  - [x] (2026-11-15) Extend `ProfilesDeclaration` with validated private
+    redaction records and a names-only catalogue; reject duplicates,
+    unsupported metadata, and inconsistent serialization.
+  - [x] (2026-11-15) Apply projection at the derive, pipeline, generated bridge,
+    and agent-context boundary; derive `ProfileFieldRedaction` records and add
+    the `profile-redaction-v1` cache salt.
+  - [x] (2026-11-15) Add bounded differential property tests for V1, V2, and V4
+    and a names-only property test for V3; all 19 redaction tests and all 14
+    declaration tests pass.
+  - [x] (2026-11-15) Record non-vacuity evidence by seeding three faults
+    (retained default, retained nested enum member, skipped child), observing
+    failures, restoring the module byte-for-byte, and rerunning green.
+  - [x] (2026-11-15) Record the contract in ADR-0018 and reference it from the
+    agent-native and cargo-orthohelp design documents.
+  - [x] (2026-11-16) Ordinary gates and gated M1 commit: formatting, Clippy,
+    docstring coverage, Markdown, Mermaid, spelling, and the workspace test
+    suite except the load-sensitive boundary target, whose saturation
+    attribution is recorded below. Whitaker remains escalated, not repaired.
 - [ ] M2: proofs and external workflow evidence.
 - [ ] M3: documentation, final gates, and roadmap completion.
 
@@ -714,6 +748,99 @@ scripting guide; the guide now exists. PR #651 has since supplied the pinned
 Kani/Verus setup, command contracts, fixtures, and a dedicated CI lane.
 Production proof inventories remain empty at the rebased baseline. Assertion
 libraries are already authorized and present in workspace testing dependencies.
+
+M1 discoveries, 2026-11-15:
+
+- The production-proof CI lane named by this plan no longer exists: `#678`
+  deleted `prover-tools.yml`. M2 must create a production-proof lane rather
+  than extend one. The pinned Verus tooling from ADR-0017 remains available.
+- `cargo-orthohelp/src/schema/` was a hand-maintained mirror of the IR types,
+  as ADR-0016 recorded. Consolidating it into re-exports was required to give
+  the projection one type identity; the mirror's drift risk disappears.
+- The first focused run of the new property suite exposed three existing unit
+  tests: two encoded wrong expectations (changing `ValueType::String` to
+  `ValueType::Enum` is a public shape change, not a protected-slot change; an
+  absent `default` serializes as an explicit `null` because the field has no
+  `skip_serializing_if`), and the traversal probe used a process-global counter
+  that concurrent property tests also incremented. The fixtures were corrected
+  and the probe made thread-local.
+- Non-vacuity evidence (logs under `/tmp/fault{1,2,3}-*-9-1-2.out`):
+  - retained protected default: 9 tests failed, including
+    `projection_matches_independent_model`,
+    `projection_preserves_and_clears_exactly`, and
+    `projected_wire_carries_no_protected_literal`;
+  - retained nested enum member: 7 tests failed, including all four proptests;
+  - skipped child projection: 7 tests failed, including the traversal-count and
+    command-example tests.
+  The module was restored from a byte-identical copy (`sha256 33cc3bf3…`) and
+  all 19 redaction tests passed again.
+
+M1 gate evidence, 2026-11-15 (candidate `7a4586f7`, worktree clean of edits
+during each run):
+
+- `make check-fmt`: pass, 100 files unchanged.
+- `make lint-clippy`: pass; `cargo doc --workspace --no-deps` clean, then
+  `cargo clippy --workspace --all-targets --all-features -D warnings` clean.
+- `make docstring-coverage`: pass, 746 of 746 statements (100.0%).
+- `make markdownlint`: pass once the index reflected the four deleted mirror
+  modules and one hyphenated spelling was corrected to its closed form.
+- `make nixie`: pass, all diagrams validated.
+- `make spelling`: pass.
+- `make lint-whitaker`: excluded, see the Whitaker risk above. This is
+  infrastructure, not a verdict on the diff.
+- `make test`, `cargo test --all-targets --all-features` half: 111 test
+  binaries ran and 110 passed, including every binary that exercises this branch
+  (`ortho_config` lib 332 passed / 4 ignored, `ortho_config_macros` 325 passed,
+  `documentation_examples_rust_tests` 58 passed / 13 ignored, `compile_fail` 2
+  passed, `docs_profile_redaction` 5 passed). The single red binary is
+  `-p ortho_l10n --test boundary`: 35 passed, 9 failed, 10 ignored, 900.32 s.
+  No file this branch touches belongs to that target (`git status --porcelain`
+  matches no `ortho_l10n` path, and no manifest changed).
+- `make test`, pytest half: `128 passed, 5 skipped` when run directly with the
+  pinned `uv` environment. `make` never reached this step because the red
+  binary above aborted the recipe.
+- `-p ortho_l10n --test boundary`: attributed to host saturation, not to the
+  diff. All nine failures carry one of the two documented shapes ("exceeded the
+  N second deadline" and "900 second allowance was exhausted while … waited for
+  a sibling nested Cargo invocation"), and the log shows
+  `Blocking waiting for file lock on package cache` plus a cold
+  `target/localization-boundary/packaging-target` compile. At the time of the
+  run the host was at load average 17-23 with 4 of 4 compile slots held and
+  more than 30 requests queued.
+  [The boundary allowance finding](../BOUNDARY-ALLOWANCE-FINDING.md) records
+  the same failing set, with the same failure shapes, on an unmodified
+  `origin/main` control at `9be62487`, and states that validating a pass
+  requires an idle host. The suite was not re-run under the same saturation,
+  because that would add load without changing the outcome; the dedicated CI
+  runner is the arbiter. Log retained at
+  `/tmp/gate-evidence-9-1-2/test.attempt5-boundary-deadlines.out`.
+
+Two real defects were found by these gates and repaired in the same change:
+
+- `ortho_config/tests/trybuild/public_api_contracts.rs` is the "should pass"
+  compile fixture that proves downstream crates can build a `FieldMetadata`
+  literal. Adding the `profile_field` field without updating it made
+  `public_api_contracts_compile_for_downstream_crates` fail with
+  `E0063: missing field`. This is the fixture doing its job.
+- The documented Rust probe in
+  `ortho_config/tests/documentation_examples/guide_flows.rs` serialized the
+  bridge result directly. Once `bridge_ir_to_agent_context` became fallible,
+  that fence failed to compile with `E0277: Arc<OrthoError>: Serialize`. The
+  published example now unwraps with an `.expect(...)` naming the step.
+
+Two gate incidents were diagnosed rather than worked around:
+
+- The spelling gate reported `tracked file could not be scanned` for a deleted
+  mirror module. The deletions were unstaged, so `git ls-files` still listed
+  them. Staging the intended changes fixed the gate's index view; no
+  configuration was altered.
+- A killed `make test` attempt left `target/orthohelp-bridge-build.in-progress`
+  naming a dead pid. Three `agent_context_contract` cases then failed with
+  "requires owner recovery after an interrupted build". After confirming no
+  Cargo or rustc process used this worktree's `target/`, the marker was removed
+  and the suite re-run; the same binary had passed 21 of 21 in the killed
+  attempt. The failure log is preserved at
+  `/tmp/gate-evidence-9-1-2/test.attempt2-stale-marker.out`.
 
 ## Decision log
 
@@ -735,15 +862,37 @@ The reconnaissance recommendation against proving a simple selector is
 retained: the proof is justified only by the whole recursive projection, not by
 the enum.
 
+2026-11-15, implemented: keep one projection in `ortho_config::docs` and make
+`cargo-orthohelp::schema` re-export it. This supersedes the hand-maintained
+mirror noted as a residual risk in ADR-0016 and gives the bridge and renderers
+one type identity. Recorded in ADR-0018.
+
+2026-11-15, implemented: decide command-example suppression once per document
+before projecting, then run a single projection pass. This keeps the global
+rule honest and bounds the projection to two linear traversals.
+
+2026-11-15, implemented: reject `profile_field` on clap- or serde-flattened
+containers. The emitted leaf fields have their own names, so a container label
+cannot be mapped to them; authors mark the leaves instead.
+
+2026-11-15, decided for M2: recreate a production-proof CI lane because `#678`
+deleted `prover-tools.yml`. Reuse the pinned Verus invocation and command
+contracts from ADR-0017 rather than inventing new tooling.
+
 ## Outcomes & retrospective
 
-Planning only. Implementation is unapproved and no feature acceptance or proof
-completion is claimed. The expert review corrected a counterexample in the
-draft proof relation and removed an unsupported flattened-descendant
-assumption. The plan-only formatting, format-check, Markdown/spelling, and
-Mermaid gates passed on 2026-10-14. No unrelated formatter or spelling changes
-remain. Publication records the final commit and branch in the draft PR;
-implementation approval remains outstanding.
+M1 implemented on 2026-11-15 under the user's execution approval. No formal
+proof, external workflow evidence, or roadmap completion is claimed. The expert
+review corrected a counterexample in the draft proof relation and removed an
+unsupported flattened-descendant assumption. The plan-only formatting,
+format-check, Markdown/spelling, and Mermaid gates passed on 2026-10-14.
+
+M1 retrospectively: the largest surprises were the deleted proof lane and the
+hand-maintained schema mirror, both addressed above. The differential model and
+the bounded generator found the three fixture/probe defects before any gate
+ran, so the milestone's property suite was useful immediately rather than only
+as regression cover. The remaining M1 work is the ordinary gate run and the
+gated commit; M2 and M3 remain outstanding.
 
 ## Research and review evidence
 

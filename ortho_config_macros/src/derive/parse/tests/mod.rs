@@ -8,6 +8,7 @@ mod lit;
 mod ortho_attrs;
 mod ortho_attrs_unknown_keys;
 mod output_attrs;
+mod profile_field;
 mod renderer_attrs;
 mod renderer_fields;
 mod type_utils;

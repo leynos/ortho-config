@@ -10,9 +10,48 @@ use syn::Token;
 use super::literals::{lit_char, lit_str};
 use super::localization::reject_localized_default;
 use super::{
-    FieldAttrs, MergeStrategy, apply_field_doc_attr, clap_default_value, clap_field_is_subcommand,
-    discard_unknown, parse_ortho_config, reject_subcommand_ortho_config_attrs,
+    FieldAttrs, MergeStrategy, apply_field_doc_attr, clap_default_value, clap_field_is_flattened,
+    clap_field_is_subcommand, discard_unknown, parse_ortho_config,
+    reject_subcommand_ortho_config_attrs, serde_field_is_flattened,
 };
+
+/// The two disclosure classifications an author may declare on a field.
+///
+/// The label is syntax-level data until field emission converts it into the
+/// runtime `ortho_config::docs::ProfileFieldExposure` value.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum ProfileFieldLabel {
+    /// Confidential material whose value must never be published.
+    Secret,
+    /// A sensitive locator the application resolves elsewhere.
+    ReferenceOnly,
+}
+
+impl ProfileFieldLabel {
+    /// Parses the label text accepted by `profile_field = "..."`.
+    fn parse(value: &syn::LitStr) -> syn::Result<Self> {
+        match value.value().as_str() {
+            "secret" => Ok(Self::Secret),
+            "reference_only" => Ok(Self::ReferenceOnly),
+            other => Err(syn::Error::new(
+                value.span(),
+                format!(
+                    "unknown profile_field label '{other}'; expected \"secret\" or \
+\"reference_only\""
+                ),
+            )),
+        }
+    }
+}
+
+/// A parsed `profile_field` annotation, including the span for diagnostics.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct ProfileFieldAnnotation {
+    /// The declared classification.
+    pub(crate) label: ProfileFieldLabel,
+    /// Span of the label literal, used for parse and flatten diagnostics.
+    pub(crate) span: proc_macro2::Span,
+}
 
 /// Parses field-level `#[ortho_config(...)]` attributes.
 ///
@@ -50,7 +89,32 @@ pub(crate) fn parse_field_attrs(field: &syn::Field) -> Result<FieldAttrs, syn::E
     if out.cli_default_as_absent && out.default.is_none() {
         out.inferred_clap_default = clap_default_value(field)?;
     }
+    reject_profiled_flattened_container(field, out.profile_field)?;
     Ok(out)
+}
+
+/// Rejects `profile_field` on a container whose leaves the derive cannot see.
+///
+/// The docs builder does not expand flattened containers into descendant
+/// metadata, so accepting the annotation here would promise protection the
+/// generated metadata cannot provide. The author must mark the emitted leaf
+/// fields on the separately derived child type instead.
+fn reject_profiled_flattened_container(
+    field: &syn::Field,
+    annotation: Option<ProfileFieldAnnotation>,
+) -> syn::Result<()> {
+    let Some(declared) = annotation else {
+        return Ok(());
+    };
+    let is_flattened = clap_field_is_flattened(field)? || serde_field_is_flattened(&field.attrs)?;
+    if is_flattened {
+        return Err(syn::Error::new(
+            declared.span,
+            "profile_field cannot be applied to a flattened container because its \
+emitted metadata has no descendant fields; mark the leaf fields on the child type instead",
+        ));
+    }
+    Ok(())
 }
 
 /// Applies a recognised field attribute, returning `true` if handled.
@@ -85,18 +149,38 @@ fn apply_field_attr(
         return Ok(false);
     };
     let key = ident.to_string();
-    let recognised = match key.as_str() {
+    match key.as_str() {
         "localized_default" => Err(reject_localized_default(&meta.path)),
-        "cli_long" => set_cli_long(meta, out),
-        "cli_short" => set_cli_short(meta, out),
-        "default" => set_default(meta, out),
-        "merge_strategy" => set_merge_strategy(meta, out),
-        // A bare flag: there is no value to parse, so it cannot fail.
-        "skip_cli" => Ok(()).inspect(|()| out.skip_cli = true),
-        "cli_default_as_absent" => set_cli_default_as_absent(meta, out),
-        _ => return apply_field_doc_attr(meta, out),
-    };
-    recognised.map(|()| true)
+        "cli_long" => {
+            let s = lit_str(meta, "cli_long")?;
+            out.cli_long = Some(s.value());
+            Ok(true)
+        }
+        "cli_short" => {
+            let c = lit_char(meta, "cli_short")?;
+            out.cli_short = Some(c);
+            Ok(true)
+        }
+        "default" => {
+            out.default = Some(meta.value()?.parse()?);
+            Ok(true)
+        }
+        "merge_strategy" => {
+            let s = lit_str(meta, "merge_strategy")?;
+            out.merge_strategy = Some(MergeStrategy::parse(&s.value(), s.span())?);
+            Ok(true)
+        }
+        "skip_cli" => {
+            out.skip_cli = true;
+            Ok(true)
+        }
+        "cli_default_as_absent" => {
+            out.cli_default_as_absent = parse_cli_default_as_absent(meta)?;
+            Ok(true)
+        }
+        "profile_field" => set_profile_field(meta, out).map(|()| true),
+        _ => apply_field_doc_attr(meta, out),
+    }
 }
 
 /// Records the `cli_long` flag name.
@@ -136,6 +220,30 @@ fn set_cli_default_as_absent(
     out: &mut FieldAttrs,
 ) -> Result<(), syn::Error> {
     out.cli_default_as_absent = parse_cli_default_as_absent(meta)?;
+    Ok(())
+}
+
+/// Records the disclosure classification of a profile-protected field.
+///
+/// A second annotation is rejected rather than overwritten: a field with two
+/// classifications would have no single disclosure rule to apply.
+fn set_profile_field(
+    meta: &syn::meta::ParseNestedMeta,
+    out: &mut FieldAttrs,
+) -> Result<(), syn::Error> {
+    let value = lit_str(meta, "profile_field")?;
+    if out.profile_field.is_some() {
+        return Err(syn::Error::new(
+            value.span(),
+            "duplicate profile_field annotation; a field has exactly one \
+disclosure classification",
+        ));
+    }
+    let label = ProfileFieldLabel::parse(&value)?;
+    out.profile_field = Some(ProfileFieldAnnotation {
+        label,
+        span: value.span(),
+    });
     Ok(())
 }
 

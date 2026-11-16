@@ -333,6 +333,22 @@ Adding `positional` is an additive optional field: it bumps the IR minor
 version and leaves existing `ir`, `man`, and `ps` output unchanged for command
 surfaces that use only flags.
 
+#### 2.2.1 Profile field disclosure
+
+A field may carry `profile_field: Option<ProfileFieldExposure>`, with the
+`snake_case` labels `secret` and `reference_only`. The disclosure policy has a
+single owner in `ortho_config::docs`: `DocMetadata::redacted_for_output`
+removes protected defaults, field examples, CLI possible values, and nested
+enum members, and removes every command-level example when any field in the
+tree is protected. `cargo-orthohelp` does not implement or vary that policy.
+Its schema module re-exports the `ortho_config::docs` types, its pipeline
+projects deserialized IR before rendering, its bridge projects before writing
+IR JSON, and its agent-context adapter projects at its public boundary and
+derives protected-field records from the projected tree. The cache identity
+adds the `profile-redaction-v1` salt so artefacts produced under a different
+policy are never reused. The contract and its rationale are recorded in
+[ADR-0018](adrs/adr-0018-profile-field-redaction.md).
+
 ### 2.3 Value typing and defaults
 
 ```rust
@@ -866,7 +882,8 @@ valid; `--no-build` trusts the existing IR.
 
 Crate fingerprints hash `Cargo.toml`, `build.rs` (when present), `src/`, and
 `locales/` so changes to configuration schemas or translations invalidate the
-cache.
+cache. The identity also hashes the disclosure-policy salt
+`profile-redaction-v1`; see §2.2.1.
 
 Digests are SHA-256 and the crate-internal `cargo-orthohelp/src/hex.rs` helper
 renders full digests as 64 lowercase hexadecimal digits. `sha2` 0.11 returns

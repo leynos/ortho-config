@@ -5,6 +5,8 @@
 
 mod ir;
 
+mod profile_redaction;
+
 #[cfg(test)]
 mod proptests;
 
@@ -16,6 +18,7 @@ pub use ir::{
     RendererField, RendererFieldLocalization, RendererMetadata, RendererRecord, SectionsMetadata,
     SourceKind, StdoutPurpose, StreamContent, TogglePolicy, TtyPolicy, ValueType, WindowsMetadata,
 };
+pub use profile_redaction::ProfileFieldExposure;
 
 /// Current IR schema version.
 pub const ORTHO_DOCS_IR_VERSION: &str = "2.0";

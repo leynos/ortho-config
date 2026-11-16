@@ -20,7 +20,7 @@ fn transform_maps_profile_metadata_into_supported_declaration() {
         flag: String::from("profile"),
         env_var: String::from("APP_PROFILE"),
     });
-    let context = bridge_ir_to_agent_context(&metadata, "demo_pkg", None);
+    let context = bridge_ir_to_agent_context(&metadata, "demo_pkg", None).expect("bridge succeeds");
     assert!(context.profiles.supported);
     let selection = context
         .profiles
@@ -82,7 +82,7 @@ fn transform_injects_selector_when_a_same_named_input_has_another_long() {
         flag: String::from("profile"),
         env_var: String::from("APP_PROFILE"),
     });
-    let context = bridge_ir_to_agent_context(&metadata, "demo_pkg", None);
+    let context = bridge_ir_to_agent_context(&metadata, "demo_pkg", None).expect("bridge succeeds");
     let selection = context
         .profiles
         .selection
@@ -106,7 +106,7 @@ fn transform_injects_selector_when_a_same_named_input_has_another_long() {
 #[test]
 fn transform_leaves_declaration_unsupported_for_legacy_ir() {
     let metadata = doc(DocSpec::root_without_fields());
-    let context = bridge_ir_to_agent_context(&metadata, "demo_pkg", None);
+    let context = bridge_ir_to_agent_context(&metadata, "demo_pkg", None).expect("bridge succeeds");
     assert!(!context.profiles.supported);
     assert!(context.profiles.selection.is_none());
 }

@@ -23,7 +23,7 @@ use crate::schema::{
 pub(super) fn bridge_single(renderer: Option<RendererMetadata>) -> RendererContract {
     let mut metadata = doc(DocSpec::root_without_fields());
     metadata.renderer = renderer;
-    let context = bridge_ir_to_agent_context(&metadata, "demo_pkg", None);
+    let context = bridge_ir_to_agent_context(&metadata, "demo_pkg", None).expect("bridge succeeds");
     context
         .commands
         .into_iter()
@@ -202,7 +202,7 @@ fn child_commands_do_not_inherit_renderer_declarations() {
         }),
     });
 
-    let context = bridge_ir_to_agent_context(&root, "demo_pkg", None);
+    let context = bridge_ir_to_agent_context(&root, "demo_pkg", None).expect("bridge succeeds");
     let child = context
         .commands
         .iter()
@@ -241,7 +241,7 @@ fn sibling_commands_keep_their_own_declarations() {
         ..DocSpec::root_without_fields()
     });
 
-    let context = bridge_ir_to_agent_context(&root, "demo_pkg", None);
+    let context = bridge_ir_to_agent_context(&root, "demo_pkg", None).expect("bridge succeeds");
     let find = |name: &str| {
         &context
             .commands

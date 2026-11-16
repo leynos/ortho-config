@@ -27,7 +27,7 @@ use crate::schema::{CliMetadata, DocMetadata, FieldMetadata, HeadingIds, Section
 proptest! {
     #[test]
     fn generated_trees_have_unique_command_paths(tree in metadata_tree()) {
-        let context = bridge_ir_to_agent_context(&tree, "demo_pkg", None);
+        let context = bridge_ir_to_agent_context(&tree, "demo_pkg", None).expect("bridge succeeds");
         let mut seen = BTreeSet::new();
 
         for command in context.commands {
@@ -44,7 +44,7 @@ proptest! {
     #[test]
     fn every_generated_command_survives_the_bridge(tree in metadata_tree()) {
         let expected = expected_paths(&tree);
-        let context = bridge_ir_to_agent_context(&tree, "demo_pkg", None);
+        let context = bridge_ir_to_agent_context(&tree, "demo_pkg", None).expect("bridge succeeds");
         let actual = context
             .commands
             .iter()
@@ -58,7 +58,7 @@ proptest! {
     /// Commands are ordered by path even though siblings arrive unsorted.
     #[test]
     fn commands_are_sorted_by_path(tree in metadata_tree()) {
-        let context = bridge_ir_to_agent_context(&tree, "demo_pkg", None);
+        let context = bridge_ir_to_agent_context(&tree, "demo_pkg", None).expect("bridge succeeds");
 
         for (left, right) in context.commands.iter().zip(context.commands.iter().skip(1)) {
             prop_assert!(left.path <= right.path);
@@ -67,7 +67,7 @@ proptest! {
 
     #[test]
     fn command_inputs_are_sorted_by_name(tree in metadata_tree_with_fields()) {
-        let context = bridge_ir_to_agent_context(&tree, "demo_pkg", None);
+        let context = bridge_ir_to_agent_context(&tree, "demo_pkg", None).expect("bridge succeeds");
 
         for command in context.commands {
             for (left, right) in command.inputs.iter().zip(command.inputs.iter().skip(1)) {
@@ -78,8 +78,8 @@ proptest! {
 
     #[test]
     fn transformed_trees_serialize_deterministically(tree in metadata_tree_with_fields()) {
-        let first = bridge_ir_to_agent_context(&tree, "demo_pkg", None);
-        let second = bridge_ir_to_agent_context(&tree, "demo_pkg", None);
+        let first = bridge_ir_to_agent_context(&tree, "demo_pkg", None).expect("bridge succeeds");
+        let second = bridge_ir_to_agent_context(&tree, "demo_pkg", None).expect("bridge succeeds");
 
         let first_json = serde_json::to_string_pretty(&first)
             .expect("first transform should serialize");
@@ -94,7 +94,7 @@ proptest! {
         let mut tree = doc("root", Some("demo"), Vec::new());
         tree.fields = vec![field(&hidden_name, true)];
 
-        let context = bridge_ir_to_agent_context(&tree, "demo_pkg", None);
+        let context = bridge_ir_to_agent_context(&tree, "demo_pkg", None).expect("bridge succeeds");
 
         for command in context.commands {
             prop_assert!(
@@ -271,6 +271,7 @@ fn field(name: &str, hide_in_help: bool) -> FieldMetadata {
         examples: Vec::new(),
         links: Vec::new(),
         notes: Vec::new(),
+        profile_field: None,
     }
 }
 

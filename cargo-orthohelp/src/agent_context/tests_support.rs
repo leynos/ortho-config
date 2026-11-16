@@ -241,6 +241,7 @@ pub(crate) fn field(parts: FieldParts<'_>) -> FieldMetadata {
         examples: Vec::new(),
         links: Vec::new(),
         notes: Vec::new(),
+        profile_field: None,
     }
 }
 
