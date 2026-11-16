@@ -32,9 +32,18 @@ use std::time::{Duration, Instant};
 /// message must name the budget the caller set: a caller waiting 200
 /// milliseconds must not be told that a 600-second budget elapsed.
 pub(super) fn acquire(started: Instant, budget: Duration) -> Result<File> {
-    let path = build_lock_path()?;
-    let lock = open_lock_file(&path)?;
-    wait_until_locked(&lock, &path, started + budget, budget)?;
+    acquire_at(&build_lock_path()?, started, budget)
+}
+
+/// Holds the advisory lock on `path`, under the same bounded wait.
+///
+/// Taking the path as an argument lets a test contend on a lock file it owns
+/// rather than on the one every process of this suite shares: a sibling case
+/// is permitted to hold the shared lock for its whole build budget, which
+/// would otherwise decide whether a short-budget regression test passes.
+pub(super) fn acquire_at(path: &Path, started: Instant, budget: Duration) -> Result<File> {
+    let lock = open_lock_file(path)?;
+    wait_until_locked(&lock, path, started + budget, budget)?;
     Ok(lock)
 }
 
