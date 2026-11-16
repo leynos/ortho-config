@@ -823,6 +823,18 @@ operator. Never modify the installation or `dylint.toml` to buy a green gate.
   the disclosure salt (`v1-9a0f5582851e611582e4dd0ddf4ea78e`). The redaction
   record is renumbered ADR-0023 and every reference follows it. No delivered
   behaviour changed.
+- [x] (2026-11-16) Full gates on the rebased candidate `ee34e606`. All eight
+  targets passed: `check-fmt` (106 files unchanged), `markdownlint` (0 issues;
+  the spelling gate reported `typos.toml` current), `nixie` (107 Markdown
+  files), `lint-clippy`, `docstring-coverage` (1065 items, 100%), `verus` (27
+  verified, 0 errors), `test` (2741 Cargo tests across 114 binaries with 44
+  ignored, then 128 pytest tests), and `test-workflow-contracts` (748 passed, 2
+  skipped). Logs are `/tmp/pr593-*-9-1-2-gate2.out`. The first attempt on the
+  rebased candidate failed only `check-fmt`, on two blank-line hunks the
+  conflict resolution had left in `cache.rs`; `make fmt` repaired them and the
+  whole set was re-run from the top. On this base,
+  `documentation_examples_tests` reports 13 tests rather than the pre-rebase
+  14, because main reworked that harness and absorbed one case.
 
 ## Surprises & discoveries
 
