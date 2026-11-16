@@ -12,7 +12,11 @@
 //! compiler sees it: `#[cfg]` on a `mod` declaration, a condition applied
 //! through a nested `cfg_attr`, or an inner `#![cfg]` at the top of a module
 //! file can make the declaring file unreachable. A `#[path]` is the opposite
-//! hazard: it can make the compiler load a file this walk would not follow.
+//! hazard: it can make the compiler load a file this walk would not follow, and
+//! a module file that is a symlink — or that exists only in a form the walk
+//! skips — hides the same way. A macro invocation is a third: Rust parses the
+//! call as one item and substitutes what it declares afterwards, so a
+//! declaration a macro generates never appears in this parse.
 //! The walk therefore follows `mod` declarations from the crate root, certifies
 //! the declaring file only when every hop is unconditional, and refuses a
 //! declaration whose compiled file it cannot establish. A declaration nested
@@ -35,7 +39,7 @@ use cargo_metadata::Package;
 use syn::{Item, ItemMod};
 
 use super::audit::{
-    audit_definition, declares_module_path, has_presence_conditional_attribute,
+    audit_definition, declares_module_path, has_presence_conditional_attribute, refuse_item_macros,
     refuse_nested_error_kinds, reject_cfg_attributes,
 };
 use super::library::library_crate_root;
@@ -157,6 +161,7 @@ fn collect_sources(
 fn analyze_error_kind(source: &str, origin: &Utf8Path) -> Result<Option<usize>> {
     let file = syn::parse_file(source).with_context(|| format!("{origin} should be valid Rust"))?;
     refuse_nested_error_kinds(&file.items, origin)?;
+    refuse_item_macros(&file.items, origin)?;
     let mut definitions = file.items.iter().filter_map(|item| match item {
         Item::Enum(definition) if definition.ident == "ErrorKind" => Some(definition),
         _ => None,
@@ -283,7 +288,15 @@ impl Reachability<'_> {
         prefix: &Utf8Path,
         depth: usize,
     ) -> Result<()> {
-        for candidate in module_files(prefix, module, self.sources) {
+        let candidates = module_files(prefix, module, self.sources);
+        ensure!(
+            !candidates.is_empty(),
+            "`mod {name}` below {prefix} resolves to no file this walk reads; the compiler may \
+             load a symlinked or otherwise unreachable module file, so the inventory is \
+             unprovable and the gate fails closed",
+            name = module.ident,
+        );
+        for candidate in candidates {
             self.visit_file(&candidate, depth + 1)?;
         }
         Ok(())

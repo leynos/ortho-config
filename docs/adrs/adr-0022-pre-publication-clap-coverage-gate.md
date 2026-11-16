@@ -135,6 +135,12 @@ an unknown identity and require a fail-closed diagnostic; alter only the parsed
 count and require the publication comparison to fail; change the total without
 the matrix and require compile failure; and introduce a duplicate with an
 omission at unchanged length and require the semantic inventory test to fail.
+Each source shape the walk refuses also has its own control: a conditional
+module hop, a `#[path]` declaration, a declaration nested in an inline module
+whether or not the module is conditional, a compiled decoy whose inventory
+`include!` splices from a contained file, and a declared module file staged as
+a symlink. The symlink controls also show the direction they must not take: an
+alias of the declaring module stays uncounted rather than refused.
 
 ## Alternatives rejected
 
