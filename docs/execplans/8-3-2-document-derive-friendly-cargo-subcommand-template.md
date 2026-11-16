@@ -143,6 +143,12 @@ extending the contract.
   substituted, and proved it non-vacuous by removing `serde` from the guide
   recipe and observing the expected compile failure. Corrected the Context
   statement that still described the 8.3.2 acceptance bullets as remaining.
+- [x] (2026-11-16) Rebased onto `main` at `d11a0797`, which prepares the 0.11.0
+  release, and moved both published dependency recipes to
+  `ortho_config = "0.11.0"`. The hosted `build-test` jobs build the
+  pull-request merge commit, so the 0.10.0 requirement could not resolve
+  against the 0.11.0 checkout even though the branch's own tree still carried
+  0.10.0.
 
 ## Surprises & discoveries
 
@@ -174,6 +180,14 @@ The generated documentation manifest had `tracing-subscriber` but not
 added as a direct dependency. The recipe fences were registered and checked
 statically because TOML cannot execute; the Rust fences remain the executable
 acceptance evidence.
+
+A published recipe pins the release it was written for, but the hosted
+`build-test` jobs compile the pull-request merge commit, which carries the
+current `main`. A release bump there therefore breaks a recipe-backed build
+that passed on the branch's own tree: the local checkout was 0.10.0 while the
+merge tree was 0.11.0. `every_documented_manifest_installs_the_current_release`
+requires the same alignment, so the recipes must follow the release rather than
+preserve the version they were first published with.
 
 ## Decision log
 
