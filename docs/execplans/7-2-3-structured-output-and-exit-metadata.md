@@ -637,7 +637,10 @@ migration guide before touching the candidate.
   files with the spelling gate clean, and `make nixie` validated every diagram.
   The `ortho_l10n` boundary target, red through wall-clock expiries at the
   previous head, passed 44/44 with 10 ignored in 602 s here, which confirms the
-  earlier red as load rather than diff.
+  earlier red as load rather than diff. `cargo test --workspace --doc` under
+  the gate's own `RUSTFLAGS` then passed 136 doctests across 10 suites with 47
+  ignored at `f8b39efc`, which is the explicit doctest result the a9 assessment
+  asked for; `make test` never reaches doctests.
 
 ## Surprises & discoveries
 
