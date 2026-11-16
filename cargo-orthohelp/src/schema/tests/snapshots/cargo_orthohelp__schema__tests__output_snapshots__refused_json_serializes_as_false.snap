@@ -1,0 +1,8 @@
+---
+source: cargo-orthohelp/src/schema/tests/output_snapshots.rs
+expression: "snapshot_json(&OutputMetadata\n{\n    supports_json: Some(false), stdout: Some(StdoutPurpose::None),\n    stderr_diagnostics: None, exit_classes: Vec::new(),\n})"
+---
+{
+  "supports_json": false,
+  "stdout": "none"
+}

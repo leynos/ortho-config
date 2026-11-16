@@ -67,6 +67,7 @@ pub(super) fn node(
         windows: None,
         behaviour: None,
         renderer,
+        output: None,
         profiles: None,
     }
 }

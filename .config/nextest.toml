@@ -197,7 +197,14 @@ slow-timeout = { period = "120s", terminate-after = 8 }
 # the nested build the class can reach, not for the cheapest path it takes.
 # It was on the 600s base allowance until `child_cargo_tier_test.py` read the
 # class from the sources and reported it.
-filter = 'binary(powershell_windows) | binary(nested_subcommand_end_to_end) | binary(documented_command) | binary(documentation_examples_rust_tests) | binary(agent_context_contract) | binary(policy_report_contract) | binary(golden_tests) | binary(identifier_artefact_e2e) | binary(cli_dispatch) | binary(agent_context_renderer_end_to_end)'
+#
+# `binary(agent_context_output_end_to_end)` arrived with the structured-output
+# metadata work and spawns the shipped binary through `cargo_orthohelp_exe`,
+# the same loader the renderer end-to-end target uses. It was therefore on the
+# 600s base allowance with a child cargo on its clock until the same contract
+# reported it on run 43655987369, where `build-test (linux)` failed the workflow
+# contract step and no other step failed.
+filter = 'binary(powershell_windows) | binary(nested_subcommand_end_to_end) | binary(documented_command) | binary(documentation_examples_rust_tests) | binary(agent_context_contract) | binary(policy_report_contract) | binary(golden_tests) | binary(identifier_artefact_e2e) | binary(cli_dispatch) | binary(agent_context_renderer_end_to_end) | binary(agent_context_output_end_to_end)'
 test-group = 'orthohelp_cache'
 slow-timeout = { period = "120s", terminate-after = 8 }
 

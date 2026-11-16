@@ -1,0 +1,5 @@
+---
+source: cargo-orthohelp/src/schema/tests/output_snapshots.rs
+expression: "snapshot_json(&OutputMetadata::default())"
+---
+{}

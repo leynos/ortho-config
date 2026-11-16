@@ -68,6 +68,8 @@ pub struct OrthoHelpContext {
     pub cache_ir_path: Slot<Utf8PathBuf>,
     pub cache_ir_content: Slot<String>,
     pub policy_package: Slot<String>,
+    /// Listing of `<target_dir>/orthohelp` recorded before a run.
+    pub recorded_tree: Slot<Vec<String>>,
 }
 
 /// Cross-process ownership of the shared BDD cache beneath Cargo's target.
@@ -196,6 +198,7 @@ impl Default for OrthoHelpContext {
             cache_ir_path: Slot::new(),
             cache_ir_content: Slot::new(),
             policy_package: Slot::new(),
+            recorded_tree: Slot::new(),
         }
     }
 }
@@ -257,6 +260,43 @@ pub(super) fn scenario_target_dir(ctx: &OrthoHelpContext) -> StepResult<Utf8Path
     ctx.target_dir
         .with_ref(Clone::clone)
         .ok_or_else(|| "Cargo target directory should be set".into())
+}
+
+/// Lists every entry beneath `root` as a sorted, `/`-joined relative path.
+///
+/// A missing root lists as empty: callers compare one listing with another, and
+/// "the directory was never created" and "the directory is still empty" are the
+/// same observation for that comparison. Separators are normalised so the
+/// recorded listing reads the same on every platform.
+pub(super) fn list_tree(root: &Utf8Path) -> StepResult<Vec<String>> {
+    let mut listing = Vec::new();
+    match Dir::open_ambient_dir(root, ambient_authority()) {
+        Ok(dir) => collect_tree(&dir, "", &mut listing)?,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => return Err(format!("reading {root} failed: {error}").into()),
+    }
+    listing.sort();
+    Ok(listing)
+}
+
+/// Appends one directory's descendants to `listing`, depth first.
+fn collect_tree(dir: &Dir, prefix: &str, listing: &mut Vec<String>) -> StepResult<()> {
+    // Collect first so a failing entry surfaces before any recursion starts,
+    // rather than after part of the tree has already been appended.
+    let entries = dir.entries()?.collect::<Result<Vec<_>, _>>()?;
+    for entry in entries {
+        let name = entry.file_name()?;
+        let path = if prefix.is_empty() {
+            name.clone()
+        } else {
+            format!("{prefix}/{name}")
+        };
+        if entry.file_type()?.is_dir() {
+            collect_tree(&dir.open_dir(&name)?, &path, listing)?;
+        }
+        listing.push(path);
+    }
+    Ok(())
 }
 
 /// Provides a clean context for orthohelp scenarios.

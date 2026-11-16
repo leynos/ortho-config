@@ -113,6 +113,11 @@ const SIMPLE_RUNS: &[SimpleRun] = &[
         stdout: "field=host\n",
     },
     SimpleRun {
+        id: "guide-output-metadata",
+        args: &[],
+        stdout: "supports_json=Some(true) stdout=Some(Data) classes=[\"success\", \"usage\"]\n",
+    },
+    SimpleRun {
         id: "guide-behaviour-metadata",
         args: &[],
         stdout: "mutation=Some(Delete) bypass=Some(\"--force\")\n",
@@ -124,6 +129,11 @@ const SIMPLE_RUNS: &[SimpleRun] = &[
     },
     SimpleRun {
         id: "api-guide-policy-report-constructors",
+        args: &[],
+        stdout: "",
+    },
+    SimpleRun {
+        id: "api-guide-output-policy",
         args: &[],
         stdout: "",
     },

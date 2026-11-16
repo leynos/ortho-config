@@ -2019,6 +2019,96 @@ literal now needs the new field. Read [the changelog](../CHANGELOG.md) for the
 exact field to name if you build those values yourself; applications that only
 derive the configuration need no change.
 
+## Declare structured output and exit classes
+
+Renderer metadata says how a command _writes_. Output metadata says what an
+agent may _rely on_: whether a JSON mode exists, what the normal result on
+stdout is, whether stderr carries diagnostics, and which exit classes the
+command documents. Declare it in its own nested group:
+
+<!-- tested-example: guide-output-metadata -->
+```rust
+use ortho_config::{OrthoConfig, OrthoConfigDocs};
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Deserialize, Serialize, OrthoConfig)]
+#[ortho_config(
+    prefix = "APP_",
+    output(
+        supports_json = true,
+        stdout = "data",
+        stderr_diagnostics = true,
+        exit_class(name = "success", meaning = "The report was written"),
+        exit_class(name = "usage", meaning = "The invocation was invalid")
+    )
+)]
+struct ReportArgs {
+    /// Path of the report to write.
+    #[ortho_config(default = String::from("report.json"))]
+    path: String,
+}
+
+fn main() {
+    // The block is an `Option`: a command that declares nothing carries no
+    // output metadata at all rather than a defaulted claim.
+    if let Some(output) = ReportArgs::get_doc_metadata().output {
+        let classes: Vec<&str> = output
+            .exit_classes
+            .iter()
+            .map(|class| class.name.as_str())
+            .collect();
+        println!(
+            "supports_json={:?} stdout={:?} classes={classes:?}",
+            output.supports_json, output.stdout
+        );
+    }
+}
+```
+
+The example prints
+`supports_json=Some(true) stdout=Some(Data) classes=["success", "usage"]`. The
+group accepts four keys:
+
+- `supports_json = true` or `false` — whether a JSON mode exists;
+- `stdout = "data"`, `"path"`, `"summary"`, or `"none"` — the purpose of a
+  normal successful result. `data` is the result itself, `path` is a filesystem
+  path the command produced, `summary` is a human-readable account of work
+  done, and `none` means a successful invocation writes nothing. Help, version,
+  and error output are excluded;
+- `stderr_diagnostics = true` or `false` — whether stderr can carry
+  diagnostics, which says nothing about exit status; and
+- `exit_class(name = "…", meaning = "…")`, repeatable — one documented exit
+  class. `name` must match `[a-z][a-z0-9_]*` and be unique within the command;
+  `meaning` must not be blank.
+
+Class names are protocol identifiers and meanings are carried verbatim, so
+neither may be localized. No numeric status is declared: mapping classes to
+process exit codes is later roadmap work, and inventing a number here would
+pre-empt it.
+
+Three conventions follow from the no-inference rule:
+
+- A refusal is not a silence. `supports_json = false` states that no JSON mode
+  exists; leaving the key out states nothing. An agent that conflates the two
+  will either retry a capability that was refused or skip one that exists.
+- An empty block claims nothing. `output()` is accepted, reaches the wire as
+  `{}`, and means exactly what no block means. Every undeclared key is omitted
+  rather than replaced by `false`.
+- Declare each command separately. A subcommand never inherits its parent's
+  output block, because sibling commands commonly differ: one emits JSON and
+  another prints prose.
+
+A declaration is not a check. The derive records what an author stated; it
+never inspects flags, arguments, or a running process to confirm it. The
+metadata flows into the documentation IR, the localized per-locale artefacts,
+and agent context as an `output` object. Checking whether a data-returning
+command actually declares JSON support is a separate, opt-in step described in
+[Lint declared structured output](#lint-declared-structured-output).
+
+Because the wire contract is additive, the JSON stays compatible. The Rust
+source API is not: constructing documentation IR or an `AgentCommand` by struct
+literal now needs the `output` field set to `None` when nothing is declared.
+
 ## Agent-native policy checking
 
 `cargo orthohelp --check-agent-native` runs an opt-in policy check against a
@@ -2311,6 +2401,68 @@ The validator checks only the claims supplied to it. It does not discover
 commands from prose, validate a shell invocation's quoting or arity, or prove
 that an example succeeds when run. Those remain the consumer's responsibility;
 `docs/agent-native-cli-design.md` records the full boundary.
+
+## Lint declared structured output
+
+The structured-output rule is exported beside the behaviour rules as
+`cargo_orthohelp::policy::rules::output::check_output(context, mode)`. It
+reports one `json_support_missing` finding (rule
+`agent-native.output.json-missing`) for every command whose declared stdout
+purpose is `data` and whose `supports_json` is false or undeclared.
+
+It compares declarations rather than observing a process. The `stdout` purpose
+describes what a command's normal successful result _is_, independently of how
+that result is encoded, so a command returning data in some structured format
+other than JSON still declares `data`. The rule is deliberately about JSON
+because that is the capability the product asks for: the finding names `--json`
+and gives the `output(supports_json = true)` annotation to add once the
+application implements it. Correcting the `stdout` purpose is the remedy only
+when the original declaration was inaccurate. A canonical verb such as `get` is
+never treated as evidence, `path`, `summary`, `none`, and the tolerant
+`unknown` fallback never fire, an absent block never becomes a defaulted
+record, and `PolicyMode::Off` returns an empty report.
+
+Like `check_behaviour`, the rule consumes a compiled agent context, so it is a
+library API rather than part of `--check-agent-native`; see the
+[cargo-orthohelp API guide](cargo-orthohelp-api-guide.md#structured-output-rule)
+for a runnable example that calls both checkers.
+
+## Rely on process exit status
+
+`cargo-orthohelp` reports normal completion with three process statuses. They
+describe existing behaviour; no diagnostic field carries them.
+
+_Table 6: Normal-completion process statuses._
+
+| Status | Class     | Meaning                                                                                                                                                                        |
+| ------ | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 0      | `success` | The requested work finished, including `--help` and `--version`.                                                                                                               |
+| 1      | `failure` | A runtime failure: loading metadata, building or running the bridge, parsing IR, serializing or writing a document, reading or writing files, or a deny-mode policy violation. |
+| 2      | `usage`   | Clap rejected the arguments or the dispatch shape.                                                                                                                             |
+
+A policy denial shares status `1` with every other runtime failure, so the
+number alone cannot identify it. The report is written and streamed before the
+process exits, and a positive `summary.deny` count is the authoritative signal:
+
+<!-- tested-example: guide-policy-deny -->
+```console
+rm -f out/policy-report.json
+cargo orthohelp --check-agent-native --policy-mode deny --package my-cli --out-dir out
+jq -e '.summary.deny == 0' out/policy-report.json
+```
+
+The `cargo orthohelp` command exits `1` when the check reports a denial, so a
+fail-fast shell fails the step on the exit status and never reaches the
+assertion. A shell that continues after a failure does reach it, and the `jq`
+assertion then reads only the report the current run wrote, because the
+previous one was removed first; a stale count cannot pass the gate. Signals,
+forced termination, and a launcher that never starts the process are outside
+this contract.
+
+These three statuses describe `cargo-orthohelp` itself, not the target command.
+A command's declared `exit_class` names remain documentation about that
+command: mapping them to numbers is later roadmap work (7.2.5), and declaring
+how JSON mode frames its streams is roadmap 7.2.4.
 
 ## Upgrade from an earlier release
 

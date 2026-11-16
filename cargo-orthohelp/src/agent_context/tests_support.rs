@@ -136,6 +136,7 @@ pub(crate) fn doc(spec: DocSpec) -> DocMetadata {
         windows: None,
         behaviour: spec.behaviour,
         renderer: None,
+        output: None,
         profiles: None,
     }
 }

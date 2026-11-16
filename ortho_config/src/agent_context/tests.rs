@@ -25,6 +25,9 @@ mod renderer_defaults;
 #[path = "tests_renderer_wire.rs"]
 mod renderer_wire;
 
+#[path = "tests_output_wire.rs"]
+mod output_wire;
+
 #[path = "tests_wire_enums.rs"]
 mod wire_enums;
 
@@ -343,6 +346,7 @@ pub(super) fn sample_agent_context() -> AgentContext {
                 output_mode: Some("json".to_owned()),
             }],
             renderer: RendererContract::default(),
+            output: None,
         }],
         profiles: ProfilesDeclaration::unsupported(),
         feedback: SupportDeclaration { supported: false },

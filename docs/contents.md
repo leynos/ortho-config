@@ -103,6 +103,10 @@
   review the steps that read the chosen root back after both coverage passes,
   the rejection paths their contract suite executes, and the acceptance path
   the hosted Windows leg observes.
+- [ADR-0023: Explicit structured-output declarations](adrs/adr-0023-explicit-structured-output-declarations.md):
+  review the accepted `output(...)` derive group, the refusal-versus-silence
+  distinction, the omission rules for a declared block, and the deferred stream
+  framing and numeric exit taxonomy.
 - [Archived v0.8.0 roadmap](archive/v0-8-0-roadmap.md): review completed
   phases, steps, and tasks from the roadmap that preceded the active
   agent-native plan.
@@ -242,6 +246,8 @@
   - [Dual-renderer metadata](execplans/7-2-2-dual-renderer-metadata.md):
     review the approval-gated plan for renderer support, presentation policies,
     and stable protocol fields in roadmap 7.2.2.
+  - [Structured output and exit metadata](execplans/7-2-3-structured-output-and-exit-metadata.md):
+    review the proposed metadata, lint and exit-contract work for roadmap 7.2.3.
   - [Profile metadata](execplans/9-1-1-profile-metadata.md): plan for roadmap
     item 9.1.1, optional profile selection and layering.
   - [Adopt rstest-bdd v0.5.0](execplans/adopt-rstest-bdd-v0-5-0.md): plan for

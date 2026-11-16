@@ -19,6 +19,9 @@ mod fixtures;
 
 // Declared here rather than inside `fixtures` so targets that never read
 // renderer metadata do not carry these helpers as dead code.
+#[path = "fixtures/wire_assertions.rs"]
+mod wire_assertions;
+
 #[path = "fixtures/renderer_assertions.rs"]
 mod renderer_assertions;
 

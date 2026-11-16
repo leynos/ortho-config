@@ -5,16 +5,18 @@
 //!
 //! The types are grouped by the part of a command they describe: the document
 //! as a whole and its sections here, per-field metadata in [`field`], declared
-//! behaviour in [`behaviour`], declared rendering in [`renderer`], and reusable
-//! content in [`content`]. This module is private; it re-exports every type so
-//! `docs` presents the same flat surface it did before the split, and the
-//! public paths stay `ortho_config::docs::DocMetadata` and friends.
+//! behaviour in [`behaviour`], declared rendering in [`renderer`], declared
+//! structured output in [`output`], and reusable content in [`content`]. This
+//! module is private; it re-exports every type so `docs` presents the same flat
+//! surface it did before the split, and the public paths stay
+//! `ortho_config::docs::DocMetadata` and friends.
 
 use serde::{Deserialize, Serialize};
 
 mod behaviour;
 mod content;
 mod field;
+mod output;
 mod renderer;
 
 pub use behaviour::{BehaviourMetadata, InteractionKind, MutationKind};
@@ -22,6 +24,7 @@ pub use content::{Example, Link, Note};
 pub use field::{
     CliMetadata, DefaultValue, Deprecation, EnvMetadata, FieldMetadata, FileMetadata, ValueType,
 };
+pub use output::{ExitClass, OutputMetadata, StdoutPurpose};
 pub use renderer::{
     AccessibilityPolicy, ClosedStdinPolicy, InheritancePolicy, PlainPolicy, RenderWidth,
     RendererField, RendererFieldLocalization, RendererMetadata, RendererRecord, StreamContent,
@@ -63,6 +66,14 @@ pub struct DocMetadata {
     /// flags, output formats, or the host locale.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub renderer: Option<RendererMetadata>,
+    /// Optional declared structured-output capability for this command.
+    ///
+    /// Absent (`None`) means the author made no declaration; consumers must
+    /// treat the capability as undeclared rather than inferring it from names,
+    /// flags, renderers, or the presence of a `--json` option. Omitted from the
+    /// wire when absent, matching the `renderer` block's convention.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub output: Option<OutputMetadata>,
     /// Profile selection metadata for opted-in structs (roadmap 9.1.1).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub profiles: Option<DocProfilesMeta>,

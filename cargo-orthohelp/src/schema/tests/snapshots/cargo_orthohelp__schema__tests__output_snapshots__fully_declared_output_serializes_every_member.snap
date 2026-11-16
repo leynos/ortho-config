@@ -1,0 +1,19 @@
+---
+source: cargo-orthohelp/src/schema/tests/output_snapshots.rs
+expression: "snapshot_json(&OutputMetadata\n{\n    supports_json: Some(true), stdout: Some(StdoutPurpose::Data),\n    stderr_diagnostics: Some(false), exit_classes:\n    vec![ExitClass\n    {\n        name: \"success\".to_owned(), meaning:\n        \"The command completed\".to_owned(),\n    }, ExitClass\n    {\n        name: \"usage\".to_owned(), meaning:\n        \"The invocation was invalid\".to_owned(),\n    },],\n})"
+---
+{
+  "supports_json": true,
+  "stdout": "data",
+  "stderr_diagnostics": false,
+  "exit_classes": [
+    {
+      "name": "success",
+      "meaning": "The command completed"
+    },
+    {
+      "name": "usage",
+      "meaning": "The invocation was invalid"
+    }
+  ]
+}

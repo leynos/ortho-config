@@ -73,27 +73,4 @@ pub(crate) fn assert_greet_renderer(document: &Value, origin: &str) -> Result<()
     }
 }
 
-/// Finds the single command whose `path` ends in `leaf`.
-///
-/// Requiring uniqueness means a renamed or duplicated command fails here rather
-/// than silently asserting whichever match came first.
-pub(crate) fn command_by_leaf<'a>(document: &'a Value, leaf: &str) -> Result<&'a Value, TestError> {
-    let matches = document
-        .get("commands")
-        .and_then(Value::as_array)
-        .ok_or("commands should be an array")?
-        .iter()
-        .filter(|command| {
-            command
-                .get("path")
-                .and_then(Value::as_array)
-                .and_then(|path| path.last())
-                .and_then(Value::as_str)
-                == Some(leaf)
-        })
-        .collect::<Vec<_>>();
-    match matches.as_slice() {
-        [command] => Ok(command),
-        other => Err(format!("expected one command named {leaf:?}, found {}", other.len()).into()),
-    }
-}
+pub(crate) use super::wire_assertions::command_by_leaf;

@@ -32,7 +32,7 @@ use crate::policy::{PolicyMode, PolicySeverity};
 
 /// Strategy over a short lowercase slug with optional digits, hyphens, and
 /// underscores (matching CLI-path segment rules without flag dashes).
-fn slug() -> impl Strategy<Value = String> {
+pub(super) fn slug() -> impl Strategy<Value = String> {
     (
         1..=15usize,
         prop::char::range('a', 'z'),
@@ -164,6 +164,7 @@ fn command() -> impl Strategy<Value = AgentCommand> {
                 pagination: None,
                 examples: Vec::new(),
                 renderer: RendererContract::default(),
+                output: None,
             },
         )
 }

@@ -3,6 +3,7 @@
 use super::*;
 use ortho_config::docs as ortho_docs;
 
+mod output_snapshots;
 mod renderer_snapshots;
 
 #[test]
@@ -69,6 +70,7 @@ struct DocMetadataSpec<'a> {
     subcommands: Vec<ortho_docs::DocMetadata>,
     windows: Option<ortho_docs::WindowsMetadata>,
     behaviour: Option<ortho_docs::BehaviourMetadata>,
+    output: Option<ortho_docs::OutputMetadata>,
 }
 
 fn make_doc_metadata(spec: DocMetadataSpec<'_>) -> ortho_docs::DocMetadata {
@@ -84,6 +86,7 @@ fn make_doc_metadata(spec: DocMetadataSpec<'_>) -> ortho_docs::DocMetadata {
         windows: spec.windows,
         behaviour: spec.behaviour,
         renderer: None,
+        output: spec.output,
         profiles: None,
     }
 }
@@ -97,6 +100,7 @@ fn sample_metadata() -> ortho_docs::DocMetadata {
         subcommands: vec![sample_subcommand()],
         windows: Some(sample_windows()),
         behaviour: Some(sample_behaviour()),
+        output: Some(sample_output()),
     })
 }
 
@@ -113,6 +117,41 @@ fn sample_behaviour() -> ortho_docs::BehaviourMetadata {
     }
 }
 
+/// Supplies a fully declared output block for the sample metadata fixture.
+///
+/// Every member is populated, and the two classes are deliberately not in
+/// alphabetical order so the parity check observes the author's order.
+fn sample_output() -> ortho_docs::OutputMetadata {
+    ortho_docs::OutputMetadata {
+        supports_json: Some(true),
+        stdout: Some(ortho_docs::StdoutPurpose::Data),
+        stderr_diagnostics: Some(true),
+        exit_classes: vec![
+            ortho_docs::ExitClass {
+                name: "success".to_owned(),
+                meaning: "The command completed".to_owned(),
+            },
+            ortho_docs::ExitClass {
+                name: "usage".to_owned(),
+                meaning: "The invocation was invalid".to_owned(),
+            },
+        ],
+    }
+}
+
+/// Supplies an explicit refusal so the fixture exercises provenance.
+///
+/// A refusal and an undeclared capability are different declarations, and only
+/// a sample that declares the refusal can show the wire keeps them apart.
+fn sample_refused_output() -> ortho_docs::OutputMetadata {
+    ortho_docs::OutputMetadata {
+        supports_json: Some(false),
+        stdout: Some(ortho_docs::StdoutPurpose::None),
+        stderr_diagnostics: None,
+        exit_classes: Vec::new(),
+    }
+}
+
 fn sample_subcommand() -> ortho_docs::DocMetadata {
     make_doc_metadata(DocMetadataSpec {
         app_name: "run",
@@ -122,6 +161,7 @@ fn sample_subcommand() -> ortho_docs::DocMetadata {
         subcommands: vec![sample_nested_subcommand()],
         windows: None,
         behaviour: None,
+        output: Some(sample_refused_output()),
     })
 }
 
@@ -139,6 +179,7 @@ fn sample_nested_subcommand() -> ortho_docs::DocMetadata {
             bypass: None,
             dry_run: None,
         }),
+        output: None,
     })
 }
 

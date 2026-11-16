@@ -17,6 +17,9 @@ use input::build_input;
 mod renderer;
 use renderer::map_renderer;
 
+mod output;
+use output::map_output;
+
 mod policy;
 pub use policy::apply_policy_to_context;
 
@@ -74,6 +77,7 @@ struct SelectorFlag<'a>(&'a str);
 ///     behaviour: None,
 ///     renderer: None,
 ///     profiles: None,
+///     output: None,
 /// };
 ///
 /// let context = bridge_ir_to_agent_context(&metadata, "example", None);
@@ -236,6 +240,7 @@ fn walk(
         pagination: None,
         examples: Vec::new(),
         renderer: map_renderer(meta.renderer.as_ref()),
+        output: map_output(meta.output.as_ref()),
     });
 
     for subcommand in &meta.subcommands {
@@ -319,8 +324,13 @@ mod proptests;
 #[path = "renderer_proptests.rs"]
 mod renderer_proptests;
 
+#[cfg(test)]
+#[path = "output_proptests.rs"]
+mod output_proptests;
+
 // Visible to the crate so the skill-validation bridge regression can build IR
 // fixtures with the same builders instead of a second copy; the module is
 // test-only and adds nothing to the public API.
+
 #[cfg(test)]
 pub(crate) mod tests;

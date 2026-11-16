@@ -202,16 +202,22 @@ the use local to the module that needs it.
 
 ### Nextest test-group serialization
 
-`.config/nextest.toml` places eleven documentation and cache users in the
+`.config/nextest.toml` places twelve documentation and cache users in the
 single-threaded `orthohelp_cache` group: `rstest_bdd`, `powershell_windows`,
 `nested_subcommand_end_to_end`, `documented_command`,
 `documentation_examples_rust_tests`, `agent_context_contract`,
 `policy_report_contract`, `golden_tests`, `identifier_artefact_e2e`,
-`cli_dispatch` and `agent_context_renderer_end_to_end`. These binaries can
-clear the shared BDD cache or build documented examples against Cargo's shared
-target. A named process-local `Mutex` serializes scenarios within one test
-process, including direct `cargo test`. It cannot coordinate independent test
-processes, so filesystem leases also protect cache ownership across them.
+`cli_dispatch`, `agent_context_renderer_end_to_end` and
+`agent_context_output_end_to_end`. These binaries can clear the shared BDD
+cache or build documented examples against Cargo's shared target. A named
+process-local `Mutex` serializes scenarios within one test process, including
+direct `cargo test`. It cannot coordinate independent test processes, so
+filesystem leases also protect cache ownership across them.
+
+`agent_context_output_end_to_end` runs the shipped `cargo-orthohelp` binary
+through `cargo_orthohelp_exe`, the same loader the renderer end-to-end target
+uses, so its nested build writes into the shared Cargo target and sits on the
+raised allowance as well as in this group.
 
 The membership is not a hand-maintained list, and
 `tests/workflow_contracts/child_cargo_tier_test.py` is what keeps it from
@@ -577,6 +583,69 @@ Test entry points:
   and
 - `cargo test -p cargo-orthohelp --test golden_tests` for the agent-context
   snapshots.
+
+### Structured output metadata ownership
+
+Structured-output metadata
+([ADR-0023](adrs/adr-0023-explicit-structured-output-declarations.md)) is
+declared through the sibling `output(...)` attribute and is owned in the same
+three places as the renderer block, which it sits beside in every document:
+
+- `ortho_config::docs::ir::output` holds the human-documentation IR types;
+- `cargo_orthohelp::schema` re-exports the mirror the standalone generator
+  decodes; and
+- `ortho_config::agent_context::output` holds the wire contract, with
+  `cargo_orthohelp::agent_context::output::map_output` as the only place the
+  strict IR enum meets the tolerant wire enum.
+
+The macro side is `derive/parse/output_attrs.rs`, emitted by
+`derive/generate/docs/output.rs`. It borrows the shared `parse_bool` and
+`parse_token` helpers from `renderer_values.rs` rather than restating them, but
+owns its own accepted-token table and its own strict group: an unknown key, a
+mis-typed literal, a blank class meaning, a malformed class name, and a
+repeated leaf are all hard errors with spans. Two groups may contribute
+distinct leaves, so `output(supports_json = true)` followed by
+`output(stdout = "data")` is accepted while a repeated `stdout` is rejected.
+
+Unlike the renderer block, no capability claim is defaulted anywhere.
+`supports_json`, `stdout`, and `stderr_diagnostics` are `Option` at every
+layer, so an author's refusal (`Some(false)`) stays distinct from silence, and
+`map_output` maps an absent block to `None` instead of inventing
+`supports_json: false`. Decoding does have defaults, and every one of them
+expresses absence rather than a claim: a missing scalar member decodes to
+`None`, and a missing `exit_classes` member decodes to an empty vector, which
+documents no class instead of asserting that the command cannot fail. Both
+layers also skip those defaulted values when serializing, so a decoded leaf
+compares equal to one the author never wrote. Only the wire enum carries a
+tolerant fallback: an unrecognized future stdout token reads as `unknown`,
+which establishes no data-returning status. IR decoding stays strict. A present
+block with every member absent is representable as `{}` and makes the same
+claim as no block at all, so do not add production code that treats it as a
+defaulted record.
+
+The policy rule lives in `cargo-orthohelp/src/policy/rules/output.rs` and is
+exposed only as the library call
+`cargo_orthohelp::policy::rules::output::check_output(context, mode)`. It is
+not reachable from `--check-agent-native`, because that path is bridge-free by
+Decision D11 and therefore has no compiled agent context to inspect. The
+finding's message is the entire operator experience — agent context carries no
+source spans, so `location` is always absent — which makes the message wording
+part of the contract: `false` and undeclared JSON support are explained
+differently, and both lead with adding `output(supports_json = true)` once the
+command implements `--json`. Correct a declared `stdout` purpose only when the
+original declaration was inaccurate; a data command that gains JSON keeps
+`data`.
+
+Test entry points:
+
+- `cargo test -p cargo-orthohelp --lib output` for the rule table, equal-path
+  ties, and the off/warn/deny report snapshots;
+- `cargo test -p cargo-orthohelp --test rstest_bdd -- orthohelp_policy` for the
+  scenarios, including the policy-only run that must leave no bridge artefact;
+- `cargo test -p cargo-orthohelp --test cli_dispatch` for the documented process
+  statuses, help, and version; and
+- `cargo test -p cargo-orthohelp --test agent_context_output_end_to_end` for
+  subprocess runs of the shipped binary.
 
 `ortho_l10n::try_normalize_segment` is the single source of truth for strict
 runtime and derive-time Fluent identifier segments. Reuse it, or the
@@ -1597,6 +1666,45 @@ proceeds to generation. That generation writes `agent-context.json` for
 `agent-context` and `all`, but suppresses AgentContext JSON on stdout whenever
 policy checking is enabled. A deny-mode finding fails after the report is
 retained and emitted, before any generator artefacts are created.
+
+### Policy rule API testing
+
+The behaviour and structured-output rules are library APIs over a compiled
+agent context, so they are tested at three levels rather than through
+`--check-agent-native`.
+
+- Finite tables. `cargo-orthohelp/src/policy/rules/output_tests.rs` enumerates
+  every (JSON support, stdout purpose, enforcement mode) combination and
+  derives the expected verdict from the written specification, not from the
+  production predicate. Additional cases vary `stderr_diagnostics` and
+  `exit_classes` to show unrelated declarations cannot change the verdict. Keep
+  that expected column independent when adding cases.
+- Sampled properties. `output_proptests.rs` generates command vectors of length
+  0–64 and checks additivity, permutation invariance for distinct paths, stable
+  ties for equal paths, and an unchanged input context.
+- Executable specification. `tests/features/structured_output.feature`, with
+  steps in `tests/rstest_bdd_support/output_policy.rs`, builds a context in
+  process, calls `check_output`, and asserts stable machine fields. Each
+  scenario declares one command in one mode, which keeps the
+  `OutputPolicyState` fixture free of cross-scenario sharing.
+
+Red–green evidence matters as much as coverage here. Before implementing the
+predicate, confirm the table fails for the missing capability, and demonstrate
+at least one negative control — omit undeclared JSON support, or duplicate a
+finding — so the suite is known not to be vacuous.
+
+Process-level contracts live beside these unit suites and must pin the exact
+status, not merely success or failure. `tests/cli_dispatch.rs` pins `0`, `1`,
+and `2` for help, runtime failure, and Clap rejection; `policy_report_contract`
+pins `0` for a completed report and `1` for denial; `documented_command.rs`
+pins the same numbers against the commands the users' guide prints, including
+that a denied check still writes and streams its report.
+
+These obligations are finite or sampled. No unbounded invariant is claimed for
+the metadata transport or the one predicate, so the repository selects no Kani
+or Verus proof here; the production-proof inventory in this guide records the
+proofs that do exist. Revisit that selection only if a new unbounded semantic
+invariant appears, and revise the ExecPlan before writing a proof.
 
 ### Integration test targets
 

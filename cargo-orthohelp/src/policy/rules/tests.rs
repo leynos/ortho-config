@@ -40,6 +40,7 @@ pub(super) fn command(
         pagination: None,
         examples: Vec::new(),
         renderer: RendererContract::default(),
+        output: None,
     }
 }
 

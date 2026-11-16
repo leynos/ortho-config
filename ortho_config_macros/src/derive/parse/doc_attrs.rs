@@ -9,7 +9,9 @@ use super::doc_types::{
     DocFieldAttrs, DocStructAttrs, HeadingOverrides, PrecedenceAttrs, WindowsAttrs,
 };
 use super::literals::{lit_char, lit_str};
-use super::{FieldAttrs, discard_unknown, parse_behaviour_meta, parse_renderer_meta};
+use super::{
+    FieldAttrs, discard_unknown, parse_behaviour_meta, parse_output_meta, parse_renderer_meta,
+};
 
 /// Applies one documentation setting to the struct model.
 ///
@@ -72,6 +74,7 @@ fn apply_nested_struct_attr(
             parse_behaviour_meta(meta, group)
         }),
         "renderer" => parse_renderer_meta(meta, out.renderer.get_or_insert_default()),
+        "output" => parse_output_meta(meta, out.output.get_or_insert_default()),
         _ => return Ok(false),
     };
     recognised.map(|()| true)

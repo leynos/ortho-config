@@ -272,6 +272,7 @@ fn transform_projects_nested_tree_with_sorted_commands_and_inputs() {
 
     assert_eq!(commands, expected_nested_command_summaries());
 }
+
 #[rstest]
 #[case(None, None)]
 #[case(Some(""), None)]
@@ -312,6 +313,9 @@ mod renderer_tests;
 
 #[path = "renderer_mapping_tests.rs"]
 mod renderer_mapping_tests;
+
+#[path = "output_tests.rs"]
+mod output_tests;
 
 #[path = "tests_profiles.rs"]
 mod tests_profiles;

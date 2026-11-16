@@ -74,6 +74,7 @@ fn empty_metadata(app_name: &str) -> DocMetadata {
         windows: None,
         behaviour: None,
         renderer: None,
+        output: None,
         profiles: None,
     }
 }

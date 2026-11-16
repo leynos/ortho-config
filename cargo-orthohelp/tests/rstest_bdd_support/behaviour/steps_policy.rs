@@ -19,7 +19,9 @@ use cap_std::fs_utf8::Dir;
 use rstest_bdd_macros::{given, then, when};
 use serde_json::Value;
 
-use super::steps::{OrthoHelpContext, StepResult, get_out_dir, run_orthohelp};
+use super::steps::{
+    OrthoHelpContext, StepResult, get_out_dir, list_tree, run_orthohelp, scenario_target_dir,
+};
 
 /// Package name fixtures used by the policy scenarios.
 const WARN_FIXTURE: &str = "orthohelp_policy_warn_fixture";
@@ -52,6 +54,20 @@ fn policy_adoption_fixture_package(orthohelp_context: &mut OrthoHelpContext) {
     orthohelp_context
         .policy_package
         .set(ADOPTION_FIXTURE.to_owned());
+}
+
+/// Records the bridge cache subtree the run must leave untouched.
+///
+/// The bridge publishes beneath `<target_dir>/orthohelp`, so its absence for a
+/// policy-only run is observable only as a comparison: earlier scenarios in the
+/// same target may already have populated that subtree. The scenario holds the
+/// shared cache lock, so no peer scenario can add entries during the window.
+#[given("the bridge cache directory is recorded")]
+fn record_bridge_cache_directory(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
+    let target_dir = scenario_target_dir(orthohelp_context)?;
+    let listing = list_tree(&target_dir.join("orthohelp"))?;
+    orthohelp_context.recorded_tree.set(listing);
+    Ok(())
 }
 
 #[given("a fixture package with no policy table")]
@@ -294,6 +310,28 @@ fn policy_report_is_the_only_artefact(orthohelp_context: &mut OrthoHelpContext) 
         entries,
         vec!["policy-report.json".to_owned()],
         "the policy check should not run the generator or the bridge build"
+    );
+    Ok(())
+}
+
+/// Asserts that the run added nothing to the bridge cache subtree.
+///
+/// This is the observable half of the preserved no-bridge boundary: the
+/// generator's presence would create a cache-key directory and its build
+/// output beneath `<target_dir>/orthohelp`, and comparing against the listing
+/// recorded before the run attributes any such entry to this run alone.
+#[then("no bridge build artefact appears under the target directory")]
+fn no_bridge_build_artefact(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
+    let target_dir = scenario_target_dir(orthohelp_context)?;
+    let recorded = orthohelp_context
+        .recorded_tree
+        .with_ref(Clone::clone)
+        .ok_or("the bridge cache directory should have been recorded")?;
+    let observed = list_tree(&target_dir.join("orthohelp"))?;
+    assert_eq!(
+        observed, recorded,
+        "a policy-only check must not build the bridge: the cache gained {observed:?} \
+         over the recorded {recorded:?}"
     );
     Ok(())
 }

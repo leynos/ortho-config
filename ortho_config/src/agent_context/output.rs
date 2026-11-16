@@ -1,0 +1,125 @@
+//! Structured-output contracts for agent context (roadmap 7.2.3).
+//!
+//! Split from `mod` so each module stays beneath the 400-line cap. These types
+//! are the tolerant reading side of the output metadata: unlike the
+//! documentation IR, the stdout enum carries an `Unknown` fallback so a
+//! consumer that meets a future token keeps reading the rest of the document.
+//!
+//! Every member keeps the author's declared state. In particular
+//! `supports_json` stays an `Option` rather than defaulting to `false`, so an
+//! agent can tell "the author refused JSON" from "the author said nothing".
+//!
+//! See ADR-0023 for the vocabulary, the omission rules, and the no-inference
+//! contract.
+
+use serde::{Deserialize, Deserializer, Serialize};
+
+/// Deserializes a declared member, rejecting an explicit `null`.
+///
+/// `Option<T>` alone cannot tell an omitted member from a present `null`,
+/// because serde maps both to `None`. Inside agent context ADR-0023 reserves
+/// `None` for omission, so a present `null` is a decode error rather than a
+/// second spelling of "undeclared". The field keeps `#[serde(default)]` so an
+/// omitted member still yields `None` without calling this function.
+pub(crate) fn deserialize_present<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
+where
+    D: Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    T::deserialize(deserializer).map(Some)
+}
+
+/// Deserializes the output block, rejecting an explicit `null`.
+///
+/// Omission is the only way to say a command declared nothing. A present
+/// `null` would make "declared nothing" and a decode accident
+/// indistinguishable, which ADR-0023 forbids for agent context.
+pub(crate) fn deserialize_contract<'de, D>(
+    deserializer: D,
+) -> Result<Option<OutputContract>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    OutputContract::deserialize(deserializer).map(Some)
+}
+
+/// Declared structured-output capability for one command in agent context.
+///
+/// Serialization omits the block entirely when a command declares nothing, and
+/// omits every absent member inside a present block, matching the renderer
+/// contract's omission convention. A present empty block still makes no
+/// capability claim.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct OutputContract {
+    /// Whether the command offers JSON output; `None` means undeclared.
+    ///
+    /// This is the author's assertion that a `--json` capability exists. It is
+    /// not an observation that any particular flag, runtime, or payload exists.
+    #[serde(
+        default,
+        deserialize_with = "deserialize_present",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub supports_json: Option<bool>,
+    /// Purpose of the normal successful result on stdout; `None` is undeclared.
+    #[serde(
+        default,
+        deserialize_with = "deserialize_present",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub stdout: Option<StdoutPurpose>,
+    /// Whether stderr can carry diagnostics; `None` means undeclared.
+    #[serde(
+        default,
+        deserialize_with = "deserialize_present",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub stderr_diagnostics: Option<bool>,
+    /// Documented exit classes in the author's declared order.
+    ///
+    /// Omitted when empty. An empty list documents no class; it never asserts
+    /// that the command cannot fail.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub exit_classes: Vec<ExitClass>,
+}
+
+/// Purpose of a command's normal successful result on stdout.
+///
+/// The tolerant wire enum: an unrecognized future token reads as
+/// [`StdoutPurpose::Unknown`], which establishes no data-returning status.
+///
+/// Marked `#[non_exhaustive]` because the design document requires every public
+/// agent-context type to be, so a later semantic variant is an additive change
+/// rather than a break for downstream exhaustive matches. Unlike the structs
+/// beside it, an enum needs no constructor to stay constructible, so this
+/// attribute does not depend on the constructor work roadmap 13.1 tracks.
+#[non_exhaustive]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum StdoutPurpose {
+    /// Successful output is the command's data result.
+    Data,
+    /// Successful output is a filesystem path the command produced.
+    Path,
+    /// Successful output is a human-readable summary of work done.
+    Summary,
+    /// A successful invocation writes nothing to stdout.
+    None,
+    /// Unrecognized future token; never treated as data-returning.
+    #[default]
+    #[serde(other)]
+    Unknown,
+}
+
+/// One documented exit class.
+///
+/// `name` is a stable protocol identifier and `meaning` a verbatim explanation.
+/// The bridge copies both without validating, sorting, or localizing them; the
+/// derive is what rejects a malformed declaration.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ExitClass {
+    /// Stable, non-localized identifier.
+    pub name: String,
+    /// Explanation of when the class applies, carried verbatim.
+    pub meaning: String,
+}

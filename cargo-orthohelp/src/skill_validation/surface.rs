@@ -91,6 +91,7 @@ impl EffectiveCommandSurface {
     ///         pagination: None,
     ///         examples: Vec::new(),
     ///         renderer: RendererContract::default(),
+    ///         output: None,
     ///     }],
     ///     ..AgentContext::new("demo")
     /// };

@@ -9,6 +9,9 @@ mod fixtures;
 
 // Declared here rather than inside `fixtures` so targets that never read
 // renderer metadata do not carry these helpers as dead code.
+#[path = "fixtures/wire_assertions.rs"]
+mod wire_assertions;
+
 #[path = "fixtures/renderer_assertions.rs"]
 mod renderer_assertions;
 
@@ -32,6 +35,7 @@ use tempfile::TempDir;
 type TestError = Box<dyn Error + Send + Sync>;
 
 const FIXTURE_PACKAGE: &str = "orthohelp_fixture";
+
 const FIXTURE_ROOT_TYPE: &str = "orthohelp_fixture::NestedFixtureConfig";
 
 // The rstest cases share a content-addressed bridge directory whose manifest is
