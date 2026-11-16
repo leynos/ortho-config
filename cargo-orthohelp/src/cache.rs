@@ -39,7 +39,6 @@ pub(crate) const CACHE_KEY_VERSION_PREFIX: &str = "v1-";
 /// field does not automatically change what is redacted.
 const DISCLOSURE_POLICY_VERSION: &str = "profile-redaction-v1";
 
-
 /// Cache key inputs for the bridge IR.
 #[derive(Debug, Clone)]
 pub struct CacheKey {
@@ -290,4 +289,3 @@ fn try_open_dir(dir: &Dir, path: &Utf8Path) -> Result<Option<Dir>, OrthohelpErro
 #[cfg(test)]
 #[path = "cache_tests.rs"]
 mod tests;
-
