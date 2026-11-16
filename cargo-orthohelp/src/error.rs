@@ -29,6 +29,15 @@ pub enum OrthohelpError {
         message: String,
     },
 
+    /// The provided root type path could not be parsed or is unsupported.
+    #[error("failed to parse root type '{value}': {message}")]
+    InvalidRootType {
+        /// The invalid root type value as supplied by the caller.
+        value: String,
+        /// A description of why the root type is invalid.
+        message: String,
+    },
+
     /// The man page section number is outside the valid range (1-8).
     #[error("{0}")]
     InvalidManSection(#[from] InvalidManSection),
