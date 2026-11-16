@@ -10,7 +10,7 @@ use std::process::{Command, Stdio};
 use ortho_config_test_helpers::process::capture::Reader;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mut command = Command::new("cargo");
+    let mut command = Command::new("child-under-test");
     command.stdout(Stdio::piped());
     let mut child = command.spawn()?;
     let stdout = child
