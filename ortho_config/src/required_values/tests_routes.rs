@@ -74,8 +74,8 @@ fn keys_the_provider_cannot_express_have_no_environment_route(
     assert_no_environment_route(key, reason);
 }
 
-/// Return the environment variable advertised for the leaf `key` under `prefix`.
-fn leaf_environment_variable(key: &str, prefix: Option<&str>) -> Option<String> {
+/// Return the routes advertised for the leaf `key` under `prefix`.
+fn leaf_routes(key: &str, prefix: Option<&str>) -> Vec<SupplyRoute> {
     let fields = vec![required_leaf(key)];
     let hints = RouteHints {
         prefix: prefix.map(String::from),
@@ -87,11 +87,7 @@ fn leaf_environment_variable(key: &str, prefix: Option<&str>) -> Option<String> 
         .first()
         .expect("the leaf is the only reported requirement")
         .routes()
-        .iter()
-        .find_map(|route| match route {
-            SupplyRoute::Environment { variable } => Some(variable.clone()),
-            _ => None,
-        })
+        .to_vec()
 }
 
 /// A prefix is part of the name, so an unusable prefix loses the route.
@@ -102,7 +98,8 @@ fn leaf_environment_variable(key: &str, prefix: Option<&str>) -> Option<String> 
 /// first three cases are the positive controls: the same leaf keeps a truthful
 /// route whenever its prefix forms an observable name, including no prefix at
 /// all and an empty one, which matches every variable without stripping
-/// anything.
+/// anything. The configuration-file route names no environment variable, so it
+/// must survive every case.
 #[rstest]
 #[case::prefixed(Some("DEMO_"), Some("DEMO_HOST"))]
 #[case::no_prefix(None, Some("HOST"))]
@@ -114,10 +111,20 @@ fn a_prefix_that_cannot_name_a_variable_has_no_environment_route(
     #[case] prefix: Option<&str>,
     #[case] expected: Option<&str>,
 ) {
+    let routes = leaf_routes("host", prefix);
+    let variable = routes.iter().find_map(|route| match route {
+        SupplyRoute::Environment { variable } => Some(variable.as_str()),
+        _ => None,
+    });
     assert_eq!(
-        leaf_environment_variable("host", prefix).as_deref(),
-        expected,
+        variable, expected,
         "unexpected environment route for prefix {prefix:?}"
+    );
+    assert!(
+        routes
+            .iter()
+            .any(|route| matches!(route, SupplyRoute::ConfigurationFile { .. })),
+        "the configuration-file route must survive prefix {prefix:?}"
     );
 }
 

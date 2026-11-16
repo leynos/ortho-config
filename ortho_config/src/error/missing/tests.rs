@@ -342,6 +342,11 @@ fn control_characters_in_a_quoted_key_are_escaped() {
         "a tab must use TOML's short escape"
     );
     assert_eq!(
+        ConfigPath::new(["carriage\rreturn"]).render(),
+        "\"carriage\\rreturn\"",
+        "a carriage return must be escaped rather than returning the cursor"
+    );
+    assert_eq!(
         ConfigPath::new(["nul\0byte"]).render(),
         "\"nul\\u0000byte\"",
         "a NUL must be escaped rather than truncating the rendered text"
