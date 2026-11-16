@@ -336,12 +336,16 @@ fn redacted_wire_output_carries_the_label_but_no_literals() {
     // default is an explicit null rather than an omitted key.
     let wire_facts = (
         encoded.get("profile_field"),
-        encoded.get("default").is_some_and(serde_json::Value::is_null),
+        encoded
+            .get("default")
+            .is_some_and(serde_json::Value::is_null),
         encoded
             .get("examples")
             .and_then(serde_json::Value::as_array)
             .is_some_and(Vec::is_empty),
-        encoded.get("cli").and_then(|cli| cli.get("possible_values")),
+        encoded
+            .get("cli")
+            .and_then(|cli| cli.get("possible_values")),
     );
 
     assert_eq!(
