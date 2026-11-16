@@ -127,6 +127,8 @@ pub struct SchemaField {
 pub enum Activation {
     Required,
     Optional,
+    // Optional only to the loader of the declaring type.
+    DefaultBacked,
 }
 
 pub enum SchemaChildren {
@@ -162,30 +164,31 @@ same item also derives `OrthoConfig`, so the two cannot conflict.
 
 A field is required unless its declared shape or attributes guarantee a value:
 
-| Declared shape or attribute                    | Requiredness  |
-| ---------------------------------------------- | ------------- |
-| `Option<T>` (one outer layer)                  | Optional      |
-| `Option<T>` with a custom deserializer         | Required      |
-| `#[ortho_config(default = ...)]` with a loader | Optional      |
-| The same default on a schema-only type         | Required      |
-| Inferred clap default (`default_value`, `_t`)  | Optional      |
-| `#[serde(default)]` on the field               | Optional      |
-| `#[serde(default)]` on the container           | Optional      |
-| `#[serde(skip)]` or `skip_deserializing`       | Not inspected |
-| `Vec<T>`, `BTreeMap<K, V>`, `HashMap<K, V>`    | Required      |
-| Any other scalar, map, or opaque type          | Required      |
+| Declared shape or attribute                                                  | Requiredness  |
+| ---------------------------------------------------------------------------- | ------------- |
+| `Option<T>` (one outer layer)                                                | Optional      |
+| `Option<T>` with a custom deserializer                                       | Required      |
+| `#[ortho_config(default = ...)]` or inferred clap default, own loader active | Optional      |
+| The same default composed by a parent, or on a schema-only type              | Required      |
+| `#[serde(default)]` on the field                                             | Optional      |
+| `#[serde(default)]` on the container                                         | Optional      |
+| `#[serde(skip)]` or `skip_deserializing`                                     | Not inspected |
+| `Vec<T>`, `BTreeMap<K, V>`, `HashMap<K, V>`                                  | Required      |
+| Any other scalar, map, or opaque type                                        | Required      |
 
 Collections are required unless a default supplies them, because the loader
 emits an empty collection only through an explicit default or a merge overlay.
 The documentation IR's "collections are non-required" rule is descriptive and
 does not drive runtime decisions.
 
-The two default rows hold only where a loader materializes the declared value.
-`#[derive(OrthoConfig)]` emits one, and it covers only the fields of the type
-it is derived on; a type deriving the standalone schema is read by its parent's
-loader, which builds no defaults layer beneath itself. A declared default on
-such a type therefore never reaches the merged value and does not make its
-field optional.
+The two default rows turn on which loader is active. `#[derive(OrthoConfig)]`
+emits a defaults struct, and it covers only the fields of the type it is
+derived on. A parent that composes the type never runs that loader and builds
+no defaults layer beneath itself, so the child's declared default never reaches
+the merged value and does not make its field optional. The schema records the
+narrower fact as `Activation::DefaultBacked` rather than as optional, and
+`SchemaChildren::compose` requires it. A type deriving the standalone schema
+has no loader at all, so its declared defaults are required from the start.
 
 A field marked `#[serde(flatten)]` without the nested marker is not inspected:
 its keys do not appear under its own name, so any report would name a key the
@@ -244,6 +247,16 @@ absent observations.
   none, the node itself is reported with an object-shaped file route, so an
   absent required object containing only optional children cannot escape the
   report.
+- A declared default is a supply layer only for the loader of the type that
+  declares it, so the schema records that narrower fact instead of calling the
+  field optional. The generated defaults struct belongs to that loader; a
+  parent composing the type never builds it, and the parent's merged value
+  never carries the default. `SchemaChildren::compose` therefore demotes every
+  composed `DefaultBacked` node to required, level by level, so a parent
+  reports the key. Without this, the report would omit a value nothing
+  supplies, and the user would meet the deserializer's second failure only
+  after fixing the reported one. A schema-only child is unaffected: it has no
+  loader, so its declared defaults are already required.
 
 The report is the ordered, deduplicated subsequence of activated absent
 requirements. It contains no supplied values. Source, discovery, and parse
@@ -466,6 +479,17 @@ loader, and that loader's defaults struct covers only the parent's own fields,
 so a default declared on the child never reaches the merged value. The schema
 generator therefore carries whether the companion derive materializes defaults
 and treats declared defaults as optional only when it does.
+
+That flag alone answers the wrong question, because it is a property of the
+type and optionality is a property of a reading. A child that derives
+`OrthoConfig` does materialize its own defaults, so it reports them as
+optional, yet its parent never runs that loader. The schema therefore records
+the narrower `Activation::DefaultBacked` and lets composition decide:
+`SchemaChildren::compose` requires every node whose only supply was the
+declaring type's default, so the parent reports the key while the child's own
+load still tolerates absence. Two loads of the same declaration, differing only
+in the active loader, thus disagree about the report, which is the truthful
+outcome.
 
 ## References
 

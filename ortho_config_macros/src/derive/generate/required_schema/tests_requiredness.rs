@@ -10,8 +10,16 @@ use syn::DeriveInput;
 
 use super::{emit, emit_plain};
 
+/// A materialized default is optional for its own loader only.
+///
+/// `#[ortho_config(default = 8080)]` feeds the defaults struct that
+/// `#[derive(OrthoConfig)]` merges, so `port` is absent-tolerant here. It is not
+/// a general supply layer, though: the schema marks it `DefaultBacked` so a
+/// parent composing the type requires it. The Serde default and the `Option`
+/// stay plainly optional, which is the control: only the declared default takes
+/// the narrower activation.
 #[test]
-fn defaults_and_options_are_optional() -> Result<()> {
+fn a_materialized_default_is_default_backed() -> Result<()> {
     let input: DeriveInput = syn::parse_quote! {
         struct Nested {
             #[ortho_config(default = 8080)]
@@ -23,12 +31,19 @@ fn defaults_and_options_are_optional() -> Result<()> {
     };
     let tokens = emit(&input, &[])?;
     ensure!(
-        tokens.matches("Activation::Optional").count() == 3,
-        "expected three optional fields: {tokens}"
+        tokens.contains(concat!(
+            "key:::std::string::String::from(\"port\"),",
+            "aliases:::std::vec![],activation:ortho_config::Activation::DefaultBacked"
+        )),
+        "a materialized default must not claim to be optional everywhere: {tokens}"
+    );
+    ensure!(
+        tokens.matches("Activation::Optional").count() == 2,
+        "the Serde default and the Option stay optional: {tokens}"
     );
     ensure!(
         !tokens.contains("Activation::Required"),
-        "no field is required"
+        "no field is required of this loader: {tokens}"
     );
     Ok(())
 }

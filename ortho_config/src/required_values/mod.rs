@@ -43,6 +43,7 @@
 //! ```
 
 mod collect;
+mod env_route;
 mod schema;
 
 pub(crate) use collect::RouteScope;

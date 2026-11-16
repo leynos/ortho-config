@@ -1120,12 +1120,16 @@ explicit at integration boundaries.
 ### Recover from missing required values
 
 A field is required when it is not an `Option`, has no explicit or inferred
-default, and carries no Serde default at the field or container level. Two
+default, and carries no Serde default at the field or container level. Three
 exceptions refine that rule. An `Option<T>` carrying `deserialize_with` or
 `with` is required unless a Serde default applies, because the custom
-deserializer, not the declared type, decides what absence means. And a
+deserializer, not the declared type, decides what absence means. A
 `#[serde(default)]` on a flattened field does not rescue a required child: the
-flatten composes the child's own requirement schema at the current level.
+flatten composes the child's own requirement schema at the current level. And
+an explicit `#[ortho_config(default = ...)]` supplies its value only to the
+loader of the type that declares it: a nested type's default is materialized by
+that type's own loader, which a parent composing it never runs, so the parent
+reports the key and expects the caller to supply it.
 
 When required values are absent, the loader returns
 `OrthoError::MissingRequiredValues` with every missing value in declaration

@@ -10,7 +10,7 @@ use quote::quote;
 use syn::ext::IdentExt;
 use syn::{Field, Ident};
 
-use self::requiredness::{ActivationFacts, is_optional};
+use self::requiredness::{ActivationFacts, FieldActivation, activation};
 use crate::derive::build::CliFieldMetadata;
 use crate::derive::parse::{
     FieldAttrs, SerdeRenameAll, StructAttrs, nested_schema_type, option_inner,
@@ -231,7 +231,7 @@ fn push_statement(
 ) -> syn::Result<TokenStream> {
     let krate = args.krate;
     let aliases = serde_field_aliases(&field.attrs)?;
-    let is_optional = is_optional(
+    let classification = activation(
         field,
         attrs,
         &ActivationFacts {
@@ -241,10 +241,10 @@ fn push_statement(
             aliases: &aliases,
         },
     )?;
-    let activation = if is_optional {
-        quote! { #krate::Activation::Optional }
-    } else {
-        quote! { #krate::Activation::Required }
+    let activation = match classification {
+        FieldActivation::Required => quote! { #krate::Activation::Required },
+        FieldActivation::Optional => quote! { #krate::Activation::Optional },
+        FieldActivation::DefaultBacked => quote! { #krate::Activation::DefaultBacked },
     };
     let children = if composes_children(field, attrs)? {
         let ty = nested_schema_type(&field.ty);

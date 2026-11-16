@@ -484,6 +484,15 @@ schema strips one `Option` and any `Box` wrappers before composing the child,
 so an optional parent deactivates its subtree while a required parent still
 activates its required descendants.
 
+`requiredness::activation` decides one field's activation, and the choice
+depends on which loader reads the type. A declared or inferred default is
+recorded as `Activation::DefaultBacked`, not as `Optional`, because only the
+loader of the declaring type materializes it. `SchemaChildren::compose` turns
+every composed `DefaultBacked` node into `Required`, one level per compose
+call, so a parent reports a key that no active layer supplies. A schema-only
+child is unaffected: it has no loader, so the generator already reports its
+declared defaults as required.
+
 `ortho_config/src/required_values/` owns the runtime side: `schema.rs` defines
 the model, `collect.rs` is the pure collector, and `mod.rs` exposes
 `ensure_no_missing_required_values` plus the program-label helper. The

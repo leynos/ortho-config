@@ -198,6 +198,11 @@ extends that contract to selected subcommands.
   deserialized from the unmatched keys. The composed subtree of an `Option`
   child is therefore demoted as a whole, including any nested object, while
   every other flatten keeps its requirements.
+- A declared default is a supply layer only for the loader of the type that
+  declares it. The schema records `Activation::DefaultBacked` for such a field,
+  and `SchemaChildren::compose` requires it, because a parent never runs the
+  child's loader and so never builds the defaults struct that carries the
+  value. The child's own load keeps tolerating absence.
 - A field-level custom deserializer outranks the declared type. Serde consults
   a field default, then a container default, and only then the field's
   deserializer; when one is installed it raises a missing-field error instead

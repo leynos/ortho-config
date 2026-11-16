@@ -7,13 +7,32 @@
 
 use std::fmt;
 
-/// Whether an absent node is an error or merely deactivates its subtree.
+/// Whether an absent node is an error, and which layer tolerates it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Activation {
-    /// The loader requires the value, so its absence must be reported.
+    /// The active loader requires the value, so its absence must be reported.
     Required,
-    /// The loader tolerates absence, so the subtree is not inspected.
+    /// Some layer supplies the value whichever loader reads this node, so
+    /// absence is never an error: an `Option` type, a Serde default, or a
+    /// default at the container level.
     Optional,
+    /// Only the declaring type's own loader supplies the value, by
+    /// materializing the field's declared default. The node is absent-tolerant
+    /// when that loader is the active one and required in every other reading,
+    /// so [`SchemaChildren::compose`] demotes it to [`Self::Required`].
+    DefaultBacked,
+}
+
+impl Activation {
+    /// Report whether an absent node must be reported at this level.
+    ///
+    /// A `DefaultBacked` node is tolerated here: the type that declared it
+    /// materializes its default. Composition is what turns it into a
+    /// requirement.
+    #[must_use]
+    pub(crate) const fn is_required(self) -> bool {
+        matches!(self, Self::Required)
+    }
 }
 
 /// The children of a requirement node.
@@ -33,6 +52,12 @@ impl SchemaChildren {
     /// one object through [`RequiredConfigSchema::declares_nested_object`]; a
     /// type that answers `false` composes nothing, so its field stays a leaf
     /// under the parent's own key.
+    ///
+    /// A child's declared defaults are never materialized here: the defaults
+    /// struct belongs to the child's own loader, which a parent does not run.
+    /// Composition therefore requires every child node that was optional only
+    /// because of a declared default, so the parent reports a key no active
+    /// layer can supply instead of promising it.
     ///
     /// # Errors
     ///
@@ -60,7 +85,13 @@ impl SchemaChildren {
         if !T::declares_nested_object() {
             return Ok(Self::Leaf);
         }
-        Ok(Self::Nested(T::collect_required_schema(stack)?))
+        let children = T::collect_required_schema(stack)?;
+        Ok(Self::Nested(
+            children
+                .into_iter()
+                .map(SchemaField::require_default_backed)
+                .collect(),
+        ))
     }
 }
 
@@ -140,6 +171,25 @@ impl SchemaField {
                     .map(Self::optional_subtree)
                     .collect::<Vec<_>>(),
             );
+        }
+        self
+    }
+
+    /// Require a node whose absence only its declaring type's loader tolerates.
+    ///
+    /// A declared default is materialized by the defaults struct of the type
+    /// that declares it, and a composing parent never builds that struct. The
+    /// default is therefore not a supply layer for the reading the parent
+    /// performs, so the node returns to [`Activation::Required`].
+    ///
+    /// One call handles one composition level. A nested type applies the same
+    /// rule to its own fields while it collects them, so a composed subtree
+    /// arrives fully required without a second walk; an optional flatten
+    /// demotes the result afterwards with [`Self::optional_subtree`].
+    #[must_use]
+    fn require_default_backed(mut self) -> Self {
+        if self.activation == Activation::DefaultBacked {
+            self.activation = Activation::Required;
         }
         self
     }

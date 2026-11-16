@@ -1,4 +1,4 @@
-//! Requiredness decision for one generated schema field.
+//! Activation decision for one generated schema field.
 //!
 //! A field's absence is an error unless some layer can supply it. The layers
 //! are the field's own type, a Serde default, and — only when the companion
@@ -11,6 +11,18 @@ use syn::Field;
 use crate::derive::parse::{
     FieldAttrs, option_inner, serde_field_has_custom_deserializer, serde_has_default,
 };
+
+/// The activation a declared field contributes to its schema.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum FieldActivation {
+    /// No layer supplies the value, so its absence is an error.
+    Required,
+    /// A layer supplies the value whichever loader reads the type.
+    Optional,
+    /// Only the declaring type's own loader supplies the value, by materializing
+    /// the field's declared default.
+    DefaultBacked,
+}
 
 /// The declared facts that decide whether a field's absence is an error.
 ///
@@ -28,39 +40,48 @@ pub(super) struct ActivationFacts<'a> {
     pub(super) aliases: &'a [String],
 }
 
-/// Classify a field as optional or required.
+/// Classify a field's activation.
 ///
-/// The checks mirror the layers that can supply a value: an `Option` type, an
-/// explicit or inferred default, or a Serde default at either level.
+/// The checks mirror the layers that can supply a value: an `Option` type, a
+/// Serde default, or an explicit or inferred default.
+///
+/// Only `#[derive(OrthoConfig)]` emits the loader that materializes declared
+/// defaults, so only that derive reports [`FieldActivation::DefaultBacked`]: a
+/// field is optional for its own loader and required wherever another loader
+/// reads the type. A type that derives the schema alone is only ever read by
+/// its parent's loader, which never builds a defaults layer for it, so its
+/// declared default is not a supply layer and the field stays required.
 ///
 /// A default that `ortho_config` materializes is serialized under the Rust
 /// identifier, so it only supplies the value when the loader reads that
 /// identifier; a renamed field whose identifier is not an alias stays required
 /// even though it declares a default.
 ///
-/// Only `#[derive(OrthoConfig)]` emits the loader that materializes declared
-/// defaults. A type that derives the schema alone is read by its parent's
-/// loader, which never builds a defaults layer for it, so its declared default
-/// is not a supply layer and its field stays required unless a Serde default
-/// applies.
-///
 /// An `Option` type is optional only because Serde's `missing_field` helper
 /// yields `None` for it — and `expr_is_missing` consults a field's custom
 /// deserializer *instead* of that helper, returning `missing_field` directly.
 /// A default is checked before the deserializer, so it still makes the field
 /// optional. Without one, `Option<T>` is required.
-pub(super) fn is_optional(
+pub(super) fn activation(
     field: &Field,
     attrs: &FieldAttrs,
     facts: &ActivationFacts<'_>,
-) -> syn::Result<bool> {
-    let is_optional_by_serde = serde_has_default(&field.attrs)? || facts.container_default;
-    let default_reaches = default_reaches_field(field, facts.key, facts.aliases);
-    let declares_default = attrs.default.is_some() || attrs.inferred_clap_default.is_some();
-    let is_optional_by_default = facts.materializes_defaults && declares_default && default_reaches;
-    let is_optional_by_type =
+) -> syn::Result<FieldActivation> {
+    let supplied_by_type =
         option_inner(&field.ty).is_some() && !serde_field_has_custom_deserializer(&field.attrs)?;
-    Ok(is_optional_by_type || is_optional_by_serde || is_optional_by_default)
+    let supplied_by_serde = serde_has_default(&field.attrs)? || facts.container_default;
+    if supplied_by_type || supplied_by_serde {
+        return Ok(FieldActivation::Optional);
+    }
+    let declares_default = attrs.default.is_some() || attrs.inferred_clap_default.is_some();
+    let supplied_by_materialized_default = facts.materializes_defaults
+        && declares_default
+        && default_reaches_field(field, facts.key, facts.aliases);
+    Ok(if supplied_by_materialized_default {
+        FieldActivation::DefaultBacked
+    } else {
+        FieldActivation::Required
+    })
 }
 
 /// Report whether a materialized default reaches the key the loader reads.

@@ -13,7 +13,9 @@
 //! - a `#[serde(skip)]` field is never inspected, because Serde fills it from
 //!   `Default` and reads no key for it;
 //! - a documentation override describes a value without deciding whether it is
-//!   required.
+//!   required;
+//! - a default declared by a child's own loader supplies that loader only, so a
+//!   parent composing the same type must still report the key.
 //!
 //! Every shape is paired with a control that names the same path when the value
 //! really is absent, so an empty report is a property of the shape and not of
@@ -84,6 +86,26 @@ struct DocumentedRequiredRoot {
     /// The override describes the value; it does not make the value optional.
     #[ortho_config(doc(required = false))]
     host: String,
+}
+
+/// A child type that derives a loader of its own and declares a default.
+#[derive(Debug, Deserialize, Serialize, OrthoConfig)]
+#[ortho_config(prefix = "MRDL_")]
+struct LoaderChild {
+    /// Required for this type's own loader and for any parent that composes it.
+    name: String,
+    /// Supplied by this type's loader, which a parent never runs.
+    #[ortho_config(default = 8080)]
+    port: u16,
+}
+
+/// A parent that composes the loader-bearing child.
+#[derive(Debug, Deserialize, Serialize, OrthoConfig)]
+#[ortho_config(prefix = "MRDP_")]
+struct LoaderParent {
+    /// No flag can carry the object; the schema is still composed.
+    #[ortho_config(nested, skip_cli)]
+    child: LoaderChild,
 }
 
 /// Write `contents` to a fresh discovery file named `name`.
@@ -160,6 +182,51 @@ fn a_documentation_override_does_not_relax_requiredness() -> Result<()> {
         paths(&missing) == ["host"],
         "`doc(required = false)` must not silence a real requirement: {:?}",
         paths(&missing)
+    );
+    Ok(())
+}
+
+/// A declared default supplies only the loader of the type that declares it.
+///
+/// `LoaderChild::load` builds the defaults struct and materialises `port`, so
+/// its own report names `name` alone. `LoaderParent` composes the same type but
+/// never runs the child's loader, so nothing supplies `child.port` and the
+/// report must keep naming it: a report that omitted the key would send the
+/// user to fix `child.name` and meet a second failure afterwards. Both loads
+/// use the same absent inputs, so the difference is the active loading path.
+#[test]
+fn a_declared_default_supplies_only_its_own_loader() -> Result<()> {
+    let own = report(load::<LoaderChild>(&[PROGRAM], &[]))?;
+    ensure!(
+        paths(&own) == ["name"],
+        "the declaring type's loader must materialise `port`, got {:?}",
+        paths(&own)
+    );
+
+    let composed = report(load::<LoaderParent>(&[PROGRAM], &[]))?;
+    ensure!(
+        paths(&composed) == ["child.name", "child.port"],
+        "a parent's loader never materialises the child's default, got {:?}",
+        paths(&composed)
+    );
+    Ok(())
+}
+
+/// The routes reported for a composed child recover the load.
+///
+/// `a_declared_default_supplies_only_its_own_loader` insists the parent reports
+/// `child.port`; this case insists that reporting it is honest by supplying the
+/// value through the environment route the report advertises.
+#[test]
+fn a_parent_accepts_the_composed_child_it_reports() -> Result<()> {
+    let config = load::<LoaderParent>(
+        &[PROGRAM],
+        &[("MRDP_CHILD__NAME", "db"), ("MRDP_CHILD__PORT", "1")],
+    )
+    .map_err(|error| anyhow!("the advertised environment routes must recover: {error}"))?;
+    ensure!(
+        config.child.name == "db" && config.child.port == 1,
+        "the supplied child must load unchanged, got {config:?}"
     );
     Ok(())
 }
