@@ -10,56 +10,57 @@ use rstest::rstest;
 use serde_json::json;
 
 use super::super::collect::collect_missing;
-use super::super::schema::RouteHints;
+use super::super::schema::{RouteHints, SchemaField};
 use super::{required_leaf, required_object};
 use crate::SupplyRoute;
 
-#[test]
-fn environment_routes_uppercase_and_nest_segments() {
-    let fields = vec![required_object("database", vec![required_leaf("host")])];
+/// Return the routes of the only requirement `field` produces under `prefix`.
+///
+/// Each case needs the same three steps: hint the collector, insist that one
+/// requirement is reported, and take its routes. One helper owns them so a
+/// case states only the schema and the prefix it is about.
+fn requirement_routes(field: SchemaField, prefix: Option<&str>) -> Vec<SupplyRoute> {
+    let fields = vec![field];
     let hints = RouteHints {
-        prefix: Some(String::from("DEMO_")),
+        prefix: prefix.map(String::from),
         cli_flags: Vec::new(),
     };
-    let report =
-        collect_missing(&fields, &json!({}), &hints, None).expect("the nested leaf is absent");
-    let item = report
+    collect_missing(&fields, &json!({}), &hints, None)
+        .expect("the requirement is absent")
         .items()
         .first()
-        .expect("the nested leaf is the only reported requirement");
-    let variables: Vec<&str> = item
+        .expect("exactly one requirement is reported")
         .routes()
-        .iter()
-        .filter_map(|route| match route {
-            SupplyRoute::Environment { variable } => Some(variable.as_str()),
-            _ => None,
-        })
-        .collect();
-    assert_eq!(variables, vec!["DEMO_DATABASE__HOST"]);
+        .to_vec()
 }
 
-/// Assert the sole reported requirement for `key` has no environment route.
+/// Return the environment variable advertised among `routes`, if any.
+fn environment_variable(routes: &[SupplyRoute]) -> Option<&str> {
+    routes.iter().find_map(|route| match route {
+        SupplyRoute::Environment { variable } => Some(variable.as_str()),
+        _ => None,
+    })
+}
+
+#[test]
+fn environment_routes_uppercase_and_nest_segments() {
+    let routes = requirement_routes(
+        required_object("database", vec![required_leaf("host")]),
+        Some("DEMO_"),
+    );
+    assert_eq!(
+        environment_variable(&routes),
+        Some("DEMO_DATABASE__HOST"),
+        "a nested leaf must advertise the uppercased, `__`-joined variable"
+    );
+}
+
+/// A key the provider cannot read back is never advertised.
 ///
 /// `environment_routes_uppercase_and_nest_segments` is the positive control:
 /// the same collection passes over an expressible key and does advertise a
 /// variable, so a rejection here is a property of the key and not of the
 /// harness.
-fn assert_no_environment_route(key: &str, reason: &str) {
-    let fields = vec![required_leaf(key)];
-    let report = collect_missing(&fields, &json!({}), &RouteHints::default(), None)
-        .expect("the leaf is absent");
-    let item = report
-        .items()
-        .first()
-        .expect("the leaf is the only reported requirement");
-    assert!(
-        item.routes()
-            .iter()
-            .all(|route| !matches!(route, SupplyRoute::Environment { .. })),
-        "`{key}` must not advertise an environment route: {reason}"
-    );
-}
-
 #[rstest]
 #[case::dotted("a.b", "a literal dot nests instead of naming one key")]
 #[case::split("a__b", "an embedded `__` splits into two segments")]
@@ -71,23 +72,11 @@ fn keys_the_provider_cannot_express_have_no_environment_route(
     #[case] key: &str,
     #[case] reason: &str,
 ) {
-    assert_no_environment_route(key, reason);
-}
-
-/// Return the routes advertised for the leaf `key` under `prefix`.
-fn leaf_routes(key: &str, prefix: Option<&str>) -> Vec<SupplyRoute> {
-    let fields = vec![required_leaf(key)];
-    let hints = RouteHints {
-        prefix: prefix.map(String::from),
-        cli_flags: Vec::new(),
-    };
-    let report = collect_missing(&fields, &json!({}), &hints, None).expect("the leaf is absent");
-    report
-        .items()
-        .first()
-        .expect("the leaf is the only reported requirement")
-        .routes()
-        .to_vec()
+    let routes = requirement_routes(required_leaf(key), None);
+    assert!(
+        environment_variable(&routes).is_none(),
+        "`{key}` must not advertise an environment route: {reason}"
+    );
 }
 
 /// A prefix is part of the name, so an unusable prefix loses the route.
@@ -111,13 +100,10 @@ fn a_prefix_that_cannot_name_a_variable_has_no_environment_route(
     #[case] prefix: Option<&str>,
     #[case] expected: Option<&str>,
 ) {
-    let routes = leaf_routes("host", prefix);
-    let variable = routes.iter().find_map(|route| match route {
-        SupplyRoute::Environment { variable } => Some(variable.as_str()),
-        _ => None,
-    });
+    let routes = requirement_routes(required_leaf("host"), prefix);
     assert_eq!(
-        variable, expected,
+        environment_variable(&routes),
+        expected,
         "unexpected environment route for prefix {prefix:?}"
     );
     assert!(
@@ -126,27 +112,6 @@ fn a_prefix_that_cannot_name_a_variable_has_no_environment_route(
             .any(|route| matches!(route, SupplyRoute::ConfigurationFile { .. })),
         "the configuration-file route must survive prefix {prefix:?}"
     );
-}
-
-/// Return the environment variable advertised for a nested leaf under `parent`.
-fn nested_environment_variable(parent: &str) -> Option<String> {
-    let fields = vec![required_object(parent, vec![required_leaf("host")])];
-    let hints = RouteHints {
-        prefix: Some(String::from("DEMO_")),
-        cli_flags: Vec::new(),
-    };
-    let report =
-        collect_missing(&fields, &json!({}), &hints, None).expect("the nested leaf is absent");
-    report
-        .items()
-        .first()
-        .expect("the nested leaf is the only reported requirement")
-        .routes()
-        .iter()
-        .find_map(|route| match route {
-            SupplyRoute::Environment { variable } => Some(variable.clone()),
-            _ => None,
-        })
 }
 
 /// A segment edge that abuts the separator changes the path the provider sees.
@@ -164,8 +129,12 @@ fn a_segment_edge_that_merges_with_the_separator_has_no_environment_route(
     #[case] parent: &str,
     #[case] expected: Option<&str>,
 ) {
+    let routes = requirement_routes(
+        required_object(parent, vec![required_leaf("host")]),
+        Some("DEMO_"),
+    );
     assert_eq!(
-        nested_environment_variable(parent).as_deref(),
+        environment_variable(&routes),
         expected,
         "unexpected environment route for a leaf under `{parent}`"
     );
