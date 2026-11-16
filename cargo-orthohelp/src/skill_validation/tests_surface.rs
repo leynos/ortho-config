@@ -61,6 +61,7 @@ fn agent_command(segments: &[&str], longs: &[&str]) -> AgentCommand {
         pagination: None,
         examples: Vec::new(),
         renderer: RendererContract::default(),
+        output: None,
     }
 }
 
