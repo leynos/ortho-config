@@ -98,12 +98,13 @@ translations are repaired. Consumers who are not ready to ship real strings can
 explicitly choose `DemoLocalizer::noop()` for the same effect.
 
 Parsing failures are also routed through
-`ortho_config::localize_clap_error_with_command`, so missing subcommands or
-arguments reuse the same catalogue while still receiving context from the
-command tree. The demo catalogue overrides `clap-error-missing-argument` and
-`clap-error-missing-subcommand`, demonstrating how application text supersedes
-the embedded defaults while still deferring to stock `clap` messages whenever a
-translation is absent.
+`ortho_config::localize_clap_error_with_command`, so a missing required
+argument or an unknown subcommand reuses the same catalogue while still
+receiving context from the command tree. The demo catalogue overrides
+`clap-error-missing-argument` and `clap-error-invalid-subcommand`, the second
+being the one an unknown subcommand triggers, demonstrating how application
+text supersedes the embedded defaults while still deferring to stock `clap`
+messages whenever a translation is absent.
 
 ### Running with Japanese locale
 
