@@ -10,6 +10,7 @@ pub(super) use implementation::cargo_environment::CARGO_ENV_ALLOWLIST;
 use implementation::{allowed_environment, first_output_line};
 pub(super) use implementation::{
     cargo_dispatch_path, prepare_cargo_command_for_target_before, prepare_metadata_command,
+    with_prepared_environment,
 };
 
 #[path = "cargo_environment_tests.rs"]
