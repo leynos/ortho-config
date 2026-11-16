@@ -485,6 +485,69 @@ with a compatibility probe rather than an assumption.
   `ratio = nan`. With the JSON extraction restored it fails with `got None`,
   which is the reported symptom; on the repair it passes.
 
+- [x] (2026-11-16) Repaired the twelve findings from the CodeRabbit round on
+  `1025cd1b` and re-ran the six gates on `ced27adb`. Six commits carry the
+  repairs, in the order they landed:
+  - `c37c8807` — the missing-required report rendered TOML keys by
+    concatenation in two places and escaped only the quote. A key holding a
+    backslash, tab, or other control character produced a report that was not
+    valid TOML. One `render_segment` now escapes the whole set and `toml_key`
+    is deleted, so both renderers share it.
+  - `1a687871` — the environment route was offered for a completed variable
+    name no process environment can hold. The provider trims a name before the
+    prefix match and trims the remainder after it, so a prefix matching only an
+    untrimmed name, or one carrying `=` or NUL, can never be observed. The
+    collector validates the finished name; the new cases keep the prefixed,
+    unprefixed, and empty-prefix routes as positive controls beside the
+    rejections.
+  - `b3e07f19` — generated code called `collect_required_schema` directly for a
+    nested child, so a `#[serde(transparent)]` container had its inner keys
+    recorded under the parent's key. The decision moved behind
+    `RequiredConfigSchema::declares_nested_object` and
+    `SchemaChildren::compose`. The same commit adds `materializes_defaults`,
+    because a declared `#[ortho_config(default = ...)]` is only materialized by
+    the defaults layer the `OrthoConfig` derive emits.
+  - `41a17a4e` — both injected-environment subcommand loaders finished through
+    Figment extraction, so an absent required value arrived as
+    `OrthoError::Merge` rather than the enumerated report. They now delegate to
+    the schema-aware helpers and bound `T: RequiredConfigSchema` in place of
+    `DeserializeOwned`.
+  - `bf89a414` — the child-process probe ran through `Command::output`, so a
+    hang would hold the whole test binary until the harness killed it. It runs
+    through `test_helpers::process::run_with_deadline` with a named budget that
+    covers the run and its tree cleanup.
+  - `ced27adb` — the documentation half: the requiredness matrix rows for a
+    declared default under a loader and on a schema-only type, the
+    transparent-child rule, the enumerating loader methods, and the corrected
+    CHANGELOG anchor.
+  - The twelfth finding was stale: it described a `toml_key` that `c37c8807`
+    had already deleted, so that commit is its disposition rather than a
+    separate repair.
+
+  Whitaker's `module_max_lines` forced two splits while the repair was being
+  gated: `required_schema/mod.rs` was 421 lines and is 359 now, with
+  `requiredness.rs` holding the activation facts and `is_optional`;
+  `required_schema/tests.rs` was 406 and is 334, with `tests_requiredness.rs`
+  holding the three default-related cases. Two failures were infrastructure,
+  not defects. `make test` round 1 aborted on a stale
+  `target/orthohelp-bridge-build.in-progress` marker whose recorded pid was
+  dead, left by a harness-killed run; the marker was removed after confirming
+  no live compiler held the worktree, and the log kept as `.out.round1`. Round
+  2 failed only because the new `T: RequiredConfigSchema + ?Sized` bound added
+  a "required by a bound" note to the `required_schema_nested_without_impl`
+  trybuild expectation; the `.stderr` was re-blessed with `TRYBUILD=overwrite`
+  after reading the diff (round 2 kept as `.out.round2`).
+
+  On `ced27adb` all six gates passed in the plan's order. `make check-fmt`
+  reported 106 files unchanged; `make lint` passed rustdoc, Clippy, Whitaker
+  and 1044/1044 docstring coverage; `make typecheck` finished in 3m03s;
+  `make test` ran 118 binaries with `--no-fail-fast` to 2828 passed and 0
+  failed, and its pytest command passed 128 with 5 skipped; `make markdownlint`
+  and `make nixie` both exited 0. Lint needed four runs, preserved as
+  `.out.round1`–`.out.round3` plus the passing `.out`: round 1 caught a
+  `clippy::nonminimal_bool` in the new case table, and rounds 2 and 3 caught
+  the two module sizes in turn.
+
 ## Surprises & discoveries
 
 The full local suite aborted once at round c7 on
@@ -659,6 +722,17 @@ and had begun deserializing from the projection, which turned a configured
 `nan` into silence. Enumeration over the projection is still right, because a
 present `null` counts as supplied — which is also the correct answer for a
 non-finite float.
+
+Adding a trait bound to generated code can change a compile-fail snapshot.
+`SchemaChildren::compose`'s `T: RequiredConfigSchema + ?Sized` bound makes
+rustc append a "required by a bound in …" note to
+`required_schema_nested_without_impl`, so `make test` rejects the stored
+expectation although the reported error itself is unchanged. The snapshot was
+re-blessed only after reading the diff and confirming the added note was the
+whole change. The same gate run taught that Whitaker's `module_max_lines`
+counts each module *file* and reports the offending file's `mod` declaration,
+so splitting a module into sibling files is the sanctioned repair and a second
+oversized module surfaces only once the first is fixed; no `#[allow]` was used.
 
 ## Decision log
 
