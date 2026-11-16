@@ -86,11 +86,17 @@ fn cache_key_hash_renders_lowercase_hex() {
     );
 }
 
+/// Pins the exact digest so the disclosure salt cannot silently drop out.
+///
+/// [`cache_key_hash_tracks_every_input`] proves the listed fields vary the
+/// hash, but a salt that is never fed to the hasher would still satisfy it.
+/// This vector is the documented concatenation recomputed independently, so
+/// removing the salt, its label, or its separator changes the expected value.
 #[rstest]
 fn cache_key_hash_uses_the_leading_sha256_bytes() {
     assert_eq!(
         cache_key().hash(),
-        "v1-151fb1ee840f9a46d9843813b6877cda",
+        "v1-9a0f5582851e611582e4dd0ddf4ea78e",
         "cache key should version and use the leading digest bytes for its directory name"
     );
 }
