@@ -35,6 +35,7 @@ fn configuration_file_body(rendered: &str) -> String {
 }
 
 /// Report an object route that arrives before the leaves sharing its table.
+#[cfg(feature = "toml")]
 fn report_object_before_its_leaves() -> MissingRequiredValues {
     MissingRequiredValues::try_new(
         None,
@@ -55,6 +56,7 @@ fn report_object_before_its_leaves() -> MissingRequiredValues {
 }
 
 /// Report keys whose spellings a TOML bare key cannot express.
+#[cfg(feature = "toml")]
 fn report_unconventional_keys() -> MissingRequiredValues {
     let keys = [r"api@key", r#"he said "hi""#, r"back\slash", "tab\there"];
     let items: Vec<MissingRequiredValue> = keys
@@ -317,6 +319,37 @@ fn keys_outside_the_bare_alphabet_are_quoted_and_escaped() {
         ConfigPath::new(["a_b-c9"]).render(),
         "a_b-c9",
         "the bare alphabet must stay unquoted"
+    );
+}
+
+/// Control characters inside a quoted key are escaped, never emitted raw.
+///
+/// The rendered report and the suggested file section spell keys through one
+/// routine, so a key that reaches a terminal, a log, or a TOML document must
+/// not carry a raw newline or NUL through either. The named escapes are the
+/// ones TOML defines; every other control character, including DEL, uses the
+/// `\u` form.
+#[test]
+fn control_characters_in_a_quoted_key_are_escaped() {
+    assert_eq!(
+        ConfigPath::new(["line\nbreak"]).render(),
+        "\"line\\nbreak\"",
+        "a newline must be escaped rather than breaking the rendered line"
+    );
+    assert_eq!(
+        ConfigPath::new(["tab\there"]).render(),
+        "\"tab\\there\"",
+        "a tab must use TOML's short escape"
+    );
+    assert_eq!(
+        ConfigPath::new(["nul\0byte"]).render(),
+        "\"nul\\u0000byte\"",
+        "a NUL must be escaped rather than truncating the rendered text"
+    );
+    assert_eq!(
+        ConfigPath::new(["del\u{7f}"]).render(),
+        "\"del\\u007F\"",
+        "DEL is a control character, so a quoted key escapes it too"
     );
 }
 

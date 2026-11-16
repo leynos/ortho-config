@@ -6,9 +6,9 @@
 //! provider that has at least one route, and it withholds the route prompt
 //! entirely when no route could be rendered.
 
-use std::fmt::{self, Write as _};
+use std::fmt;
 
-use super::{ConfigPath, MissingRequiredValue, MissingRequiredValues, SupplyRoute};
+use super::{ConfigPath, MissingRequiredValue, MissingRequiredValues, SupplyRoute, render_segment};
 
 impl fmt::Display for MissingRequiredValues {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -120,8 +120,8 @@ fn write_indented_lines(formatter: &mut fmt::Formatter<'_>, lines: &[String]) ->
 /// keys in any order. TOML assigns each bare key to the most recently opened
 /// table and rejects a repeated header, so the section is regrouped here: root
 /// assignments first, then one header per table in first-appearance order.
-/// Every key is rendered through [`toml_key`], because a bare key accepts only
-/// ASCII letters, digits, `-` and `_` — in assignments as well as headers.
+/// Every key is rendered through [`render_segment`], because a bare key accepts
+/// only ASCII letters, digits, `-` and `_` — in assignments as well as headers.
 #[derive(Default)]
 struct FileSection {
     /// Assignments that belong to the document root.
@@ -142,7 +142,7 @@ impl FileSection {
         let Some((last, parent)) = path.segments().split_last() else {
             return;
         };
-        let assignment = format!("{} = \"<value>\"", toml_key(last));
+        let assignment = format!("{} = \"<value>\"", render_segment(last));
         if parent.is_empty() {
             self.root.push(assignment);
         } else {
@@ -175,48 +175,15 @@ impl FileSection {
     fn render(&self) -> Vec<String> {
         let mut lines = self.root.clone();
         for (header, assignments) in &self.tables {
-            let rendered: Vec<String> = header.iter().map(|segment| toml_key(segment)).collect();
+            let rendered: Vec<String> = header
+                .iter()
+                .map(|segment| render_segment(segment))
+                .collect();
             lines.push(format!("[{}]", rendered.join(".")));
             lines.extend(assignments.iter().cloned());
         }
         lines
     }
-}
-
-/// Render one key segment the way a TOML document accepts it.
-///
-/// A bare key may contain only ASCII letters, digits, `-` and `_`. Anything
-/// else has to be a quoted key, and a quoted key is a TOML basic string, so a
-/// double quote or backslash inside it is escaped rather than emitted raw.
-fn toml_key(segment: &str) -> String {
-    let is_bare = !segment.is_empty()
-        && segment.chars().all(|character| {
-            character.is_ascii_alphanumeric() || character == '-' || character == '_'
-        });
-    if is_bare {
-        return segment.to_owned();
-    }
-    let mut quoted = String::with_capacity(segment.len() + 2);
-    quoted.push('"');
-    for character in segment.chars() {
-        match character {
-            '"' => quoted.push_str("\\\""),
-            '\\' => quoted.push_str("\\\\"),
-            '\u{8}' => quoted.push_str("\\b"),
-            '\t' => quoted.push_str("\\t"),
-            '\n' => quoted.push_str("\\n"),
-            '\u{c}' => quoted.push_str("\\f"),
-            '\r' => quoted.push_str("\\r"),
-            other if other.is_control() => {
-                // Writing into a `String` cannot fail; `fmt::Write` reports a
-                // result only so the same call can target a fallible sink.
-                _ = write!(quoted, "\\u{:04X}", u32::from(other));
-            }
-            other => quoted.push(other),
-        }
-    }
-    quoted.push('"');
-    quoted
 }
 
 /// Build the configuration-file section from every file route in `missing`.

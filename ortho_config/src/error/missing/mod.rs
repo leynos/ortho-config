@@ -6,7 +6,7 @@
 //! collector because display must not discover requirements, read process
 //! arguments, or consult the environment.
 
-use std::fmt;
+use std::fmt::{self, Write as _};
 
 /// The configuration key path of a missing requirement.
 ///
@@ -85,13 +85,37 @@ impl fmt::Display for ConfigPath {
     }
 }
 
-/// Render one path segment, quoting it when a bare spelling would be ambiguous.
+/// Render one path segment the way a TOML document accepts it.
+///
+/// A bare key may contain only ASCII letters, digits, `-` and `_`. Anything
+/// else has to be a quoted key, and a quoted key is a TOML basic string, so the
+/// quote, the backslash, and every control character are written as escapes
+/// rather than emitted raw. Both the rendered report and the suggested file
+/// section spell keys through this one routine, so a character that needs an
+/// escape cannot be spelled two different ways in one message.
 fn render_segment(segment: &str) -> String {
     if is_bare_key(segment) {
         return segment.to_owned();
     }
-    let escaped = segment.replace('\\', "\\\\").replace('"', "\\\"");
-    format!("\"{escaped}\"")
+    let mut quoted = String::with_capacity(segment.len() + 2);
+    quoted.push('"');
+    for character in segment.chars() {
+        match character {
+            '"' => quoted.push_str("\\\""),
+            '\\' => quoted.push_str("\\\\"),
+            '\u{8}' => quoted.push_str("\\b"),
+            '\t' => quoted.push_str("\\t"),
+            '\n' => quoted.push_str("\\n"),
+            '\u{c}' => quoted.push_str("\\f"),
+            '\r' => quoted.push_str("\\r"),
+            // Writing into a `String` cannot fail; `fmt::Write` reports a
+            // result only so the same call can target a fallible sink.
+            other if other.is_control() => _ = write!(quoted, "\\u{:04X}", u32::from(other)),
+            other => quoted.push(other),
+        }
+    }
+    quoted.push('"');
+    quoted
 }
 
 /// Report whether TOML reads `segment` as a key without quotes.
