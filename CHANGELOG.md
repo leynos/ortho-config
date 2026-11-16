@@ -105,8 +105,11 @@ All notable changes to this project will be documented in this file.
   both through. Code that assembles these documents by struct literal must name
   `renderer: None` and `output: None`; `AgentCommand` consumers must supply
   `renderer: RendererContract::default()` and `output: None`, because the type
-  does not implement `Default`. Both fields are `#[serde(default)]` and are
-  omitted when absent, so the wire contract stays additive: JSON without either
+  does not implement `Default`. Both fields are `#[serde(default)]`, and what
+  each layer omits differs: `output` is omitted when absent on both layers, and
+  `renderer` is omitted from `DocMetadata` when absent, but
+  `AgentCommand::renderer` is a plain `RendererContract` that is always
+  serialized. The wire contract therefore stays additive: JSON without either
   key still deserializes, wire version 1 and documentation IR 2.0 are
   unchanged, and no existing field changed shape, spelling, ordering, or
   null-versus-omission rule. Applications that only derive their configuration
