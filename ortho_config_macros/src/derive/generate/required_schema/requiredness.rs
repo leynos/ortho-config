@@ -67,21 +67,37 @@ pub(super) fn activation(
     attrs: &FieldAttrs,
     facts: &ActivationFacts<'_>,
 ) -> syn::Result<FieldActivation> {
-    let supplied_by_type =
-        option_inner(&field.ty).is_some() && !serde_field_has_custom_deserializer(&field.attrs)?;
-    let supplied_by_serde = serde_has_default(&field.attrs)? || facts.container_default;
-    if supplied_by_type || supplied_by_serde {
+    if is_optional_for_every_loader(field, facts)? {
         return Ok(FieldActivation::Optional);
     }
-    let declares_default = attrs.default.is_some() || attrs.inferred_clap_default.is_some();
-    let supplied_by_materialized_default = facts.materializes_defaults
-        && declares_default
-        && default_reaches_field(field, facts.key, facts.aliases);
-    Ok(if supplied_by_materialized_default {
+    Ok(if is_own_loader_only(field, attrs, facts) {
         FieldActivation::DefaultBacked
     } else {
         FieldActivation::Required
     })
+}
+
+/// Report whether a layer supplies the value whichever loader reads the type.
+///
+/// Either the field's own type yields a value for absence, or Serde does, and
+/// neither depends on which loader is running.
+fn is_optional_for_every_loader(field: &Field, facts: &ActivationFacts<'_>) -> syn::Result<bool> {
+    let supplied_by_type =
+        option_inner(&field.ty).is_some() && !serde_field_has_custom_deserializer(&field.attrs)?;
+    let supplied_by_serde = serde_has_default(&field.attrs)? || facts.container_default;
+    Ok(supplied_by_type || supplied_by_serde)
+}
+
+/// Report whether only the declaring type's own loader supplies the value.
+fn is_own_loader_only(field: &Field, attrs: &FieldAttrs, facts: &ActivationFacts<'_>) -> bool {
+    facts.materializes_defaults
+        && declares_default(attrs)
+        && default_reaches_field(field, facts.key, facts.aliases)
+}
+
+/// Report whether the field declares a default this crate can materialize.
+const fn declares_default(attrs: &FieldAttrs) -> bool {
+    attrs.default.is_some() || attrs.inferred_clap_default.is_some()
 }
 
 /// Report whether a materialized default reaches the key the loader reads.
