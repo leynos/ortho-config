@@ -627,6 +627,21 @@ with a compatibility probe rather than an assumption.
   43 tests, including the six key spellings, six prefixes and three segment
   edges the moved helpers own.
 
+- [x] (2026-11-16) Cleared the CodeScene advisory the new activation case
+  raised. Hosted CodeScene posted a Complex Method finding on
+  `requiredness::activation` (cyclomatic complexity 9 against a threshold of
+  9) as soon as the `DefaultBacked` branch landed. The function was split into
+  `is_optional_for_every_loader`, `is_own_loader_only` and `declares_default`,
+  each of which answers one question, and `activation` now reads as the two
+  decisions it makes. `cs review` reports 10.0 for the file with no findings,
+  and `cs delta b1ee6974` reports nothing new: the only remaining delta finding
+  is the inherited duplication in `subcommand/sources.rs` already recorded
+  above. The first gate attempt after the split failed `make lint` with
+  `clippy::missing_const_for_fn` on `declares_default`, which the `const fn`
+  declaration answered; `make check-fmt`, `make lint`, `make typecheck` and
+  `make test` then all exited 0 (2829 passed and 0 failed over 117 harness
+  summaries; pytest 128 passed with 5 skipped).
+
 ## Surprises & discoveries
 
 The full local suite aborted once at round c7 on
