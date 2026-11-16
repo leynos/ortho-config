@@ -171,7 +171,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-ortho_config = "0.10.0"
+ortho_config = "0.11.0"
 clap = { version = "4.5", features = ["derive"] }
 serde = { version = "1.0", features = ["derive"] }
 tracing = "0.1"
