@@ -16,6 +16,7 @@ use clap::{
 };
 use std::borrow::Cow;
 use std::collections::HashMap;
+use std::error::Error as _;
 use std::sync::Arc;
 
 /// Builds a formatter suitable for [`clap::Command::try_get_matches`] error
@@ -38,7 +39,10 @@ pub fn clap_error_formatter(
 ///   kinds are returned untouched, and a kind newer than the matrix derives a
 ///   `clap-error-<kebab-kind>` identifier.
 /// - Includes relevant [`ContextKind`] values as Fluent arguments (for
-///   example, `argument`, `value`, `expected`, `actual`).
+///   example, `argument`, `value`, `expected`, `actual`), plus the details
+///   `clap` keeps outside its context map: a value parser's rejection reason
+///   as `reason`, and, for a conflict, the prior argument as `prior` and which
+///   of the two conflict shapes surfaced as `conflict_kind`.
 /// - Falls back to the original `clap` message when the localizer does not
 ///   return a translation, so a missing Fluent argument never replaces a
 ///   usable diagnostic with an unresolved placeholder.
@@ -194,6 +198,11 @@ fn localization_args(
         "valid_subcommands",
         error.get(ContextKind::ValidSubcommand),
     );
+    // Only a conflict carries a prior argument, so the key is absent for every
+    // other kind rather than empty.
+    insert_context(&mut args, "prior", error.get(ContextKind::PriorArg));
+    insert_value_parser_reason(&mut args, error);
+    insert_conflict_kind(&mut args, error);
 
     // let-chains require edition 2024 (stabilised in Rust 1.88).
     if !args.contains_key("valid_subcommands")
@@ -210,6 +219,41 @@ fn localization_args(
     }
 
     args
+}
+
+/// Adds the rejection reason a value parser supplied for a rejected value.
+///
+/// clap keeps this reason on the error itself rather than in its context map,
+/// and renders it after the generic "invalid value" text. Without it, the
+/// translation would replace a diagnostic that names the actual problem with
+/// one that only says a parser declined the value.
+fn insert_value_parser_reason(args: &mut LocalizationArgs<'static>, error: &ClapError) {
+    let Some(reason) = error.source() else {
+        return;
+    };
+    let text = reason.to_string();
+    if !text.is_empty() {
+        args.insert("reason", text.into());
+    }
+}
+
+/// Names which conflict surfaced, so the message can describe it correctly.
+///
+/// clap reports both a repeated argument (`--debug --debug`) and a collision
+/// between distinct arguments as `ArgumentConflict`, and distinguishes them
+/// only by whether the offending argument is also the prior one. A message
+/// that always blamed "another argument" would misdescribe the repeated case,
+/// where there is no other argument involved.
+fn insert_conflict_kind(args: &mut LocalizationArgs<'static>, error: &ClapError) {
+    if error.kind() != ErrorKind::ArgumentConflict {
+        return;
+    }
+    let offending = error.get(ContextKind::InvalidArg);
+    let is_repeated = offending.is_some() && offending == error.get(ContextKind::PriorArg);
+    args.insert(
+        "conflict_kind",
+        if is_repeated { "repeated" } else { "conflict" }.into(),
+    );
 }
 
 /// Adds one non-empty context value, leaving absent and unsupported values out of the map.

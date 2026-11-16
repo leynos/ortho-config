@@ -7,11 +7,15 @@ clap-error-invalid-value = Invalid value for { $argument }: { $value }
 clap-error-missing-subcommand = Missing subcommand. Available options: { $valid_subcommands }
 clap-error-invalid-subcommand = Unknown subcommand: { $subcommand }
 clap-error-no-equals = Equal sign is required when assigning a value to { $argument }
-clap-error-value-validation = Invalid value for { $argument }: { $value } was rejected by the value parser
+clap-error-value-validation = Invalid value for { $argument }: { $value } was rejected by the value parser: { $reason }
 clap-error-too-many-values = Unexpected value for { $argument }: no more values were expected
 clap-error-too-few-values = Too few values for { $argument }: at least { $min } required, but { $actual } provided
 clap-error-wrong-number-of-values = Wrong number of values for { $argument }: { $expected } required, but { $actual } provided
-clap-error-argument-conflict = The argument { $argument } cannot be used with another argument
+clap-error-argument-conflict =
+    { $conflict_kind ->
+        [repeated] The argument { $argument } cannot be used multiple times
+       *[conflict] The argument { $argument } cannot be used with { $prior }
+    }
 clap-error-invalid-utf8 = The provided value is not valid UTF-8
 clap-error-io = An input/output error occurred while producing command-line diagnostics
 clap-error-format = The command line could not be rendered

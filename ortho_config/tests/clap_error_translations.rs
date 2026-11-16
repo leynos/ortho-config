@@ -36,7 +36,11 @@ const REPRESENTATIVE_ARGUMENTS: &[(&str, &[(&str, &str)])] = &[
     ("clap-error-no-equals", &[("argument", "--colour")]),
     (
         "clap-error-value-validation",
-        &[("argument", "--count"), ("value", "abc")],
+        &[
+            ("argument", "--count"),
+            ("value", "abc"),
+            ("reason", "must be a positive whole number"),
+        ],
     ),
     ("clap-error-too-many-values", &[("argument", "ITEM")]),
     (
@@ -47,7 +51,14 @@ const REPRESENTATIVE_ARGUMENTS: &[(&str, &[(&str, &str)])] = &[
         "clap-error-wrong-number-of-values",
         &[("argument", "--opt"), ("expected", "2"), ("actual", "1")],
     ),
-    ("clap-error-argument-conflict", &[("argument", "--debug")]),
+    (
+        "clap-error-argument-conflict",
+        &[
+            ("argument", "--debug"),
+            ("prior", "--trace"),
+            ("conflict_kind", "conflict"),
+        ],
+    ),
     ("clap-error-invalid-utf8", &[]),
     ("clap-error-io", &[]),
     ("clap-error-format", &[]),
@@ -180,7 +191,11 @@ fn consumer_resources_override_an_embedded_identifier() {
 fn incomplete_consumer_catalogue_retains_the_embedded_translation() {
     let localizer = FluentLocalizer::with_en_us_defaults(["cli-about = Consumer about text"])
         .expect("consumer overlay should parse and register");
-    let args = args_from(&[("argument", "--count"), ("value", "abc")]);
+    let args = args_from(&[
+        ("argument", "--count"),
+        ("value", "abc"),
+        ("reason", "must be a positive whole number"),
+    ]);
 
     let rendered = localizer.message("clap-error-value-validation", Some(&args), "fallback");
     assert_ne!(
@@ -190,6 +205,60 @@ fn incomplete_consumer_catalogue_retains_the_embedded_translation() {
     assert!(
         rendered.contains("was rejected by the value parser"),
         "expected the embedded en-US translation, got: {rendered}"
+    );
+}
+
+/// Asserts each conflict shape names its own diagnosis.
+///
+/// `clap` reports a repeated flag and a collision between distinct arguments as
+/// the same kind, so a message that did not select on `conflict_kind` would
+/// blame "another argument" for `--debug --debug`, where no other argument is
+/// involved, and would omit the argument the offending one collided with.
+#[test]
+fn argument_conflict_message_names_the_conflict_shape() {
+    let localizer = FluentLocalizer::builder(langid!("en-US"))
+        .try_build()
+        .expect("the embedded en-US catalogue should parse and register");
+
+    let repeated_args = args_from(&[
+        ("argument", "--debug"),
+        ("prior", "--debug"),
+        ("conflict_kind", "repeated"),
+    ]);
+    let repeated = localizer
+        .lookup("clap-error-argument-conflict", Some(&repeated_args))
+        .expect("the embedded conflict message should resolve");
+
+    let conflict_args = args_from(&[
+        ("argument", "--debug"),
+        ("prior", "--trace"),
+        ("conflict_kind", "conflict"),
+    ]);
+    let conflict = localizer
+        .lookup("clap-error-argument-conflict", Some(&conflict_args))
+        .expect("the embedded conflict message should resolve");
+
+    assert!(
+        repeated.contains("cannot be used multiple times"),
+        "a repeated argument should be reported as a repeat, got: {repeated}"
+    );
+    assert!(
+        !repeated.contains("cannot be used with"),
+        "a repeated argument has no other argument to blame, got: {repeated}"
+    );
+    assert!(
+        conflict.contains("cannot be used with"),
+        "a conflict should describe a collision, got: {conflict}"
+    );
+    // Fluent isolates each interpolated value, so the argument is asserted
+    // separately from the literal prose that surrounds it.
+    assert!(
+        conflict.contains("--trace"),
+        "a conflict should name the prior argument, got: {conflict}"
+    );
+    assert!(
+        !conflict.contains("multiple times"),
+        "distinct arguments are not a repeat, got: {conflict}"
     );
 }
 

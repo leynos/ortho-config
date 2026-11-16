@@ -12,7 +12,10 @@ use std::process::ExitCode;
 /// The demo command tree exercised by the runner.
 ///
 /// `arg_required_else_help` reproduces clap's own missing-input help, and
-/// `require_equals` reproduces a parser error the matrix translates.
+/// `require_equals` reproduces a parser error the matrix translates. The
+/// remaining flags carry the detail the translations must not drop: `debug`
+/// repeated reports a conflict with itself, `trace` reports a conflict with a
+/// distinct argument, and `count`'s parser supplies a rejection reason.
 fn demo_command() -> Command {
     Command::new("clap-error-fixture")
         .version("1.2.3")
@@ -24,7 +27,34 @@ fn demo_command() -> Command {
                 .action(ArgAction::Set)
                 .require_equals(true),
         )
+        .arg(Arg::new("debug").long("debug").action(ArgAction::SetTrue))
+        .arg(
+            Arg::new("trace")
+                .long("trace")
+                .action(ArgAction::SetTrue)
+                .conflicts_with("debug"),
+        )
+        .arg(
+            Arg::new("count")
+                .long("count")
+                .value_parser(positive_count)
+                .action(ArgAction::Set),
+        )
         .subcommand(Command::new("greet").about("Greet someone"))
+}
+
+/// Accepts a positive whole number, rejecting anything else with a reason.
+///
+/// The reason is the point of the fixture: clap renders it after the generic
+/// "invalid value" text, and the translated message must keep it.
+fn positive_count(raw: &str) -> Result<u32, String> {
+    let count: u32 = raw
+        .parse()
+        .map_err(|_| "must be a positive whole number".to_owned())?;
+    if count == 0 {
+        return Err("must be greater than zero".to_owned());
+    }
+    Ok(count)
 }
 
 /// Resolves the injected locale, defaulting to en-US when it is absent or

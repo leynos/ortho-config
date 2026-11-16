@@ -231,7 +231,7 @@ fn assert_translated_with_embedded_message(error: ClapError, fragment: &str) {
 #[case::too_many_values(ErrorKind::TooManyValues, "Unexpected value for")]
 #[case::too_few_values(ErrorKind::TooFewValues, "Too few values for")]
 #[case::wrong_number_of_values(ErrorKind::WrongNumberOfValues, "Wrong number of values for")]
-#[case::argument_conflict(ErrorKind::ArgumentConflict, "cannot be used with another argument")]
+#[case::argument_conflict(ErrorKind::ArgumentConflict, "cannot be used with")]
 #[case::missing_required_argument(ErrorKind::MissingRequiredArgument, "Missing required argument:")]
 #[case::missing_subcommand(ErrorKind::MissingSubcommand, "Missing subcommand.")]
 fn reachable_parser_errors_render_the_embedded_translation(
