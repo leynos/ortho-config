@@ -2,24 +2,28 @@
 
 ## Status
 
-IMPLEMENTED, ACCEPTED BY ASSESSMENT, REVIEW ROUND REPAIRED — approved on
-2026-11-14 and implemented in M1–M3. The temporary #664 prerequisite merged on
-2026-11-11 as `eaf4c028`, and the branch has been rebased onto `origin/main`
-five times since, most recently onto `eea7273f`, so all three milestones have
-recorded local certificates. The prerequisite lint repair landed on `main` as
-`1f4a5775` (PR #698), and the branch's hosted Lint stage is green, so no
-delivery gate remains blocked on another branch's work. CodeRabbit's
-completeness assessment `ep-7-2-3-20261116-a11` accepted the implementation
-against M1–M3 and found no remaining in-scope defect. The one hosted step that
-ever failed, `Publish dry run`, runs only for `workflow_dispatch` and
-reproduces on unmodified `main`: it is the release-ordering drift issue #414
-records, not a branch defect. Delivery is therefore published with a clear
-assessment. CodeRabbit's first full review of the published head raised four
-findings, all minor or trivial; each was verified against the source, repaired,
-and answered in its thread, and CodeRabbit approved that repaired head. Two
-documentation statements named in the approval were then corrected, and the
-resulting rebase onto current `main` carries its own local certificate, so the
-branch awaits a hosted run and a review decision covering the rebased head.
+COMPLETE, MERGED — PR #661 squash-merged as `ef46b48d` on 2026-11-16. The plan
+was approved on 2026-11-14 and implemented in M1–M3. The temporary #664
+prerequisite merged on 2026-11-11 as `eaf4c028`, and the branch has been
+rebased onto `origin/main` five times since, most recently onto `eea7273f`, so
+all three milestones have recorded local certificates. The prerequisite lint
+repair landed on `main` as `1f4a5775` (PR #698), and the branch's hosted Lint
+stage is green, so no delivery gate remains blocked on another branch's work.
+CodeRabbit's completeness assessment `ep-7-2-3-20261116-a11` accepted the
+implementation against M1–M3 and found no remaining in-scope defect. The one
+hosted step that ever failed, `Publish dry run`, runs only for
+`workflow_dispatch` and reproduces on unmodified `main`: it is the
+release-ordering drift issue #414 records, not a branch defect. Delivery is
+therefore published with a clear assessment. CodeRabbit's first full review of
+the published head raised four findings, all minor or trivial; each was
+verified against the source, repaired, and answered in its thread, and
+CodeRabbit approved that repaired head. Two documentation statements named in
+the approval were then corrected, and the resulting rebase onto current `main`
+carried its own local certificate, which included a workspace doctest run that
+found and repaired one further defect. CodeRabbit approved the final head, and
+PR #661 squash-merged on 2026-11-16 as `ef46b48d`, whose tree is byte-identical
+to the reviewed head `1ac26559`. The post-merge `Coverage (main)` run
+`43936063981` for the landed commit concluded `success`.
 
 This ExecPlan is a living document. Keep Constraints, Tolerances, Risks,
 Progress, Surprises & discoveries, Decision log, Outcomes & retrospective,
@@ -728,6 +732,12 @@ migration guide before touching the candidate.
   failures and 47 ignored, and `make check-fmt` and `make lint` were re-run
   over that commit. A rebase invites the same audit at every layer that reads
   the changed type: crate sources, test fixtures, and doc comments alike.
+- [x] (2026-11-16) PR #661 squash-merged into `main` as `ef46b48d`, guarded by
+  `--match-head-commit 1ac26559` so the merge could not outrun the reviewed
+  head. The squash tree and the reviewed head tree both resolve to `cf641258`,
+  proving the merge landed exactly the reviewed content. The only `push`
+  workflow for the landing commit, `Coverage (main)` run 43936063981, concluded
+  `success`, so no post-merge integration job is outstanding.
 
 ## Surprises & discoveries
 
@@ -1288,6 +1298,10 @@ Delivered in three milestones on `7-2-3-structured-output-and-exit-metadata`.
   `policy_report_contract.rs`, and `documented_command.rs`, and documented
   0/1/2 in the users' guide, design §6.1.1, the agent-native design, and
   ADR-0023. Roadmap 7.2.3 and its three bullets are checked.
+
+PR #661 squash-merged into `main` on 2026-11-16 as `ef46b48d`; the squash tree
+matches the reviewed head `1ac26559` byte for byte, and the post-merge
+`Coverage (main)` run 43936063981 concluded `success`.
 
 Proof inventory: not applicable. No Kani, Verus, CrossHair, LemmaScript, or
 comparable proof is introduced or affected. The one predicate is finite and is
