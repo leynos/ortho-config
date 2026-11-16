@@ -286,33 +286,35 @@ fn mentions_inventory(tokens: &str) -> bool {
 
 /// The macros a rendered transcription invokes.
 ///
-/// Rendering separates tokens with spaces, so an identifier followed by `!` is
-/// an invocation. A name this scope cannot resolve is returned as well and
-/// fails the audit by resolving to no transcription.
+/// Rendering separates tokens with spaces, so the identifier immediately before
+/// a `!` is an invocation. A name this scope cannot resolve is returned as well
+/// and fails the audit by resolving to no transcription.
 fn invoked_macro_names(tokens: &str) -> Vec<String> {
     let mut names = Vec::new();
-    let mut characters = tokens.chars().peekable();
-    while let Some(character) = characters.next() {
-        if !(character.is_alphabetic() || character == '_') {
-            continue;
-        }
-        let mut name = String::from(character);
-        while characters
-            .peek()
-            .is_some_and(|next| next.is_alphanumeric() || *next == '_')
+    let mut rest = tokens;
+    while let Some((before, after)) = rest.split_once('!') {
+        if let Some(name) = before
+            .split_whitespace()
+            .next_back()
+            .filter(|word| is_identifier(word))
         {
-            if let Some(next) = characters.next() {
-                name.push(next);
-            }
+            names.push(name.to_owned());
         }
-        while characters.peek().is_some_and(|next| *next == ' ') {
-            characters.next();
-        }
-        if characters.peek().is_some_and(|next| *next == '!') {
-            names.push(name);
-        }
+        rest = after;
     }
     names
+}
+
+/// Whether a rendered token is a bare identifier.
+fn is_identifier(word: &str) -> bool {
+    let Some(first) = word.chars().next() else {
+        return false;
+    };
+    let starts_ident = first.is_alphabetic() || first == '_';
+    starts_ident
+        && word
+            .chars()
+            .all(|character| character.is_alphanumeric() || character == '_')
 }
 
 /// Render a macro path the way the source spells it.
