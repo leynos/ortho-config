@@ -3077,6 +3077,44 @@ The selection rules are tested with injected environment lookups and inspected
 child command environments. Tests verify both which values are selected and
 that unrelated inherited variables do not reach the nested build.
 
+### Root type parsing before bridge generation
+
+The configured root type — from `--root-type` or
+`package.metadata.ortho_config.root_type` — is spliced into the generated
+bridge's `main`, which is then compiled and run. It is therefore untrusted
+input that reaches executable source, and it is parsed before generation rather
+than escaped at the splice point.
+
+`cargo-orthohelp/src/root_type.rs` owns that grammar. `parse_root_type` parses
+the value as a `syn::TypePath`, rejects forms that cannot name a configuration
+type from the separately compiled bridge, and renders the accepted path from
+its parsed segments. Two rules keep the boundary narrow:
+
+- **One call site.** `metadata::select_package` is the only caller, and it
+  parses the merged CLI-or-metadata candidate before the cache key and the
+  bridge template see it. Nothing downstream may re-read the raw value, and no
+  other module may build a root type from text.
+- **Render, never copy.** The rendered value is identifiers joined by `::`.
+  Because it is rebuilt from the syntax tree, spacing variants such as
+  `crate :: Config` render canonically and a statement or expression cannot
+  survive parsing, however it is spelled.
+
+Rejected forms are a qualified self type, a leading `::`, generic or
+parenthesized path arguments, a bare `crate`, and a leading `self`, `super`, or
+`Self`. Each reports `OrthohelpError::InvalidRootType`, which carries the
+caller's original spelling alongside the reason. Adding a form to the grammar
+means adding its rejection message here and a case to the `rstest` table.
+
+`cargo-orthohelp/src/root_type_tests.rs` pins the named accepted and rejected
+forms with an `rstest` table. `cargo-orthohelp/src/root_type_proptests.rs`
+covers the remaining input space with two properties: whatever is accepted
+renders as identifier path syntax only, and a rendering re-parses unchanged
+under a different crate name. The second property is what proves the rendering
+is already qualified, so a later consumer cannot silently re-qualify it.
+`cargo-orthohelp/tests/cli_dispatch.rs` exercises both input sources with
+injection-shaped values, asserting the diagnostic and the absence of the
+payload's marker file.
+
 ## Scoped and policy-based configuration discovery
 
 Automatic discovery historically resolved one file: the candidate list was
