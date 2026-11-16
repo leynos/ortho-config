@@ -74,6 +74,17 @@ const PROBE_MANIFEST: &str = concat!(
     "[workspace]\n",
 );
 
+/// The probe's lock file, so a frozen build never needs to write one.
+///
+/// The project has no dependencies, so the lock names only the probe itself.
+const PROBE_LOCK: &str = concat!(
+    "version = 4\n",
+    "\n",
+    "[[package]]\n",
+    "name = \"lease_probe\"\n",
+    "version = \"0.1.0\"\n",
+);
+
 /// Lease the target, then run a real Cargo build beneath it until killed.
 ///
 /// Ignored so an ordinary run never starts it; the test below selects it by
@@ -169,6 +180,9 @@ fn write_probe_project(scratch: &Dir) -> Result<()> {
         .write("Cargo.toml", PROBE_MANIFEST)
         .context("write the probe manifest")?;
     project
+        .write("Cargo.lock", PROBE_LOCK)
+        .context("write the probe lock file")?;
+    project
         .write("build.rs", probe_build_script())
         .context("write the probe build script")?;
     project
@@ -203,9 +217,13 @@ fn probe_build_script() -> String {
 /// The `cargo build` command for the probe project.
 fn probe_build_command(scratch_path: &Path) -> Command {
     let mut command = Command::new("cargo");
+    // Frozen before `apply`, so a reader of this file sees offline mode set
+    // ahead of the call it cannot follow (Concordat NC-007). The probe has no
+    // dependencies and carries its own lock file, so nothing is fetched.
+    command.arg("--frozen");
     cargo_environment::CargoEnvironment::build().apply(&mut command);
     command
-        .args(["build", "--offline"])
+        .arg("build")
         .current_dir(scratch_path.join(PROBE_PROJECT));
     command
 }

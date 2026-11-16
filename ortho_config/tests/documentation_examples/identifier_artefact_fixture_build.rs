@@ -111,6 +111,9 @@ fn settle_report(
 /// The `cargo build` command for the fixture, with artefact emission on or off.
 fn fixture_build_command(emit: bool, cargo: &FixtureCargo) -> Command {
     let mut command = Command::new("cargo");
+    // Frozen before `apply`, so a reader of this file sees offline mode set
+    // ahead of the call it cannot follow (Concordat NC-007).
+    command.arg("--frozen");
     cargo_environment::CargoEnvironment::build().apply(&mut command);
     command
         .args([
@@ -149,6 +152,9 @@ fn record_phase(
 /// Remove only the fixture's build output in its private target directory.
 pub(crate) fn clean_fixture(cargo: &FixtureCargo) -> Result<()> {
     let mut command = Command::new("cargo");
+    // Frozen before `apply`, so a reader of this file sees offline mode set
+    // ahead of the call it cannot follow (Concordat NC-007).
+    command.arg("--frozen");
     cargo_environment::CargoEnvironment::build().apply(&mut command);
     command
         .args(["clean", "-p", "orthohelp_fixture", "--target-dir"])
