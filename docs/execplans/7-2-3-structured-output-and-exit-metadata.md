@@ -625,6 +625,19 @@ migration guide before touching the candidate.
   `tests_output_wire.rs` name ADR-0023 again, and this plan's current-state
   mentions follow. A rebase re-applies old text, so a reference sweep has to be
   repeated against the replayed tree rather than assumed to survive.
+- [x] (2026-11-16) Gate certificate for the rebased head `f9c83db9`, tree clean
+  before and after each gate, run sequentially in the documented order.
+  `make check-fmt` reformatted one plan paragraph it then accepted and left 105
+  files unchanged on the re-run. `make typecheck` passed in 5 m 02 s with
+  `[build-limits] … waiting for a compile slot` queues up to 39 requests deep.
+  `make lint` passed every stage: `cargo doc`, `cargo clippy`, `whitaker`, then
+  `docstring-coverage` at 1044/1044. `make test BUILD_JOBS=--no-fail-fast`
+  reported 115 test binaries, 2987 passed, 0 failed and 44 ignored, then pytest
+  at 128 passed and 5 skipped. `make markdownlint` reported 0 issues in 105
+  files with the spelling gate clean, and `make nixie` validated every diagram.
+  The `ortho_l10n` boundary target, red through wall-clock expiries at the
+  previous head, passed 44/44 with 10 ignored in 602 s here, which confirms the
+  earlier red as load rather than diff.
 
 ## Surprises & discoveries
 
