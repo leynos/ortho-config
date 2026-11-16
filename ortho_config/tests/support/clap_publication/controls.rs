@@ -10,6 +10,7 @@
 use anyhow::{Context, Result, ensure};
 use camino::{Utf8Path, Utf8PathBuf};
 use cargo_metadata::Target;
+use rstest::rstest;
 
 use super::compare_count;
 use super::files::read_text;
@@ -212,56 +213,38 @@ fn unconditional_module_chain_is_counted() -> Result<()> {
     Ok(())
 }
 
-/// A file module behind a `#[cfg]` hop is not counted as compiled.
-#[test]
-fn conditional_module_hop_is_refused() -> Result<()> {
-    let root = fixture_root().join("module_tree/conditional_hop");
-
-    let error = refusal(count_error_kinds_under(&root).map(|_| ()));
-    ensure_refusal(&error, "does not unconditionally compile it")
-}
-
-/// A declaration no module declaration reaches is refused, not counted.
-#[test]
-fn orphaned_declaration_is_refused() -> Result<()> {
-    let root = fixture_root().join("module_tree/orphan");
-
-    let error = refusal(count_error_kinds_under(&root).map(|_| ()));
-    ensure_refusal(&error, "does not unconditionally compile it")
-}
-
-/// A module file that gates its own contents is refused.
-#[test]
-fn file_level_cfg_is_refused() -> Result<()> {
-    let root = fixture_root().join("module_tree/file_gated");
-
-    let error = refusal(count_error_kinds_under(&root).map(|_| ()));
-    ensure_refusal(&error, "conditionally compiles the whole file")
-}
-
-/// A condition applied through a nested `cfg_attr` still counts as conditional.
+/// Module-tree shapes the gate must refuse, each for its own stated reason.
 ///
-/// The compiler expands `#[cfg_attr(all(), cfg_attr(all(), cfg(any())))]`, so a
-/// walk that inspects only immediate attributes would certify a file the build
-/// excludes.
-#[test]
-fn nested_cfg_attr_hop_is_refused() -> Result<()> {
-    let root = fixture_root().join("module_tree/cfg_attr_nested");
+/// Every case is a committed fixture and the expected text names the
+/// distinction that shape exercises, so a gate that refused every tree, or
+/// refused one for another shape's reason, still fails here.
+#[rstest]
+// A file module behind a `#[cfg]` hop is not compiled unconditionally.
+#[case::conditional_hop("conditional_hop", "does not unconditionally compile it")]
+// A declaration no module declaration reaches is neither compiled nor counted.
+#[case::orphan("orphan", "does not unconditionally compile it")]
+// A module file whose own inner attributes gate its whole contents.
+#[case::file_gated("file_gated", "conditionally compiles the whole file")]
+// The compiler expands `#[cfg_attr(all(), cfg_attr(all(), cfg(any())))]`, so a
+// walk that inspects only immediate attributes would certify an excluded file.
+#[case::cfg_attr_nested("cfg_attr_nested", "does not unconditionally compile it")]
+// A `#[path]` makes the compiler load a file a default-name walk never sees.
+#[case::path_override("path_override", "carries a `#[path]` attribute")]
+// A compiled decoy beside an inline inventory declares exactly the reviewed
+// total, so a file-level scan would pass on the wrong enum.
+#[case::nested_definition("nested_definition", "inside `mod error`")]
+// `#[cfg(all())]` always holds, so the nested inventory is compiled and the
+// decoy beside it must not be counted in its place.
+#[case::conditional_nested_definition("conditional_nested_definition", "inside `mod error`")]
+// A condition applied through a nested `cfg_attr` does not exempt it either.
+#[case::cfg_attr_nested_definition("cfg_attr_nested_definition", "inside `mod error`")]
+// A tree without a reported crate root is refused rather than guessed at.
+#[case::no_crate_root("no_crate_root", "expected a crate root lib.rs")]
+fn module_tree_is_refused(#[case] fixture: &str, #[case] expected: &str) -> Result<()> {
+    let root = fixture_root().join("module_tree").join(fixture);
 
     let error = refusal(count_error_kinds_under(&root).map(|_| ()));
-    ensure_refusal(&error, "does not unconditionally compile it")
-}
-
-/// A `#[path]` declaration is refused rather than resolved by default names.
-///
-/// The fixture's `error.rs` is the file a default-name walk certifies, while
-/// the compiler loads `decoy.rs`; following the default would invent a count.
-#[test]
-fn path_override_declaration_is_refused() -> Result<()> {
-    let root = fixture_root().join("module_tree/path_override");
-
-    let error = refusal(count_error_kinds_under(&root).map(|_| ()));
-    ensure_refusal(&error, "carries a `#[path]` attribute")
+    ensure_refusal(&error, expected)
 }
 
 /// An unconditional inline module is followed rather than assumed opaque.
@@ -275,52 +258,6 @@ fn inline_module_hop_is_followed() -> Result<()> {
         "the inline-module fixture should count two variants, found {count}",
     );
     Ok(())
-}
-
-/// A compiled decoy beside an inline inventory is refused, not counted.
-///
-/// `decoy.rs` declares seventeen variants, which is exactly the reviewed total,
-/// while the exported inventory sits one module down and declares eighteen. A
-/// file-level scan would count the decoy and pass the comparison, so the gate
-/// must refuse the shape instead of reporting the decoy's total.
-#[test]
-fn nested_definition_is_refused() -> Result<()> {
-    let root = fixture_root().join("module_tree/nested_definition");
-
-    let error = refusal(count_error_kinds_under(&root).map(|_| ()));
-    ensure_refusal(&error, "inside `mod error`")
-}
-
-/// A condition on the module does not exempt its nested inventory.
-///
-/// `#[cfg(all())]` always holds, so the compiler builds `mod error` and the
-/// eighteen-variant enum inside it is the exported inventory. A gate that
-/// skipped conditional modules would count the seventeen-variant decoy beside
-/// it and pass.
-#[test]
-fn conditional_nested_definition_is_refused() -> Result<()> {
-    let root = fixture_root().join("module_tree/conditional_nested_definition");
-
-    let error = refusal(count_error_kinds_under(&root).map(|_| ()));
-    ensure_refusal(&error, "inside `mod error`")
-}
-
-/// A condition applied through a nested `cfg_attr` does not exempt it either.
-#[test]
-fn cfg_attr_nested_definition_is_refused() -> Result<()> {
-    let root = fixture_root().join("module_tree/cfg_attr_nested_definition");
-
-    let error = refusal(count_error_kinds_under(&root).map(|_| ()));
-    ensure_refusal(&error, "inside `mod error`")
-}
-
-/// A tree with no crate root is refused rather than counted.
-#[test]
-fn tree_without_a_crate_root_is_refused() -> Result<()> {
-    let root = fixture_root().join("module_tree/no_crate_root");
-
-    let error = refusal(count_error_kinds_under(&root).map(|_| ()));
-    ensure_refusal(&error, "expected a crate root lib.rs")
 }
 
 /// The crate root comes from the reported targets, not from their shape.
@@ -380,3 +317,55 @@ fn count_follows_the_reported_library_root() -> Result<()> {
     );
     Ok(())
 }
+
+/// A symlink alias is not read as a second declaration.
+///
+/// The inventory covers every regular `.rs` file under the crate root. A
+/// symlink named `alias.rs` pointing at `error.rs` is not one of them: reading
+/// it would report the same `ErrorKind` twice and refuse a package that is
+/// perfectly valid. The tree is staged at test time because a committed
+/// symlink does not survive a Windows checkout, where it materialises as a
+/// text file naming its target.
+#[cfg(unix)]
+#[test]
+fn symlink_alias_is_counted_once() -> Result<()> {
+    use cap_std::ambient_authority;
+    use cap_std::fs_utf8::Dir;
+    use tempfile::TempDir;
+
+    let directory = TempDir::new().context("create a directory for the alias tree")?;
+    let root = Utf8Path::from_path(directory.path())
+        .context("the temporary directory should be valid UTF-8")?;
+    let tree = Dir::open_ambient_dir(root, ambient_authority())
+        .with_context(|| format!("open {root} to stage the alias"))?;
+    tree.write("lib.rs", "mod error;\n")
+        .context("write the crate root")?;
+    tree.write("error.rs", ALIASED_ERROR_KIND)
+        .context("write the declaring module")?;
+    tree.symlink("error.rs", "alias.rs")
+        .context("alias the declaring module")?;
+
+    let count = count_error_kinds_under(root)?;
+    ensure!(
+        count == 3,
+        "the alias must not be counted as a second declaration, found {count}",
+    );
+    Ok(())
+}
+
+/// The declaring module [`symlink_alias_is_counted_once`] aliases.
+#[cfg(unix)]
+const ALIASED_ERROR_KIND: &str = concat!(
+    "//! The declaring module of a synthetic crate.\n",
+    "\n",
+    "/// Kinds of error produced while parsing command-line arguments.\n",
+    "#[non_exhaustive]\n",
+    "pub enum ErrorKind {\n",
+    "    /// A value was supplied that failed validation.\n",
+    "    InvalidValue,\n",
+    "    /// An argument was supplied that the command does not define.\n",
+    "    UnknownArgument,\n",
+    "    /// A subcommand was supplied that the command does not define.\n",
+    "    InvalidSubcommand,\n",
+    "}\n",
+);

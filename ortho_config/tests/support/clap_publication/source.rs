@@ -113,10 +113,13 @@ fn rust_sources(directory: &Dir, prefix: &Utf8Path) -> Result<Vec<Utf8PathBuf>> 
     Ok(sources)
 }
 
-/// Recursively collect Rust sources, skipping symlinked entries.
+/// Recursively collect regular Rust sources, skipping symlinked entries.
 ///
 /// `file_type` reports a symlink as such, so a symlink cycle cannot make the
-/// walk unbounded; a skipped symlink would still surface as a missing variant.
+/// walk unbounded. The regular-file test is what stops an alias from being
+/// read as a second module: `alias.rs` pointing at `error.rs` would otherwise
+/// be parsed twice and report the same `ErrorKind` as a duplicate definition.
+/// A skipped symlink would still surface as a missing variant.
 fn collect_sources(
     directory: &Dir,
     prefix: &Utf8Path,
@@ -139,7 +142,7 @@ fn collect_sources(
                 .open_dir(&name)
                 .with_context(|| format!("open {relative}"))?;
             collect_sources(&child, &relative, sources)?;
-        } else if relative.extension() == Some("rs") {
+        } else if file_type.is_file() && relative.extension() == Some("rs") {
             sources.push(relative);
         }
     }
