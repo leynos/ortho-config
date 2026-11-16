@@ -106,26 +106,39 @@ pub fn bridge_ir_to_agent_context(
     // the redaction records derive from the same disclosure view.
     let projected = meta.redacted_for_output();
     let mut context = AgentContext::new(package);
-    if let Some(profiles) = &projected.profiles {
-        let records = collect_redaction_records(&projected);
-        context.profiles = ProfilesDeclaration::supported(ProfileSelectionContract {
-            flag: profiles.flag.clone(),
-            env_var: profiles.env_var.clone(),
-        })
-        .with_redaction(records)?;
-    }
+    context.profiles = profiles_declaration(&projected)?;
     walk(&projected, &[], &mut context.commands, localizer);
     expose_profile_selector(&context.profiles, &mut context.commands);
-    context
-        .commands
-        .sort_by(|left, right| left.path.cmp(&right.path));
-    for command in &mut context.commands {
+    sort_commands(&mut context.commands);
+    log_bridge_complete(package, context.commands.len());
+    Ok(context)
+}
+
+/// Returns the profile declaration a projected document publishes.
+///
+/// A document that declares no profiles keeps the unsupported default. One
+/// that does publishes its selection contract together with the redaction
+/// records derived from the same projected view, so the two cannot disagree.
+fn profiles_declaration(projected: &DocMetadata) -> OrthoResult<ProfilesDeclaration> {
+    let Some(profiles) = &projected.profiles else {
+        return Ok(ProfilesDeclaration::unsupported());
+    };
+    let records = collect_redaction_records(projected);
+    ProfilesDeclaration::supported(ProfileSelectionContract {
+        flag: profiles.flag.clone(),
+        env_var: profiles.env_var.clone(),
+    })
+    .with_redaction(records)
+}
+
+/// Orders commands by path and each command's inputs by name.
+fn sort_commands(commands: &mut [AgentCommand]) {
+    commands.sort_by(|left, right| left.path.cmp(&right.path));
+    for command in commands {
         command
             .inputs
             .sort_by(|left, right| left.name.cmp(&right.name));
     }
-    log_bridge_complete(package, context.commands.len());
-    Ok(context)
 }
 
 /// Collects the public identity of every protected field in the tree.
