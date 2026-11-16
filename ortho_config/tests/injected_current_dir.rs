@@ -49,6 +49,75 @@ impl Default for MatchedCmd {
     }
 }
 
+/// Subcommand whose only requirement cannot arrive from the command line.
+///
+/// `skip_cli` drops the generated flag, and serialization omits the empty
+/// default, so neither the CLI nor the defaults layer carries a value for
+/// `reference`. That leaves an absent `reference` a genuine requirement of the
+/// merged value, which the loader must enumerate instead of leaving to the
+/// deserializer. `retries` is needed because the matches-aware entry point
+/// requires the generated `CliValueExtractor`; it doubles as a control, since a
+/// value its declared default supplies is never reported.
+#[derive(Debug, Parser, Serialize, Deserialize, OrthoConfig, Default, PartialEq)]
+#[command(name = "strict")]
+#[ortho_config(prefix = "CWDSEAM_")]
+struct StrictCmd {
+    /// Required, and reachable only through a file or the environment.
+    #[arg(skip)]
+    #[ortho_config(skip_cli)]
+    #[serde(skip_serializing_if = "String::is_empty")]
+    reference: String,
+    /// Optional through its declared default.
+    #[arg(long, default_value = "2")]
+    #[ortho_config(default = 2, cli_default_as_absent)]
+    retries: u32,
+}
+
+/// The variable the subcommand's environment layer reads for `reference`.
+const STRICT_REFERENCE_VAR: &str = "CWDSEAM_CMDS_STRICT_REFERENCE";
+
+/// Assert a load failed, and only because `reference` is absent.
+///
+/// The environment route must be offered as well: a report that named the
+/// value without naming a truthful route would be no more actionable than the
+/// deserializer error it replaces.
+fn assert_reports_the_absent_reference<T>(result: ortho_config::OrthoResult<T>) -> Result<()> {
+    let error = result
+        .err()
+        .ok_or_else(|| anyhow!("an absent required value must fail the load"))?;
+    let ortho_config::OrthoError::MissingRequiredValues(report) = error.as_ref() else {
+        return Err(anyhow!("expected an enumerated report, got: {error}"));
+    };
+
+    let rendered: Vec<String> = report
+        .items()
+        .iter()
+        .map(|item| item.path().render())
+        .collect();
+    ensure!(
+        rendered == ["reference"],
+        "the report must name only the absent value, got {rendered:?}"
+    );
+
+    let item = report
+        .items()
+        .first()
+        .ok_or_else(|| anyhow!("the report is empty"))?;
+    let offers_environment = item.routes().iter().any(|route| {
+        matches!(
+            route,
+            ortho_config::SupplyRoute::Environment { variable }
+                if variable == STRICT_REFERENCE_VAR
+        )
+    });
+    ensure!(
+        offers_environment,
+        "the report must offer {STRICT_REFERENCE_VAR}, got {:?}",
+        item.routes()
+    );
+    Ok(())
+}
+
 /// A temporary directory holding one configuration file.
 fn dir_with(file: &str, body: &str) -> Result<TempDir> {
     let dir = tempfile::tempdir().context("create the temporary directory")?;
@@ -270,6 +339,55 @@ fn subcommand_matches_form_keeps_clap_defaults_absent(
         merged.retries == expected,
         "expected {expected}, got {}",
         merged.retries
+    );
+    Ok(())
+}
+
+/// The single-environment form enumerates an absent required value.
+///
+/// Without the schema-aware entry point the merged value simply fails to
+/// deserialize, so a caller learns that something is missing but not which key
+/// or where to supply it.
+#[test]
+fn single_environment_merge_enumerates_an_absent_required_value() -> Result<()> {
+    let dir = tempfile::tempdir().context("create the empty directory")?;
+
+    assert_reports_the_absent_reference(
+        StrictCmd::default().load_and_merge_with_env(Arc::new(env_in(dir.path()))),
+    )?;
+
+    let supplied = StrictCmd::default()
+        .load_and_merge_with_env(Arc::new(
+            env_in(dir.path()).with_var(STRICT_REFERENCE_VAR, "from-env"),
+        ))
+        .map_err(|err| anyhow!(err))?;
+    ensure!(
+        supplied.reference == "from-env",
+        "the offered environment route must supply the value, got {supplied:?}"
+    );
+    Ok(())
+}
+
+/// The matches-aware form enumerates the same absent required value.
+#[test]
+fn matches_form_enumerates_an_absent_required_value() -> Result<()> {
+    let dir = tempfile::tempdir().context("create the empty directory")?;
+    let matches = StrictCmd::command().get_matches_from(["strict"]);
+
+    assert_reports_the_absent_reference(
+        StrictCmd::default()
+            .load_and_merge_with_matches_with_env(&matches, Arc::new(env_in(dir.path()))),
+    )?;
+
+    let supplied = StrictCmd::default()
+        .load_and_merge_with_matches_with_env(
+            &matches,
+            Arc::new(env_in(dir.path()).with_var(STRICT_REFERENCE_VAR, "from-env")),
+        )
+        .map_err(|err| anyhow!(err))?;
+    ensure!(
+        supplied.reference == "from-env",
+        "the matches form must read the same environment layer, got {supplied:?}"
     );
     Ok(())
 }
