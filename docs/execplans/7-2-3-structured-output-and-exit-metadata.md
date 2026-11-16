@@ -2,19 +2,21 @@
 
 ## Status
 
-IMPLEMENTED, ACCEPTED BY ASSESSMENT, AWAITING REVIEW — approved on 2026-11-14
-and implemented in M1–M3. The temporary #664 prerequisite merged on 2026-11-11
-as `eaf4c028`, and the branch has been rebased onto `origin/main` four times
-since, most recently onto `b1ee6974`, so all three milestones have recorded
-local certificates. The prerequisite lint repair landed on `main` as `1f4a5775`
-(PR #698), and the branch's hosted Lint stage is green, so no delivery gate
-remains blocked on another branch's work. CodeRabbit's completeness assessment
-`ep-7-2-3-20261116-a11` accepted the implementation against M1–M3 and found no
-remaining in-scope defect. The one hosted step that ever failed,
-`Publish dry run`, runs only for `workflow_dispatch` and reproduces on
-unmodified `main`: it is the release-ordering drift issue #414 records, not a
-branch defect. Delivery is therefore published with a clear assessment, and the
-formal review outcome is pending.
+IMPLEMENTED, ACCEPTED BY ASSESSMENT, REVIEW ROUND REPAIRED — approved on
+2026-11-14 and implemented in M1–M3. The temporary #664 prerequisite merged on
+2026-11-11 as `eaf4c028`, and the branch has been rebased onto `origin/main`
+four times since, most recently onto `b1ee6974`, so all three milestones have
+recorded local certificates. The prerequisite lint repair landed on `main` as
+`1f4a5775` (PR #698), and the branch's hosted Lint stage is green, so no
+delivery gate remains blocked on another branch's work. CodeRabbit's
+completeness assessment `ep-7-2-3-20261116-a11` accepted the implementation
+against M1–M3 and found no remaining in-scope defect. The one hosted step that
+ever failed, `Publish dry run`, runs only for `workflow_dispatch` and
+reproduces on unmodified `main`: it is the release-ordering drift issue #414
+records, not a branch defect. Delivery is therefore published with a clear
+assessment. CodeRabbit's first full review of the published head raised four
+findings, all minor or trivial; each was verified against the source, repaired,
+and answered in its thread, and the review decision awaits the refreshed round.
 
 This ExecPlan is a living document. Keep Constraints, Tolerances, Risks,
 Progress, Surprises & discoveries, Decision log, Outcomes & retrospective,
@@ -664,6 +666,22 @@ migration guide before touching the candidate.
   remaining in-scope omission or correctness defect in either the code or the
   renumbered documentation. It also corrected the head I had quoted in the
   request, which is the standing reason no hash in this plan is typed by hand.
+- [x] (2026-11-16) CodeRabbit's first full review of `0abaa436` raised four
+  inline findings, all minor or trivial, and every one was valid against the
+  source: `output` and `renderer` were described as omitted together although
+  `AgentCommand::renderer` is a plain `RendererContract` always serialized
+  (`c5490c06`, `14a2dcca`); the policy-deny recipe could assert on a stale
+  report in a shell that continues after a failure, and the pinned static
+  contract carried the old body (`61ac7b5c`); the impact table used "Required
+  if used", which is outside the style guide's vocabulary, and split its
+  required rows around optional adoption (`14a2dcca`); and the new public
+  `StdoutPurpose` lacked the `#[non_exhaustive]` the design requires, which
+  also forced a wildcard arm in a cross-crate proptest helper (`311a6413`).
+  Each thread carries a reply through the comment-token pool; three were
+  resolved by the reviewer's own acknowledgement and the fourth was resolved
+  once the reply landed. A doc claim and the code it describes are separate
+  obligations: the golden snapshot showed `renderer` present for an undeclared
+  command, which is what made the layer split visible.
 
 ## Surprises & discoveries
 
