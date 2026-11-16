@@ -12,6 +12,7 @@ use rstest::rstest;
 #[case::spaced_crate_prefix("crate :: Config", "demo", "demo::Config")]
 #[case::leading_space_crate_prefix(" crate::Config", "demo", "demo::Config")]
 #[case::leading_space_bare_name("  Config  ", "demo", "demo::Config")]
+#[case::raw_identifier("crate::r#type", "demo", "demo::r#type")]
 fn parses_root_type(#[case] raw: &str, #[case] crate_ident: &str, #[case] expected: &str) {
     let parsed = parse_root_type(raw, crate_ident).expect("root type should parse");
     assert_eq!(
