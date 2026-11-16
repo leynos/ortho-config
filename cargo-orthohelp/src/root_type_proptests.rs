@@ -13,14 +13,24 @@ use proptest::prelude::*;
 /// Reports whether `rendered` is identifiers joined by `::`.
 ///
 /// The bridge splices the rendering into generated Rust source, so this is the
-/// shape the generator relies on: no whitespace, punctuation, or operators.
+/// shape the generator relies on: letters, digits, and underscores, with no
+/// whitespace, punctuation, or operators that could close the path and start a
+/// new expression. Letters are Unicode letters because Rust identifiers are,
+/// and a raw identifier keeps its `r#` prefix.
+///
+/// This is deliberately a property of the text rather than of rustc's exact
+/// identifier rules. `syn` is more permissive than rustc about some code
+/// points, and an identifier rustc refuses fails the bridge build with its own
+/// diagnostic; the security promise here is only that nothing but a path can
+/// reach the generated source.
 fn is_identifier_path(rendered: &str) -> bool {
     rendered.split("::").all(|segment| {
-        let mut characters = segment.chars();
+        let ident = segment.strip_prefix("r#").unwrap_or(segment);
+        let mut characters = ident.chars();
         matches!(
             characters.next(),
-            Some(first) if first.is_ascii_alphabetic() || first == '_'
-        ) && characters.all(|character| character.is_ascii_alphanumeric() || character == '_')
+            Some(first) if first.is_alphabetic() || first == '_'
+        ) && characters.all(|character| character.is_alphanumeric() || character == '_')
     })
 }
 
