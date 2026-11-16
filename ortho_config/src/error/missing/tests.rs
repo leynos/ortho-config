@@ -55,15 +55,33 @@ fn report_object_before_its_leaves() -> MissingRequiredValues {
     .expect("four entries form a non-empty report")
 }
 
+/// Key spellings a TOML bare key cannot express.
+///
+/// The fixture and its round-trip assertion share one list, so a spelling
+/// cannot be reported without also being parsed back. Besides punctuation, an
+/// embedded quote, and a backslash, the list carries the control characters a
+/// quoted key must escape: the three TOML short escapes, and NUL and DEL, which
+/// have none.
+#[cfg(feature = "toml")]
+const UNCONVENTIONAL_KEYS: [&str; 8] = [
+    r"api@key",
+    r#"he said "hi""#,
+    r"back\slash",
+    "tab\there",
+    "line\nbreak",
+    "carriage\rreturn",
+    "nul\0byte",
+    "del\u{7f}",
+];
+
 /// Report keys whose spellings a TOML bare key cannot express.
 #[cfg(feature = "toml")]
 fn report_unconventional_keys() -> MissingRequiredValues {
-    let keys = [r"api@key", r#"he said "hi""#, r"back\slash", "tab\there"];
-    let items: Vec<MissingRequiredValue> = keys
+    let items: Vec<MissingRequiredValue> = UNCONVENTIONAL_KEYS
         .iter()
         .map(|key| leaf(&[*key], vec![file(&[*key], false)]))
         .collect();
-    MissingRequiredValues::try_new(None, items).expect("four entries form a non-empty report")
+    MissingRequiredValues::try_new(None, items).expect("eight entries form a non-empty report")
 }
 
 /// Report the routes a demo program really accepts for two absent values.
@@ -223,6 +241,11 @@ fn an_object_route_and_its_nested_leaf_share_one_table() {
 }
 
 /// Every key spelling must survive a round trip through a TOML parser.
+///
+/// Rendering the escapes is not enough on its own: the parser is what decides
+/// whether a quoted key is legal, and it is the reader the diagnostic is asking
+/// the user to edit. Each control-character case therefore has to come back
+/// under its exact spelling, not merely look escaped.
 #[cfg(feature = "toml")]
 #[test]
 fn keys_a_bare_toml_key_cannot_express_are_quoted_and_parse() {
@@ -230,10 +253,10 @@ fn keys_a_bare_toml_key_cannot_express_are_quoted_and_parse() {
     let body = configuration_file_body(&report.to_string());
     let parsed: toml::Table =
         toml::from_str(&body).expect("the Configuration File section must be valid TOML");
-    for key in [r"api@key", r#"he said "hi""#, r"back\slash", "tab\there"] {
+    for key in UNCONVENTIONAL_KEYS {
         assert!(
             parsed.contains_key(key),
-            "`{key}` must parse back under its exact spelling: {body}"
+            "`{key:?}` must parse back under its exact spelling: {body}"
         );
     }
 }
