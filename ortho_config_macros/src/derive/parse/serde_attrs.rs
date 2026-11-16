@@ -236,7 +236,10 @@ pub(crate) fn serde_field_skips_deserialization(attrs: &[Attribute]) -> syn::Res
 ///
 /// A flattened field's own name never appears as a key, so requirement
 /// enumeration must not report it unless the field also carries the nested
-/// marker.
+/// marker. The docs builder likewise cannot expand a flattened field into
+/// descendant metadata, so a `profile_field` annotation on one must be
+/// rejected rather than silently promising protection for values it cannot
+/// describe.
 pub(crate) fn serde_field_is_flattened(attrs: &[Attribute]) -> syn::Result<bool> {
     serde_field_has_bare_flag(attrs, &["flatten"])
 }

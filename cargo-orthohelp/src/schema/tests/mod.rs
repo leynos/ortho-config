@@ -1,30 +1,26 @@
-//! Tests that keep the local schema aligned with `ortho_config::docs`.
+//! Tests for the re-exported schema's wire behaviour.
+//!
+//! The types are owned by `ortho_config::docs`, so there is no second copy to
+//! compare against. These tests exercise actual serde behaviour instead:
+//! round trips, legacy defaulting, and rejection of unknown classifications.
 
 use super::*;
 use ortho_config::docs as ortho_docs;
 
 mod output_snapshots;
+
 mod renderer_snapshots;
 
 #[test]
-fn ir_version_matches_ortho_config() {
-    assert_eq!(
-        ORTHO_DOCS_IR_VERSION,
-        ortho_docs::ORTHO_DOCS_IR_VERSION,
-        "IR schema version should match ortho_config::docs"
-    );
-}
-
-#[test]
-fn schema_round_trips_against_ortho_config() {
+fn schema_round_trips_through_json() {
     let source = sample_metadata();
     let as_value = serde_json::to_value(&source).expect("serialize ortho_config metadata");
     let parsed: DocMetadata =
-        serde_json::from_value(as_value.clone()).expect("deserialize into local schema");
-    let round_trip = serde_json::to_value(parsed).expect("serialize local schema back to JSON");
+        serde_json::from_value(as_value.clone()).expect("deserialize into the shared schema");
+    let round_trip = serde_json::to_value(parsed).expect("serialize the shared schema back");
     assert_eq!(
         as_value, round_trip,
-        "schema JSON should stay compatible with ortho_config::docs"
+        "schema JSON should survive a serialize/deserialize round trip"
     );
 }
 
@@ -33,8 +29,7 @@ fn schema_round_trips_against_ortho_config() {
 /// The field is additive on the wire but not in meaning: a v1.1 document has no
 /// `value_optional` key at all, and the flag it describes is an ordinary
 /// switch. Reading it as `true` would render `--flag[=BOOL]` for a flag that
-/// rejects values. Both schema mirrors carry `#[serde(default)]` for that
-/// reason, so both are checked here against the same legacy payload.
+/// rejects values, so the shared schema defaults it to `false`.
 #[test]
 fn legacy_ir_without_value_optional_defaults_to_false() {
     let legacy = r#"{
@@ -49,17 +44,61 @@ fn legacy_ir_without_value_optional_defaults_to_false() {
 
     let from_config: ortho_docs::CliMetadata =
         serde_json::from_str(legacy).expect("legacy IR should read into ortho_config::docs");
-    let from_helper: CliMetadata =
-        serde_json::from_str(legacy).expect("legacy IR should read into the local schema");
 
     assert!(
         !from_config.value_optional,
         "ortho_config::docs should default a legacy flag to a required value"
     );
-    assert!(
-        !from_helper.value_optional,
-        "the local schema should default a legacy flag to a required value"
-    );
+}
+
+/// An IR document written before `profile_field` existed stays ordinary.
+#[test]
+fn legacy_ir_without_profile_field_stays_ordinary() {
+    let legacy = r#"{
+        "name": "port",
+        "help_id": "demo.fields.port.help",
+        "long_help_id": null,
+        "value": null,
+        "default": null,
+        "required": false,
+        "deprecated": null,
+        "cli": null,
+        "env": null,
+        "file": null,
+        "examples": [],
+        "links": [],
+        "notes": []
+    }"#;
+
+    let field: FieldMetadata =
+        serde_json::from_str(legacy).expect("legacy field should read as ordinary");
+
+    assert_eq!(field.profile_field, None);
+}
+
+/// A recognised classification string that is not a real label is rejected.
+#[test]
+fn unknown_profile_field_label_fails_deserialization() {
+    let invalid = r#"{
+        "name": "port",
+        "help_id": "demo.fields.port.help",
+        "long_help_id": null,
+        "value": null,
+        "default": null,
+        "required": false,
+        "deprecated": null,
+        "cli": null,
+        "env": null,
+        "file": null,
+        "examples": [],
+        "links": [],
+        "notes": [],
+        "profile_field": "public"
+    }"#;
+
+    let result = serde_json::from_str::<FieldMetadata>(invalid);
+
+    assert!(result.is_err(), "unknown labels must not become ordinary");
 }
 
 struct DocMetadataSpec<'a> {
@@ -282,6 +321,7 @@ fn sample_field() -> ortho_docs::FieldMetadata {
         examples: vec![sample_field_example()],
         links: vec![sample_field_link()],
         notes: vec![sample_field_note()],
+        profile_field: None,
     }
 }
 

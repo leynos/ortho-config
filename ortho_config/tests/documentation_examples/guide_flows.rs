@@ -287,7 +287,8 @@ fn profile_metadata_probe() -> DocumentedExample {
             "        serde_json::from_str(&ir).expect(\"read IR\");\n",
             "    let context = cargo_orthohelp::agent_context::bridge_ir_to_agent_context(\n",
             "        &metadata, \"app\", None,\n",
-            "    );\n",
+            "    )\n",
+            "    .expect(\"bridge IR to agent context\");\n",
             "    println!(\"{}\", serde_json::to_string(&context).expect(\"serialize context\"));\n",
             "}\n",
         )

@@ -19,55 +19,73 @@ use crate::{OrthoError, OrthoResult};
 
 /// The discovery stage that resolved the ordered base directories.
 const STAGE_BASES: &str = "bases";
+
 /// The discovery stage that probed candidate files.
 const STAGE_CANDIDATES: &str = "candidates";
 
 /// A named value supplied the configuration home.
 const SOURCE_NAMED: &str = "named";
+
 /// The home fallback supplied the configuration home.
 const SOURCE_FALLBACK: &str = "fallback";
+
 /// Neither a named value nor a fallback supplied a configuration home.
 const SOURCE_ABSENT: &str = "absent";
+
 /// `USERPROFILE` supplied the non-Unix home.
 #[cfg(not(any(unix, target_os = "redox")))]
 const SOURCE_USERPROFILE: &str = "userprofile";
+
 /// A platform lookup supplied the non-Unix configuration directory.
 #[cfg(not(any(unix, target_os = "redox")))]
 const SOURCE_PLATFORM_FALLBACK: &str = "platform_fallback";
 
 /// Discovery produced its result.
 const OUTCOME_SUCCESS: &str = "success";
+
 /// Discovery could not produce its result.
 const OUTCOME_FAILURE: &str = "failure";
+
 /// A candidate was selected because the path exists.
 #[cfg(any(unix, target_os = "redox"))]
 const OUTCOME_EXISTS: &str = "exists";
+
 /// A candidate was absent, so the search moved to the next base.
 #[cfg(any(unix, target_os = "redox"))]
 const OUTCOME_ABSENT: &str = "absent";
+
 /// Probing a candidate failed for a reason other than absence.
 #[cfg(any(unix, target_os = "redox"))]
 const OUTCOME_PROBE_FAILED: &str = "probe_failed";
 
 /// No error applies to a decision or a successful discovery.
 const CATEGORY_NONE: &str = "none";
+
 /// A candidate probe failed for a reason other than absence.
 #[cfg(any(unix, target_os = "redox"))]
 const CATEGORY_PROBE: &str = "probe";
+
 /// A candidate file could not be loaded.
 const CATEGORY_FILE: &str = "file";
+
 /// An environment layer could not be gathered.
 const CATEGORY_GATHERING: &str = "gathering";
+
 /// Layer extraction or CLI merging failed.
 const CATEGORY_MERGE: &str = "merge";
+
 /// A loaded value failed validation.
 const CATEGORY_VALIDATION: &str = "validation";
+
 /// Command-line parsing prevented a complete load.
 const CATEGORY_CLI: &str = "cli";
+
 /// An inferred clap default could not be converted.
 const CATEGORY_DEFAULT_VALUE_CONVERSION: &str = "default_value_conversion";
+
 /// A configuration `extends` cycle prevented loading.
 const CATEGORY_CYCLIC_EXTENDS: &str = "cyclic_extends";
+
 /// Profile selection or profile-table validation prevented loading.
 ///
 /// Subcommand loading ignores profiles (decision D11 of the 9.1.1 execplan),
@@ -75,8 +93,10 @@ const CATEGORY_CYCLIC_EXTENDS: &str = "cyclic_extends";
 /// rather than folded into a catch-all because the vocabulary is closed, and
 /// an unlisted category here would be a silent leak of an unknown class.
 const CATEGORY_PROFILE: &str = "profile";
+
 /// Several loading errors were retained for reporting together.
 const CATEGORY_AGGREGATE: &str = "aggregate";
+
 /// Required configuration values were still absent after every layer merged.
 ///
 /// Subcommand discovery runs before any configuration value is merged, so this
@@ -253,7 +273,9 @@ const fn error_category(error: &OrthoError) -> &'static str {
         OrthoError::UnknownProfile { .. }
         | OrthoError::InvalidProfileName { .. }
         | OrthoError::ReservedProfileName { .. }
-        | OrthoError::ProfileForbiddenKey { .. } => CATEGORY_PROFILE,
+        | OrthoError::ProfileForbiddenKey { .. }
+        | OrthoError::DuplicateProfileRedaction { .. }
+        | OrthoError::ProfileMetadataOnUnsupported { .. } => CATEGORY_PROFILE,
         OrthoError::Aggregate(_) => CATEGORY_AGGREGATE,
         OrthoError::MissingRequiredValues(_) => CATEGORY_MISSING_REQUIRED_VALUES,
     }

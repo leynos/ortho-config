@@ -110,6 +110,7 @@ pub(crate) fn generate_docs_impl(args: &DocsArgs<'_>) -> syn::Result<TokenStream
                     output: #output,
                     profiles: #profiles_tokens,
                 }
+                .redacted_for_output()
             }
         }
     })

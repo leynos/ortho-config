@@ -97,6 +97,7 @@ fn field_metadata(name: &str) -> FieldMetadata {
         examples: Vec::new(),
         links: Vec::new(),
         notes: Vec::new(),
+        profile_field: None,
     }
 }
 
@@ -370,6 +371,7 @@ pub(super) fn root_command(context: &AgentContext) -> AgentCommand {
 /// Projects a tree and returns the renderer of its single root command.
 pub(super) fn project_renderer(tree: &DocMetadata) -> RendererContract {
     crate::agent_context::bridge_ir_to_agent_context(tree, "demo_pkg", None)
+        .expect("bridge succeeds")
         .commands
         .into_iter()
         .next()

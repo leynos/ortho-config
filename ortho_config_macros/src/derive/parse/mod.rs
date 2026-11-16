@@ -45,7 +45,7 @@ pub(crate) use doc_types::{
     ExitClassAttr, HeadingOverrides, OutputAttrs, RenderWidthAttr, RendererFieldAttr,
     RendererRecordAttrs,
 };
-pub(crate) use field_attrs::parse_field_attrs;
+pub(crate) use field_attrs::{ProfileFieldAnnotation, ProfileFieldLabel, parse_field_attrs};
 pub(crate) use input::parse_input;
 #[cfg(any(test, doctest))]
 pub(crate) use literals::__doc_lit_str;
@@ -176,4 +176,6 @@ pub(crate) struct FieldAttrs {
     pub nested: bool,
     /// Field documentation metadata copied into generated API documentation.
     pub doc: DocFieldAttrs,
+    /// Disclosure classification declared by `profile_field = "..."`.
+    pub profile_field: Option<ProfileFieldAnnotation>,
 }

@@ -31,6 +31,14 @@ pub(crate) const CACHE_DIRECTORY_DIGEST_BYTES: usize = 16;
 /// Prefix identifying the cache-key directory encoding.
 pub(crate) const CACHE_KEY_VERSION_PREFIX: &str = "v1-";
 
+/// Disclosure-policy version folded into every cache key.
+///
+/// Bump this whenever the set of slots the projection removes changes, so an
+/// entry produced by an older policy is never reused with a raw value still in
+/// it. The value is deliberately independent of the IR version: adding an IR
+/// field does not automatically change what is redacted.
+const DISCLOSURE_POLICY_VERSION: &str = "profile-redaction-v1";
+
 /// Cache key inputs for the bridge IR.
 #[derive(Debug, Clone)]
 pub struct CacheKey {
@@ -68,6 +76,8 @@ impl CacheKey {
         hasher.update(self.root_type.as_bytes());
         hasher.update(self.tool_version.as_bytes());
         hasher.update(self.ir_version.as_bytes());
+        hasher.update(b"disclosure:");
+        hasher.update(DISCLOSURE_POLICY_VERSION.as_bytes());
         hasher.update(b"lockfile:");
         match &self.lockfile_hash {
             Some(hash) => hasher.update(hash.as_bytes()),

@@ -161,7 +161,12 @@ fn run(cli: Cli, format_was_explicit: bool) -> Result<(), OrthohelpError> {
     let should_use_cache = args.cache.should_cache;
     let should_skip_build = args.cache.should_skip_build;
     let ir_json = bridge::load_or_build_ir(&config, &paths, should_use_cache, should_skip_build)?;
-    let doc_metadata: DocMetadata = serde_json::from_str(&ir_json)?;
+    // Project once at the pipeline entry so handwritten or cached metadata
+    // receives the same disclosure boundary as derive-generated metadata.
+    // Rendering, localization, and agent-context conversion all consume this
+    // sanitized tree.
+    let doc_metadata: DocMetadata =
+        serde_json::from_str::<DocMetadata>(&ir_json)?.redacted_for_output();
 
     let should_generate_ir = matches!(args.format, OutputFormat::Ir | OutputFormat::All);
     let should_generate_man = matches!(args.format, OutputFormat::Man | OutputFormat::All);

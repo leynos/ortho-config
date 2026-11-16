@@ -20,7 +20,8 @@ fn transform_flattens_commands_with_summaries_and_canonical_verbs() {
         ("cmd.inspect", "Inspect state."),
     ]);
 
-    let context = bridge_ir_to_agent_context(&metadata, "demo_pkg", Some(&localizer));
+    let context = bridge_ir_to_agent_context(&metadata, "demo_pkg", Some(&localizer))
+        .expect("bridge succeeds");
     let commands: Vec<_> = context.commands.iter().map(command_summary).collect();
 
     assert_eq!(context.kind, "demo_pkg.agent_context");
@@ -108,7 +109,7 @@ fn transform_maps_visible_cli_fields_and_sorts_inputs() {
         behaviour: None,
     });
 
-    let context = bridge_ir_to_agent_context(&metadata, "demo_pkg", None);
+    let context = bridge_ir_to_agent_context(&metadata, "demo_pkg", None).expect("bridge succeeds");
     let command = context
         .commands
         .first()
@@ -141,7 +142,7 @@ fn transform_recovers_enum_values_from_cli_metadata_for_custom_types() {
         behaviour: None,
     });
 
-    let context = bridge_ir_to_agent_context(&metadata, "demo_pkg", None);
+    let context = bridge_ir_to_agent_context(&metadata, "demo_pkg", None).expect("bridge succeeds");
     let command = context
         .commands
         .first()
@@ -185,7 +186,7 @@ fn transform_reports_boolean_flags_without_enum_values() {
         behaviour: None,
     });
 
-    let context = bridge_ir_to_agent_context(&metadata, "demo_pkg", None);
+    let context = bridge_ir_to_agent_context(&metadata, "demo_pkg", None).expect("bridge succeeds");
     let command = context
         .commands
         .first()
@@ -223,7 +224,7 @@ fn transform_normalizes_default_path_separators() {
         behaviour: None,
     });
 
-    let context = bridge_ir_to_agent_context(&metadata, "demo_pkg", None);
+    let context = bridge_ir_to_agent_context(&metadata, "demo_pkg", None).expect("bridge succeeds");
     let command = context
         .commands
         .first()
@@ -263,7 +264,8 @@ fn default_normalization_preserves_quoted_contents(#[case] display: &str, #[case
 
 #[test]
 fn transform_projects_nested_tree_with_sorted_commands_and_inputs() {
-    let context = bridge_ir_to_agent_context(&nested_metadata(), "demo_pkg", None);
+    let context =
+        bridge_ir_to_agent_context(&nested_metadata(), "demo_pkg", None).expect("bridge succeeds");
     let commands: Vec<_> = context
         .commands
         .iter()
@@ -286,7 +288,8 @@ fn transform_omits_missing_or_blank_summaries(
     let metadata = doc(DocSpec::root_without_fields());
     let localizer = StaticLocalizer::maybe("root.about", lookup);
 
-    let context = bridge_ir_to_agent_context(&metadata, "demo_pkg", Some(&localizer));
+    let context = bridge_ir_to_agent_context(&metadata, "demo_pkg", Some(&localizer))
+        .expect("bridge succeeds");
     let summary = context
         .commands
         .first()
@@ -319,3 +322,6 @@ mod output_tests;
 
 #[path = "tests_profiles.rs"]
 mod tests_profiles;
+
+#[path = "tests_redaction.rs"]
+mod tests_redaction;

@@ -15,6 +15,7 @@ use serde::{Deserialize, Serialize};
     reason = "create_dir and load serve the sibling extends suite"
 )]
 mod extends_fixture;
+
 #[path = "support/profile_chain_assertions.rs"]
 mod profile_chain_assertions;
 
@@ -28,6 +29,8 @@ use std::sync::Arc;
 struct ProfiledExtendsCfg {
     app_name: String,
     retries: u8,
+    /// Marked reference-only to prove classification does not affect loading.
+    #[ortho_config(profile_field = "reference_only")]
     notes: String,
 }
 

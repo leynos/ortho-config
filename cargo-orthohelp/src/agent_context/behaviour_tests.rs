@@ -97,7 +97,7 @@ fn transform_maps_declared_behaviour(#[case] case: DeclaredBehaviourCase) {
         )),
     });
 
-    let context = bridge_ir_to_agent_context(&metadata, "demo_pkg", None);
+    let context = bridge_ir_to_agent_context(&metadata, "demo_pkg", None).expect("bridge succeeds");
     let command = context
         .commands
         .first()
@@ -115,7 +115,7 @@ fn transform_maps_declared_behaviour(#[case] case: DeclaredBehaviourCase) {
 fn transform_keeps_behaviour_fields_unknown_when_undeclared() {
     let metadata = doc(DocSpec::child("version", "cmd.version"));
 
-    let context = bridge_ir_to_agent_context(&metadata, "demo_pkg", None);
+    let context = bridge_ir_to_agent_context(&metadata, "demo_pkg", None).expect("bridge succeeds");
     let command = context
         .commands
         .first()
@@ -148,7 +148,7 @@ fn transform_maps_behaviour_on_nested_subcommands() {
         doc(DocSpec::child("list", "cmd.list")),
     ]);
 
-    let context = bridge_ir_to_agent_context(&metadata, "demo_pkg", None);
+    let context = bridge_ir_to_agent_context(&metadata, "demo_pkg", None).expect("bridge succeeds");
     let prune = context
         .commands
         .iter()

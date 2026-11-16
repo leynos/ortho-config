@@ -16,7 +16,9 @@ use quote::quote;
 use crate::derive::build::CliFieldMetadata;
 use crate::derive::generate::localization::ArgIdsModel;
 use crate::derive::generate::localization::suffix::MessageSuffix;
-use crate::derive::parse::{FieldAttrs, SerdeRenameAll, serde_serialized_field_key};
+use crate::derive::parse::{
+    FieldAttrs, ProfileFieldLabel, SerdeRenameAll, serde_serialized_field_key,
+};
 
 use self::emission::render_field_metadata;
 use self::resolution::{resolve_required, resolve_value_type};
@@ -312,7 +314,22 @@ fn render_meta_parts(attrs: &FieldAttrs, krate: &proc_macro2::TokenStream) -> Me
         examples: example_tokens(&attrs.doc.examples, krate),
         links: link_tokens(&attrs.doc.links, krate),
         notes: note_tokens(&attrs.doc.notes, krate),
+        profile_field_tokens: profile_field_tokens(attrs, krate),
     }
+}
+
+/// Emits the disclosure classification, or `None` for an ordinary field.
+fn profile_field_tokens(attrs: &FieldAttrs, krate: &proc_macro2::TokenStream) -> TokenStream {
+    attrs.profile_field.map_or_else(
+        || quote! { None },
+        |annotation| {
+            let variant = match annotation.label {
+                ProfileFieldLabel::Secret => quote! { Secret },
+                ProfileFieldLabel::ReferenceOnly => quote! { ReferenceOnly },
+            };
+            quote! { Some(#krate::docs::ProfileFieldExposure::#variant) }
+        },
+    )
 }
 
 impl FieldIdentity<'_> {
