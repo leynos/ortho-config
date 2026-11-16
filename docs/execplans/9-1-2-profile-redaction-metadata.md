@@ -692,6 +692,12 @@ branch's arms). Mitigation: certify M1 with `lint-clippy` and record the
 byte-identity evidence, leave `lint-whitaker` excluded, and escalate to the
 operator. Never modify the installation or `dylint.toml` to buy a green gate.
 
+Resolved on 2026-11-16: the installed suite no longer reports the spurious
+diagnostics on main-identical files. `make lint-whitaker` now runs as part of
+the certificate and found two genuine `module-must-have-inner-docs` omissions
+in modules this branch adds, both repaired. The M1 evidence above records the
+exclusion as it stood at that milestone; it no longer applies.
+
 ## Progress
 
 - [x] (2026-10-14) Inspect prerequisite, branch, and projection paths with two
@@ -835,6 +841,35 @@ operator. Never modify the installation or `dylint.toml` to buy a green gate.
   whole set was re-run from the top. On this base,
   `documentation_examples_tests` reports 13 tests rather than the pre-rebase
   14, because main reworked that harness and absorbed one case.
+- [x] (2026-11-16) Clear every CodeScene finding the candidate introduced.
+  `cs delta d11a0797 HEAD` first reported three: two Large Assertion Blocks
+  files and one String Heavy Function Arguments module. The assertion helpers in
+  `proptests_support.rs` and the four flagged tests in `tests.rs` now each
+  compare one tuple, so a slot can no longer be dropped by deleting a single
+  statement. `RedactionExpectation` names the command path, field, and exposure
+  of one record, which took the argument mix in
+  `profile_redaction_assertions.rs` below the 39% threshold and removed the
+  field/exposure transposition hazard. A final `cs delta d11a0797 HEAD` reports
+  "No issues found in checked changes".
+- [x] (2026-11-16) Split `proptests_support.rs` by role, because it had reached
+  703 lines against the 400-line module cap. `proptest_model.rs` owns the
+  independent model and the slot-by-slot correspondence review it documents, and
+  `proptest_assertions.rs` owns the integrity assertions; the generators and
+  their bounds stay in `proptests_support.rs`. The three files now hold 326,
+  148, and 254 lines.
+- [x] (2026-11-16) Run `make lint-whitaker` for the first time on this
+  candidate and repair what it found. The earlier cycles ran `lint-clippy`
+  alone, so two `module-must-have-inner-docs` failures had never been observed:
+  `module_must_have_inner_docs` on the sentinel catalogue's test module and on
+  `traversal_probe` in the redaction module. Both carried their rationale in
+  outer `///` attributes; both now open with `//!`, matching the
+  `powershell_decoding` fixture.
+- [x] (2026-11-16) Nine-gate certificate on `07a72b4d`. All passed:
+  `check-fmt`, `markdownlint` (including the spelling gate), `nixie`,
+  `lint-clippy`, `lint-whitaker`, `docstring-coverage` (1065 items, 100%),
+  `verus` (27 verified, 0 errors), `test` (114 Cargo test targets then 128
+  pytest tests), and `test-workflow-contracts` (748 passed, 2 skipped). Logs are
+  `/tmp/pr593-*-9-1-2-gate7.out`.
 
 ## Surprises & discoveries
 
