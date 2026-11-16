@@ -705,12 +705,11 @@ migration guide before touching the candidate.
   this branch's structured-output section; and the impact table keeps main's
   "Skill manifest validation" row inside this branch's regrouped "Required if
   called" ordering.
-- [x] (2026-11-16) The replay exposed the shared-fixture trap: `typecheck`
-      failed
-  with E0063 because main's new
+- [x] (2026-11-16) The replay exposed the shared-fixture trap at two layers.
+  `make typecheck` first failed with E0063 because main's new
   `cargo-orthohelp/src/skill_validation/tests_surface.rs` builds an
-  `AgentCommand` literal that predates the `output` field. The merge was
-  textually clean, so only the compiler could find it. `cd01b44a` supplies
+  `AgentCommand` literal that predates the `output` field; the merge was
+  textually clean, so only the compiler could find it, and `cd01b44a` supplies
   `output: None` there. Gates at `cd01b44a`: `make check-fmt` (109 files
   unchanged), `make markdownlint` (0 issues, spelling clean), `make nixie`,
   `make typecheck`, `make lint` (`cargo doc`, Clippy, Whitaker, docstring
@@ -718,6 +717,17 @@ migration guide before touching the candidate.
   3070 passed, 0 failed, 44 ignored, then pytest 128 passed and 5 skipped). A
   `range-diff` of the series reports four commits changed by hand and two by
   the merge driver, and every other commit identical.
+- [x] (2026-11-16) The second layer was the same literal inside a doc comment.
+  The review explicitly asked for a doctest run at final acceptance, and
+  `cargo test --workspace --doc` failed to compile
+  `cargo-orthohelp/src/skill_validation/surface.rs`'s
+  `EffectiveCommandSurface::from_agent_context` example for the same missing
+  field. `make test` never reaches doctests, so neither the unit nor the
+  integration certificate could have shown it. `506a3131` supplies
+  `output: None`; the workspace doctest run then passed 149 examples with 0
+  failures and 47 ignored, and `make check-fmt` and `make lint` were re-run
+  over that commit. A rebase invites the same audit at every layer that reads
+  the changed type: crate sources, test fixtures, and doc comments alike.
 
 ## Surprises & discoveries
 
