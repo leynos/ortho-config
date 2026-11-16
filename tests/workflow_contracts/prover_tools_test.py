@@ -101,7 +101,7 @@ def test_kani_check_fails_for_a_missing_selected_executable(tmp_path: Path) -> N
     assert len(read_records(capture)) == 1
 
 
-@pytest.mark.parametrize("target", ("kani", "kani-full", "verus"))
+@pytest.mark.parametrize("target", ("kani", "kani-full"))
 def test_proof_targets_fail_before_running_an_empty_inventory(
     tmp_path: Path, target: str
 ) -> None:
@@ -123,6 +123,42 @@ def test_proof_targets_fail_before_running_an_empty_inventory(
     assert not capture.exists(), "an empty inventory must fail before starting a tool"
 
 
+def test_verus_fails_when_its_inventory_is_cleared_explicitly(tmp_path: Path) -> None:
+    """A cleared Verus inventory still refuses to pass vacuously.
+
+    The default inventory is no longer empty, so the empty-inventory contract
+    has to clear it deliberately rather than rely on the repository state.
+    """
+    env = os.environ.copy()
+    uv, capture = fake_uv(tmp_path)
+    env.update(
+        {
+            "PATH": "/usr/bin:/bin",
+            "PROVER_TOOLS_CAPTURE": str(capture),
+            "UV": str(uv),
+        }
+    )
+
+    result = run_make("verus", env=env, variables=("VERUS_PROOF_FILES=",))
+
+    assert result.returncode != 0
+    assert "FORMAL-EMPTY:" in result.stderr
+    assert not capture.exists(), "an empty inventory must fail before starting a tool"
+
+
+def test_the_registered_verus_inventory_names_the_feature_proof() -> None:
+    """The bare target verifies the profile-redaction proof, not an empty list.
+
+    Registration is what turns `make verus` into feature evidence, so a
+    deletion of the default here has to fail a contract rather than quietly
+    restore the vacuous target.
+    """
+    makefile = (REPOSITORY_ROOT / "Makefile").read_text(encoding="utf-8")
+
+    assert "VERUS_PROOF_FILES ?= verus/profile_redaction.rs" in makefile
+    assert (REPOSITORY_ROOT / "verus/profile_redaction.rs").is_file()
+
+
 def test_verus_forwards_explicit_proof_files_in_order(tmp_path: Path) -> None:
     """The Make boundary preserves repeated proof-file arguments literally."""
     env = os.environ.copy()
@@ -136,7 +172,11 @@ def test_verus_forwards_explicit_proof_files_in_order(tmp_path: Path) -> None:
     )
     flags = "--proof-file 'proof dir/first.rs' --proof-file \"proof's second.rs\""
 
-    result = run_make("verus", env=env, variables=(f"VERUS_FLAGS={flags}",))
+    result = run_make(
+        "verus",
+        env=env,
+        variables=(f"VERUS_FLAGS={flags}", "VERUS_PROOF_FILES="),
+    )
 
     assert result.returncode == 0, result.stderr
     arguments = read_records(capture)[0]["args"]
@@ -149,9 +189,39 @@ def test_verus_forwards_explicit_proof_files_in_order(tmp_path: Path) -> None:
         "execution must not install a toolchain; `make install-verus` owns that"
     )
     assert arguments.count("--proof-file") == 2, (
-        "the boundary must not add a default proof file of its own"
+        "a cleared inventory must leave the caller's proof files exactly as given"
     )
     assert read_records(capture)[0]["verus_z3_path"] == VERUS_BUNDLED_Z3
+
+
+def test_verus_verifies_the_registered_inventory_before_any_extra_flag(
+    tmp_path: Path,
+) -> None:
+    """The bare target passes the registered proof, and flags come last.
+
+    The inventory is what the CI lane runs, so it has to reach the runner
+    without the caller naming it again.
+    """
+    env = os.environ.copy()
+    uv, capture = fake_uv(tmp_path)
+    env.update(
+        {
+            "PATH": "/usr/bin:/bin",
+            "PROVER_TOOLS_CAPTURE": str(capture),
+            "UV": str(uv),
+        }
+    )
+
+    result = run_make(
+        "verus", env=env, variables=("VERUS_FLAGS=--triggers-mode silent",)
+    )
+
+    assert result.returncode == 0, result.stderr
+    arguments = read_records(capture)[0]["args"]
+    assert arguments.count("--proof-file") == 1
+    registered = arguments.index("--proof-file")
+    assert arguments[registered + 1] == "verus/profile_redaction.rs"
+    assert arguments[-2:] == ["--triggers-mode", "silent"]
 
 
 def _verus_install_env(tmp_path: Path) -> tuple[dict[str, str], Path, Path, Path]:
