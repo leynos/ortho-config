@@ -123,6 +123,11 @@ const SIMPLE_RUNS: &[SimpleRun] = &[
         stdout: "supports_json=Some(true) stdout=Some(Data) classes=[\"success\", \"usage\"]\n",
     },
     SimpleRun {
+        id: "guide-profile-redaction",
+        args: &["--token", "live-token"],
+        stdout: "loaded token=live-token\npublished token default=None\n",
+    },
+    SimpleRun {
         id: "guide-behaviour-metadata",
         args: &[],
         stdout: "mutation=Some(Delete) bypass=Some(\"--force\")\n",
@@ -196,3 +201,4 @@ fn run_stdout(workspace: &mut ExampleWorkspace, id: &'static str, args: &[&str])
     );
     String::from_utf8(output.stdout).with_context(|| format!("{id} stdout is UTF-8"))
 }
+// weave: run 'weave explain ortho_config/tests/documentation_examples/simple_runs.rs' for per-hunk detail, 'weave check' to verify your resolution

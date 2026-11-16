@@ -147,6 +147,29 @@ absent. Deserializing an unknown label fails; it never degrades to an ordinary
 field. `ProfileFieldRedaction` uses the same labels. Defaults on existing
 fields make legacy IR and agent context read as ordinary metadata.
 
+### Formal evidence
+
+The projection's semantics are proved over a model in
+`verus/profile_redaction.rs`, registered in `VERUS_PROOF_FILES` so a bare
+`make verus` verifies it. The entry point includes three modules: the model
+(types, projection, and value lemmas), projection integrity (V2), and
+noninterference (V1). Each model slot names the production slot it stands for;
+value-bearing slots are modelled individually, while slots the policy preserves
+verbatim are collapsed, because projecting them is the identity.
+
+Production stores the command tree as nested `subcommands`. The model stores it
+as a flat preorder sequence of commands, each naming its parent by index, and
+an explicit `is_tree_like` invariant requires a single root at index zero with
+every other command's parent strictly earlier. That encoding makes depth
+unbounded, which is what a topology-preservation claim needs, and it is forced
+rather than preferred: Verus rejects structural recursion through a `Seq` of
+nodes. The recursive traversal is therefore covered by differential property
+tests that walk the nested production type, not by the proof.
+
+The proof establishes V1 and V2 for the model. It does not establish that the
+production `redacted_for_output` implements the model; that correspondence is
+the residual testing boundary described under Known risks.
+
 ## Goals and non-goals
 
 - Goals:
@@ -184,10 +207,11 @@ This is a deliberate pre-1.0 Rust source break, consistent with ADR-0016.
   public examples from a tree that contains one protected field.
 - The projection removes the modelled slots only. Unmodelled future value slots
   need an explicit projection change and a corresponding model update.
-- Formal evidence covers a model of the recursive projection. Correspondence
-  between the model and the production traversal is established by differential
-  property tests and output integration tests, not by a verified binary. The
-  developers' guide records that residual testing boundary.
+- Formal evidence covers a model of the recursive projection (see Formal
+  evidence). Correspondence between the model and the production traversal is
+  established by differential property tests and output integration tests, not
+  by a verified binary. The developers' guide records that residual testing
+  boundary.
 
 ## Outstanding decisions
 

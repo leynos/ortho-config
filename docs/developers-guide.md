@@ -118,7 +118,32 @@ Makefile. Each entry must name, in the pull request that adds it:
 - every assumption, precondition, or modelled abstraction;
 - the expected check count and the negative control that must be rejected.
 
-No production entries exist yet.
+One production entry is registered:
+
+- `VERUS_PROOF_FILES` names `verus/profile_redaction.rs`, which carries the
+  profile-field disclosure obligations owned by
+  `ortho_config::docs::profile_redaction`. The entry point includes
+  `profile_redaction_model` (types, projection, value lemmas),
+  `profile_redaction_integrity` (V2: the projection empties exactly the
+  protected slots, preserves public descriptors and command topology, and is
+  idempotent), and `profile_redaction_noninterference` (V1: two documents that
+  agree on public metadata project to equal results however their protected
+  slots differ). Inputs are symbolic over a flat preorder encoding of the
+  command tree, with unbounded length and depth and an `is_tree_like` invariant
+  requiring one root and strictly earlier parents. `make verus` reports the
+  check count; the M2 gate recorded `27 verified, 0 errors`.
+- Adding a module means attaching its proof to the registered entry point,
+  because the verifier only reaches the files that entry point includes.
+- Negative controls: retaining a protected default, retaining a nested enum
+  member, or skipping a child each fails a corresponding obligation.
+- Modelled abstraction, and the residual boundary: the model carries no
+  `String`, `Vec`, or serde attribute, and slots the policy preserves verbatim
+  are collapsed into one model slot. Verus rejects structural recursion through
+  a `Seq` of nodes, so the recursive production traversal is closed by the
+  differential property tests in `ortho_config/src/docs/profile_redaction/` and
+  by the golden and contract suites in `cargo-orthohelp/tests/`, not by the
+  proof. The proof covers the projection's semantics over the model; it does
+  not certify the running binary.
 
 ## Clap default inference
 
@@ -1842,6 +1867,61 @@ full closed vocabulary. Because the delegation supplies its own argument vector
 from `std::env::args_os()` while taking the environment sources from the caller,
 `load_with_profile_with_sources` is injected-labelled on the strength of its
 *environment* sources alone — the argument vector is never injected.
+
+## Profile field disclosure (roadmap 9.1.2)
+
+An author classifies a field with `profile_field = "secret"` or
+`profile_field = "reference_only"`. The contract is
+[ADR-0018](adrs/adr-0018-profile-field-redaction.md) and the user-facing view is
+[the users' guide](users-guide.md#keep-profile-values-out-of-generated-documentation).
+
+`ortho_config::docs::profile_redaction` owns the single projection,
+`DocMetadata::redacted_for_output`, and every consumer applies it at a public
+boundary instead of repeating the rule: the derive projects emitted metadata,
+the `cargo-orthohelp` pipeline projects deserialized IR, the generated bridge
+projects before writing IR JSON, and the IR-to-agent-context bridge projects
+before deriving records. A new renderer therefore needs no redaction code, and
+adding a value-bearing slot to `FieldMetadata` means extending the projection,
+the model, and the sentinel catalogue together.
+
+### Cache invalidation
+
+`cargo-orthohelp/src/cache.rs` folds the literal salt `profile-redaction-v1`
+into every cache key. Change the set of slots the projection removes in the
+same commit as bumping `DISCLOSURE_POLICY_VERSION`; an entry produced under the
+old policy then misses instead of being reused with a raw value still in it.
+`cache_key_hash_matches_the_documented_vector` pins the digest of a fixture
+key, so deleting the salt or its separator fails the test; a change-detection
+test alone would keep passing because it only compares two computed hashes.
+
+### Redaction assertions
+
+The disclosure suites assert in both directions: a protected literal is absent
+*and* a public sibling is present, so an artefact that failed to render cannot
+pass by being empty.
+`cargo-orthohelp/tests/fixtures/profile_redaction_sentinels.rs` is the shared
+catalogue of value-bearing literals, and the behavioural, golden, and contract
+suites all scan it; add a fixture literal there first, then the suite that
+consumes it. The fixture crate's own `redaction` module must keep each sentinel
+out of public descriptions, because a literal that also appears in help text
+makes an absence assertion ambiguous.
+
+Run the focused suites with:
+
+```bash
+cargo test -p ortho_config --lib profile_redaction
+cargo test -p cargo-orthohelp --lib cache_key
+cargo test -p cargo-orthohelp --test rstest_bdd profile_redaction
+cargo test -p cargo-orthohelp --test golden_tests redaction
+cargo test -p cargo-orthohelp --test agent_context_contract redaction
+```
+
+A redaction assertion is evidence only if it fails when the projection is
+disabled. Seed a fault by retaining a protected default, confirm that the
+behavioural, golden, and contract suites fail, then restore the source byte for
+byte and rerun. `cargo test --test <target>` does not rebuild the
+`cargo-orthohelp` binary, so rebuild it explicitly before trusting a seeded
+fault that a spawned process is supposed to observe.
 
 ## Behavioural test layout
 

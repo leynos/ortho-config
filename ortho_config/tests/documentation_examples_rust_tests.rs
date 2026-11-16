@@ -54,6 +54,7 @@ const STANDARD_RUST_EXAMPLES: &[&str] = &[
     "guide-collections",
     "guide-discovery",
     "guide-profiles",
+    "guide-profile-redaction",
     "guide-renderer-metadata",
     "guide-hermetic-discovery",
     "guide-load-first-outcomes",
@@ -128,6 +129,7 @@ fn documented_rust_compiles_and_runs() -> Result<()> {
     guide_flows::assert_localization_id_flow(&mut workspace)?;
     guide_flows::assert_behaviour_check_flow(&mut workspace)?;
     guide_flows::assert_profile_metadata_flow(&mut workspace)?;
+    guide_flows::assert_profile_redaction_flow(&mut workspace)?;
     migration_flows::assert_migration_flows(&mut workspace)?;
 
     example_flows::assert_error_flow(&mut workspace)?;

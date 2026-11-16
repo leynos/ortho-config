@@ -349,6 +349,30 @@ adds the `profile-redaction-v1` salt so artefacts produced under a different
 policy are never reused. The contract and its rationale are recorded in
 [ADR-0026](adrs/adr-0026-profile-field-redaction.md).
 
+The wire additions are additive. `FieldMetadata::profile_field` is an optional
+label, omitted when absent, and an unknown label fails deserialization rather
+than degrading to an ordinary field, so legacy IR reads as ordinary metadata.
+Agent context carries one record per protected field in `profiles.redaction[]`:
+`command_path`, `field_name`, the optional file `key_path`, and `exposure`.
+Records are sorted by identity and a duplicate `(command_path, field_name)` is
+rejected rather than resolved.
+
+The boundary is structural, not textual. Help identifiers, descriptions, custom
+type names, links, and notes are published verbatim, so an author who writes a
+secret into prose defeats the policy, and no renderer offers a badge or an
+override. What survives is the public descriptor: an agent can still name the
+setting it must not echo.
+
+Formal evidence covers the projection's semantics, not the binary. A Verus
+model in `verus/profile_redaction.rs` mirrors the production slots and proves
+noninterference and projection integrity over an unbounded preorder encoding of
+the command tree. Verus cannot reason about `String`, `Vec`, or serde
+attributes, so the model is a specification rather than generated code, and the
+correspondence is discharged by the differential property tests in
+`ortho_config/src/docs/profile_redaction/` together with the golden and
+contract suites in `cargo-orthohelp/tests/`; the developers' guide records that
+residual boundary.
+
 ### 2.3 Value typing and defaults
 
 ```rust

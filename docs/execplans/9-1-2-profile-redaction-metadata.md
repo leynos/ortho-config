@@ -1,6 +1,7 @@
 # Add profile redaction metadata (9.1.2)
 
-Status: APPROVED — implementation in progress.
+Status: COMPLETE — M1–M3 delivered; PR publication and review tracking follow
+in the pull request.
 
 This execution plan is a living document. Keep Constraints, Tolerances, Risks,
 Progress, Surprises & discoveries, Decision log, Outcomes & retrospective,
@@ -710,7 +711,7 @@ operator. Never modify the installation or `dylint.toml` to buy a green gate.
 - [x] (2026-11-15) Obtain explicit user approval before starting M1. The
   implementation request named this plan and instructed implementation to
   proceed, which supplies execution approval for M1–M3.
-- [ ] M1: complete disclosure boundary.
+- [x] M1: complete disclosure boundary.
   - [x] (2026-11-15) Consolidate schema ownership: `cargo-orthohelp::schema`
     re-exports `ortho_config::docs`; the four mirror modules are deleted.
   - [x] (2026-11-15) Add `ProfileFieldExposure`, the `profile_field` IR field,
@@ -735,7 +736,7 @@ operator. Never modify the installation or `dylint.toml` to buy a green gate.
     docstring coverage, Markdown, Mermaid, spelling, and the workspace test
     suite except the load-sensitive boundary target, whose saturation
     attribution is recorded below. Whitaker remains escalated, not repaired.
-- [ ] M2: proofs and external workflow evidence.
+- [x] M2: proofs and external workflow evidence.
   - [x] (2026-11-16) Model and prove V1/V2 in `verus/profile_redaction.rs` and
     its three modules, split to stay under the 400-line cap:
     `profile_redaction_model` (types, projection, value lemmas),
@@ -769,7 +770,49 @@ operator. Never modify the installation or `dylint.toml` to buy a green gate.
     `redaction_keeps_protected_values_out_of_streams_and_artefact` checks the
     debug-tracing streams. `cache_key_hash_matches_the_documented_vector`
     pins the disclosure salt into the cache identity.
-- [ ] M3: documentation, final gates, and roadmap completion.
+  - [x] (2026-11-16) Gate the M2 commits on the exact candidate. Eight gates
+    passed: `check-fmt`, `markdownlint`, `nixie`, `lint-clippy`,
+    `docstring-coverage`, `verus`, `test` (2530 Cargo tests across 112
+    binaries, then 128 pytest tests), and `test-workflow-contracts`; logs are
+    `/tmp/gate2-*-9-1-2.out`. The first run of the same candidate was red for
+    two reasons, both since resolved: six Clippy diagnostics in the new test
+    files (emptiness assertions, a shadowed closure binding, a needless
+    pass-by-value buffer, and a needless borrow), and the documented
+    saturation timeout of the nested-Cargo serialization probe, which aborted
+    the run before the pytest phase. The green run reproduces neither.
+- [x] M3: documentation, final gates, and roadmap completion.
+  - [x] (2026-11-16) Document the feature. The users' guide gains "Keep profile
+    values out of generated documentation" with the annotation, both labels,
+    what is removed and what is retained, the prose limitation, the names-only
+    catalogue, and two executable examples: `guide-profile-redaction` (loading
+    still returns the value while the projected default is absent) and
+    `guide-profile-redaction-metadata` (the published `profiles.redaction`
+    records). Both are registered in the documentation-example registry and
+    verified by `cargo test -p ortho_config --test documentation_examples_tests`
+    (14 passed) and `--test documentation_examples_rust_tests` (58 passed,
+    117 s).
+  - [x] (2026-11-16) Update the architecture and decision records. Section
+    2.2.1 of the cargo-orthohelp design records the wire additions, the
+    structural boundary, and the model-to-production relationship; section 6.7
+    of the agent-native design carries the `profiles.redaction` shape and the
+    public-text limitation; ADR-0018 gains a Formal evidence subsection
+    covering the flat preorder encoding and the residual boundary; the design
+    decision log records the decision; the developers' guide replaces the empty
+    production inventory with the registered Verus entry, its obligations,
+    negative controls, and residual boundary, and adds cache-invalidation and
+    redaction-assertion sections.
+  - [x] (2026-11-16) Update `docs/contents.md`, `docs/repository-layout.md`
+    (the `verus/` tree entry and row, and removal of the deleted
+    `tests/fixtures/prover_tools/` claim), and tick roadmap 9.1.2 with its
+    three subitems and a completion note. 9.1.3 remains unchecked.
+  - [x] (2026-11-16) Final gates on the documentation candidate. Eight targets
+    passed on the exact pre-commit content: `check-fmt`, `markdownlint`
+    (including the spelling gate), `nixie`, `lint-clippy`,
+    `docstring-coverage`, `verus` (27 verified), `test` (2530 Cargo tests plus
+    128 pytest tests, with the boundary flake not reproducing), and
+    `test-workflow-contracts`; logs are `/tmp/gate3-*-9-1-2.out`. The last
+    tracked edits were plan-status lines, so the Markdown gates were re-run
+    after them and the documentation commit follows immediately.
 
 ## Surprises & discoveries
 
@@ -969,19 +1012,37 @@ review corrected a counterexample in the draft proof relation and removed an
 unsupported flattened-descendant assumption. The plan-only formatting,
 format-check, Markdown/spelling, and Mermaid gates passed on 2026-10-14.
 
-M2 proof status, 2026-11-16: V1 and V2 are discharged. The proof is split into
-a crate root plus three modules under the 400-line cap and verifies 27
-obligations with no `assume`, `admit`, or trusted proof body. Three seeded
+M2 completed on 2026-11-16 in two commits, `b7612c40` (fixture and sentinel
+catalogue) and `0a275bd2` (proof suites and plan evidence), gated by eight
+green targets on the exact candidate. V1 and V2 are discharged: the proof is
+split into a crate root plus three modules under the 400-line cap and verifies
+27 obligations with no `assume`, `admit`, or trusted proof body. Three seeded
 model faults each break a named obligation, so the obligations are not vacuous.
 The external workflow lane, the behavioural contract, and the sentinel suites
-remain outstanding, so M2 is not complete.
+are delivered; the first gate run had exposed six Clippy diagnostics in the new
+test files and a saturation timeout of the nested-Cargo probe, both repaired
+before the green run.
 
 M1 retrospectively: the largest surprises were the deleted proof lane and the
 hand-maintained schema mirror, both addressed above. The differential model and
 the bounded generator found the three fixture/probe defects before any gate
 ran, so the milestone's property suite was useful immediately rather than only
 as regression cover. The remaining M1 work is the ordinary gate run and the
-gated commit; M2 and M3 remain outstanding.
+gated commit; M2 and M3 are recorded below.
+
+M3 completed on 2026-11-16. The users' guide section is executable rather than
+descriptive: `guide-profile-redaction` runs and pins the "loading is
+unaffected, the projected default is absent" claim, and
+`guide-profile-redaction-metadata` pins the published `profiles.redaction`
+shape against a live bridge call, so neither can drift silently. The
+architecture documents now state the wire additions, the structural limit
+(prose is published verbatim), and what the Verus model does and does not
+certify. The developers' guide's production-proof inventory is no longer empty:
+it names the registered entry point, the three modules, the preorder encoding,
+the negative controls, and the residual boundary. Roadmap 9.1.2 and its three
+subitems are ticked with evidence; 9.1.3 remains untouched. The eight ordinary
+gates passed on the pre-commit documentation candidate, and the Markdown gates
+were re-run after the final plan-status lines.
 
 ## Research and review evidence
 
