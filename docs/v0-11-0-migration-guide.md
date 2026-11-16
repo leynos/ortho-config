@@ -264,7 +264,7 @@ implementation in tests. See the
 contract and the [developer's guide](developers-guide.md) for why the
 repository routes Cargo, host-tool, and documented-binary commands through it.
 
-## 8. Replace the Figment Jail helpers with injected sources
+## 9. Replace the Figment Jail helpers with injected sources
 
 `ortho_config_test_helpers::figment` (`with_jail` and `figment_error`) is
 removed, and the crate no longer depends on `figment`. A test that used a jail
@@ -284,7 +284,7 @@ so the test no longer has to run serially. See the
 [user's guide](users-guide.md#resolve-discovery-and-merging-without-process-state)
 for the full pattern.
 
-## 9. Stop changing the process in tests
+## 10. Stop changing the process in tests
 
 The `ortho_config_test_helpers` helpers that change the process environment or
 working directory are deprecated: `env::set_var`, `env::remove_var`,
@@ -322,7 +322,7 @@ A site that must stay carries
 `#[expect(clippy::disallowed_methods, reason = "...")]`. The helpers will be
 removed in a later release.
 
-## 10. Load with one injected environment
+## 11. Load with one injected environment
 
 Nothing is required. The derive-generated `_with_sources` loaders keep working.
 Tests and embedding applications that want the whole load off the process can
