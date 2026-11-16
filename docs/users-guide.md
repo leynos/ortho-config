@@ -2451,12 +2451,13 @@ cargo orthohelp --check-agent-native --policy-mode deny --package my-cli --out-d
 jq -e '.summary.deny == 0' out/policy-report.json
 ```
 
-The first command exits `1` when the check reports a denial, so a fail-fast
-shell fails the step on the exit status and never reaches the assertion. A
-shell that continues after a failure does reach it, and the `jq` assertion then
-reads only the report the current run wrote, because the previous one was
-removed first; a stale count cannot pass the gate. Signals, forced termination,
-and a launcher that never starts the process are outside this contract.
+The `cargo orthohelp` command exits `1` when the check reports a denial, so a
+fail-fast shell fails the step on the exit status and never reaches the
+assertion. A shell that continues after a failure does reach it, and the `jq`
+assertion then reads only the report the current run wrote, because the
+previous one was removed first; a stale count cannot pass the gate. Signals,
+forced termination, and a launcher that never starts the process are outside
+this contract.
 
 These three statuses describe `cargo-orthohelp` itself, not the target command.
 A command's declared `exit_class` names remain documentation about that

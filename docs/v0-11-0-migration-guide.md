@@ -138,10 +138,10 @@ instead of a default.
 ## 4. The wire contract is unchanged
 
 Both fields are `#[serde(default)]` on the authoring IR and the agent-context
-wire, and each layer omits what the author did not declare. `output` is omitted
-when absent on both layers. `renderer` is omitted from `DocMetadata` when
-absent, but `AgentCommand::renderer` is a plain `RendererContract` that is
-always serialized, carrying its documented legacy defaults. As a result:
+wire, and what each layer omits differs. `output` is omitted when absent on
+both layers. `renderer` is omitted from `DocMetadata` when absent, but
+`AgentCommand::renderer` is a plain `RendererContract` that is always
+serialized, carrying its documented legacy defaults. As a result:
 
 - JSON produced by v0.10.0 still decodes, and the `renderer` and `output` keys
   are simply absent;
