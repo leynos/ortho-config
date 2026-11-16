@@ -40,8 +40,8 @@
 
 #[path = "identifier_artefact_cargo_messages.rs"]
 mod cargo_messages;
-#[path = "identifier_artefact_cargo_messages_property_tests.rs"]
 #[cfg(test)]
+#[path = "identifier_artefact_cargo_messages_property_tests.rs"]
 mod cargo_messages_property_tests;
 // The descendant snapshot exists only where the parent has to remove a tree
 // the helper left behind; Windows relies on the helper's Job Object.
@@ -50,8 +50,8 @@ mod cargo_messages_property_tests;
 mod descendants;
 #[path = "identifier_artefact_fixture_build.rs"]
 mod fixture_build;
-#[path = "identifier_artefact_fixture_tests.rs"]
 #[cfg(test)]
+#[path = "identifier_artefact_fixture_tests.rs"]
 mod fixture_tests;
 #[path = "identifier_artefact_lease.rs"]
 mod lease;
@@ -273,6 +273,9 @@ const DISCOVERY_ARGS: [&str; 4] = ["metadata", "--offline", "--no-deps", "--form
 /// regression cannot pass with an argument list the real path does not use.
 fn discovery_command(repository: &Path) -> Command {
     let mut command = Command::new("cargo");
+    // Frozen before `apply`, so a reader of this file sees offline mode set
+    // ahead of the call it cannot follow (Concordat NC-007).
+    command.arg("--frozen");
     cargo_environment::CargoEnvironment::metadata().apply(&mut command);
     command.args(DISCOVERY_ARGS).current_dir(repository);
     command

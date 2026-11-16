@@ -68,7 +68,14 @@ pub(crate) fn cargo_command(
     environment: &CargoEnvironment,
 ) -> Command {
     let mut command = Command::new("cargo");
+    // Tests stay offline (Concordat NC-007): the dependencies are fetched once
+    // before the suite runs, so a nested Cargo call never needs the network.
+    // The generated documentation workspaces have no lock file yet, so
+    // `--frozen` does not fit (Cargo would refuse to write one); offline mode
+    // is set on the command instead, after `apply` has replaced the
+    // environment.
     environment.apply(&mut command);
+    command.env("CARGO_NET_OFFLINE", "true");
     command.current_dir(working_directory);
     if let Some(target_directory) = target_directory_override {
         command.env("CARGO_TARGET_DIR", target_directory);

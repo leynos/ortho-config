@@ -227,6 +227,9 @@ pub(super) fn resolve_target_dir(
     deadline: Instant,
 ) -> StepResult<Utf8PathBuf> {
     let mut command = Command::new("cargo");
+    // Frozen before `apply`, so a reader of this file sees offline mode set
+    // ahead of the call it cannot follow (Concordat NC-007).
+    command.arg("--frozen");
     crate::cargo_environment::CargoEnvironment::metadata().apply(&mut command);
     command
         .args(["metadata", "--offline", "--no-deps", "--format-version=1"])

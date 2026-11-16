@@ -62,7 +62,7 @@ fn injected_allowlist_environment_accepts_discovered_build_values() {
 }
 
 fn selected_environment(environment: &CargoEnvironment) -> HashMap<String, OsString> {
-    let mut command = Command::new("cargo");
+    let mut command = Command::new("child-under-test");
     environment.apply(&mut command);
     command
         .get_envs()
@@ -89,7 +89,7 @@ fn build_policy_keeps_toolchain_controls_and_excludes_application_values() {
     supplied.insert(CACHE_CREDENTIAL, OsString::from("must-not-leak"));
 
     let environment = CargoEnvironment::build_with_lookup(|name| supplied.get(name).cloned());
-    let mut command = Command::new("cargo");
+    let mut command = Command::new("child-under-test");
     command.env(APPLICATION_SECRET, "must-not-leak");
     environment.apply(&mut command);
     let selected = command

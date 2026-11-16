@@ -45,6 +45,9 @@ fn run_cargo_dispatch(args: &[&str]) -> Result<Output, Box<dyn Error + Send + Sy
     Ok(Command::new("cargo")
         .current_dir(fixtures::workspace_root()?.as_std_path())
         .env("PATH", joined_path)
+        // Dispatch only finds and runs the subcommand binary; it builds
+        // nothing, and the offline setting states that for Concordat NC-007.
+        .env("CARGO_NET_OFFLINE", "true")
         .arg("orthohelp")
         .args(args)
         .output()?)

@@ -109,7 +109,7 @@ fn selected_value<'a>(selected: &'a HashMap<String, OsString>, name: &str) -> Op
 }
 
 fn selected_environment(environment: &BuildEnvironment) -> HashMap<String, OsString> {
-    let mut command = Command::new("cargo");
+    let mut command = Command::new("child-under-test");
     command.env("APPLICATION_SECRET", "must-not-reach-build-script");
     environment.apply(&mut command);
     command
