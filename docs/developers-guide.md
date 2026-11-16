@@ -1755,19 +1755,29 @@ must not rewrite that source. Workspace setup copies the repository's
 dependency versions without editing the parent lockfile. This helper belongs to
 the documentation layout and is separate from production bridge seeding. Keep
 the expected identifier registry closed so adding an example without choosing
-its behavioural contract fails a test. The documentation-example Cargo runner
-owns isolated Cargo process setup for these documentation tests; reuse it only
-when executing a documented Cargo workflow with caller-owned temporary state.
-The build-tool environment is a closed allow-list, separate from the narrower
-environment used by documented applications. It retains the configured Cargo
-home and shared package cache, Rust toolchain, compiler and documentation
-wrappers, applicable wrapper settings, build-job limits, warning flags, and
-platform paths. It also forwards `RUSTFLAGS`, `CARGO_ENCODED_RUSTFLAGS`,
-`CARGO_LLVM_COV`, and the LLVM profile-output controls unchanged, so a nested
-build reuses the parent's compiler flags and dependency fingerprints instead of
-compiling a second, instrumentation-free copy. Those variables are therefore
-not sanitized: rewriting them would split the fingerprint and defeat the shared
-cache.
+its behavioural contract fails a test.
+
+`ExampleWorkspace::from_recipe` builds a package from a published dependency
+recipe instead of the generated manifest. `layout::recipe_manifest` parses the
+recipe's TOML fence and substitutes only the `ortho_config` requirement: it
+keeps the published version requirement and gains a path to this checkout, so
+the recipe's own package metadata and dependency settings are what the build
+exercises. An empty `[workspace]` table keeps the package out of the repository
+workspace. The recipe path changes only the generated manifest, never the
+published source.
+
+The documentation-example Cargo runner owns isolated Cargo process setup for
+these documentation tests; reuse it only when executing a documented Cargo
+workflow with caller-owned temporary state. The build-tool environment is a
+closed allow-list, separate from the narrower environment used by documented
+applications. It retains the configured Cargo home and shared package cache,
+Rust toolchain, compiler and documentation wrappers, applicable wrapper
+settings, build-job limits, warning flags, and platform paths. It also forwards
+`RUSTFLAGS`, `CARGO_ENCODED_RUSTFLAGS`, `CARGO_LLVM_COV`, and the LLVM
+profile-output controls unchanged, so a nested build reuses the parent's
+compiler flags and dependency fingerprints instead of compiling a second,
+instrumentation-free copy. Those variables are therefore not sanitized:
+rewriting them would split the fingerprint and defeat the shared cache.
 
 The allow-list is closed: unlisted application variables do not cross it.
 Target-specific forwarding is limited to
@@ -1993,7 +2003,10 @@ the layout used in Netsuke:
   fixed arguments belong in the table in
   `documentation_examples/simple_runs.rs`; examples that need fixture files,
   environment overrides, or transcripts belong in a feature-named flow module
-  such as `guide_flows.rs`, `migration_flows.rs`, or `cargo_flows.rs`; and
+  such as `guide_flows.rs`, `migration_flows.rs`, `cargo_flows.rs`, or
+  `cargo_derive.rs`. The derive template module compiles each published fence as
+  `cargo-demo` and probes both invocation forms, help output, rejected forms,
+  and the recipe-backed build; and
 - `cargo-orthohelp/tests/documented_command.rs` runs the documented
   `cargo orthohelp` command flows against workspace packages, using the
   executable Cargo has already built for the package, and checks the artefacts
