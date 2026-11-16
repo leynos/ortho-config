@@ -49,6 +49,9 @@ pub(crate) fn prepare_cargo_command_for_target_before(
         &CargoEnvironment::build(),
     );
     command.envs(prepared_environment.0);
+    // The prepared variables replace entries on the command, so say the offline
+    // setting again afterwards (Concordat NC-007): the last assignment wins.
+    command.env("CARGO_NET_OFFLINE", "true");
     Ok(command)
 }
 
