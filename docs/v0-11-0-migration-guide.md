@@ -391,16 +391,22 @@ match error.as_ref() {
 ```
 
 A requirement is absent only when the key is absent. A present value — including
-`null` and an empty collection — counts as supplied, because the loader
-accepts it and any domain validation is a different error. When the merged
-value contains both absent requirements and invalid present values, the report
-covers the absence set first; correcting it may then surface the invalid
-values. One round of repair is promised only when missing values are the sole
-defect.
+`null` and an empty collection — counts as present for this check, because the
+check reads presence, not acceptability. Serde may still reject such a value,
+which surfaces as `OrthoError::Merge` rather than `MissingRequiredValues`. When
+the merged value contains both absent requirements and invalid present values,
+the report covers the absence set first; correcting it may then surface the
+invalid values. One round of repair is promised only when missing values are
+the sole defect.
 
 Ordinary loads, injected-source loads, profile loads, and the selected
-subcommand merge all use this path. The raw `DeserializeOwned` subcommand
-helpers, and their `_with_sources` forms, keep the earlier Figment finish.
+subcommand merge all use this path. The single-environment subcommand methods
+`load_and_merge_with_env` and `load_and_merge_with_matches_with_env` do too:
+they previously finished through Figment extraction, so an absent required
+value reached you as a deserialization error in `OrthoError::Merge`. The raw
+`DeserializeOwned` subcommand helpers, and their `_with_sources` forms, keep
+the earlier Figment finish, because their callers may name a type with no
+derived schema.
 
 ## 13. Adopt nested requirement schemas, or widen your own helpers
 

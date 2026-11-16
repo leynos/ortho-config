@@ -1120,8 +1120,14 @@ explicit at integration boundaries.
 ### Recover from missing required values
 
 A field is required when it is not an `Option`, has no explicit or inferred
-default, and carries no Serde default at the field or container level. When
-required values are absent, the loader returns
+default, and carries no Serde default at the field or container level. Two
+exceptions refine that rule. An `Option<T>` carrying `deserialize_with` or
+`with` is required unless a Serde default applies, because the custom
+deserializer, not the declared type, decides what absence means. And a
+`#[serde(default)]` on a flattened field does not rescue a required child: the
+flatten composes the child's own requirement schema at the current level.
+
+When required values are absent, the loader returns
 `OrthoError::MissingRequiredValues` with every missing value in declaration
 order, rather than reporting only the first one that Serde notices:
 
@@ -1169,7 +1175,9 @@ a missing required value is advertised as `ACME_SERVE_CMDS_SERVE_<FIELD>` and
 selected variant contributes requirements; the other variants are never
 consulted. The raw `DeserializeOwned` subcommand helpers, and their
 `_with_sources` forms, keep the earlier behaviour and produce no report,
-because they never learn which type's schema to walk.
+because they never learn which type's schema to walk. The single-environment
+methods `load_and_merge_with_env` and `load_and_merge_with_matches_with_env` do
+report, since the type they load carries a derived schema.
 
 The payload carries key paths and routes, never configuration values, so
 rendering the error cannot leak a secret. Match the variant when an application

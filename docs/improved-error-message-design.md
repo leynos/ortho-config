@@ -97,6 +97,14 @@ Runtime requiredness follows the loader, not the documentation IR:
 | Collections without a default                 | Required      |
 | Any other scalar, map, or opaque type         | Required      |
 
+Both default rows assume a loader that materializes the declared default. Only
+`#[derive(OrthoConfig)]` emits one: it builds a defaults struct holding the
+declared values and merges that struct under every other layer. A type that
+derives the standalone schema has no loader, and its parent's loader builds no
+defaults layer for it, so a declared default there never reaches the merged
+value and its field stays required. The schema-only derive states this by
+asking for a schema without materialized defaults.
+
 A `#[serde(default)]` on a flattened field is the one exception to that table:
 Serde always deserializes the field from the unmatched keys, so the default
 applies only to a field it never saw and never rescues the child. A flattened
@@ -111,25 +119,39 @@ child's declared type no longer describes what the loader reads, so a
 `#[ortho_config(nested)]` field with a custom deserializer is reported as an
 opaque leaf under its own key rather than as an object with composed children.
 
+A `#[serde(transparent)]` child is the second case where composition would name
+keys no loader reads. Such a container reads and writes its single inner value,
+so the keys its own schema records sit one level below the key the parent owns.
+The parent macro cannot see a child's container attributes, so the signal
+travels through the trait: `RequiredConfigSchema::declares_nested_object`
+answers `false` for a transparent container, and the generated composition
+helper reports the field as an opaque leaf instead of composing its children.
+An under-reported requirement is survivable — Serde still raises its own error
+for the value — whereas an invented child names a key the file cannot carry.
+
 Nested enumeration is opt-in: only a field marked `#[ortho_config(nested)]`
 composes the child's schema. `#[serde(flatten)]` composes at the current level
 only when paired with that marker. An arbitrary custom `Deserialize`
-implementation, a flatten without the marker, an enum payload, and a
-selected-subcommand value extracted through Figment stay outside the coverage
-contract and keep their existing error behaviour.
+implementation, a flatten without the marker, an enum payload, and the raw
+`DeserializeOwned` subcommand helpers stay outside the coverage contract and
+keep their existing error behaviour. The schema-aware `_for` subcommand helpers
+do enumerate: they finish the merged figment through the same collector, scoped
+to the environment prefixes and file sections that loader reads.
 
 Supply routes are computed for reported entries only, in CLI, environment, and
 configuration-file order. A route is omitted when its provider cannot consume
 the spelling: a non-identifier canonical key has no CLI flag, and a path
-segment containing a literal dot has no environment variable. A segment
-containing `=` or a NUL has no variable at all — every process environment
-treats `=` as the separator between name and value, and a NUL terminates the
-name — so only the configuration-file route remains. The test is applied to the
-whole path, not to each segment alone: the provider splits the joined name, so
-`database_.host` becomes a variable it reads back as `database._host`, and an
-edge underscore therefore also loses the environment route. That route quotes
-any segment outside TOML's bare-key alphabet, which keeps the advertised
-spelling one the file can actually express.
+segment containing a literal dot has no environment variable. The environment
+test applies to the completed variable name, prefix included, as well as to
+each segment. A name containing `=` or a NUL has no variable at all — every
+process environment treats `=` as the separator between name and value, and a
+NUL terminates the name — and a name with leading whitespace never matches,
+because the provider trims a name before comparing it with the prefix. A
+segment test is still needed on its own, because the provider splits the joined
+name: `database_.host` becomes a variable it reads back as `database._host`, so
+an edge underscore also loses the environment route. The configuration-file
+route is always offered, and it quotes any segment outside TOML's bare-key
+alphabet, which keeps the advertised spelling one the file can actually express.
 
 ## 3. Implementation design
 

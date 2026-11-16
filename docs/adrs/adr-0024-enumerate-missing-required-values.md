@@ -162,22 +162,30 @@ same item also derives `OrthoConfig`, so the two cannot conflict.
 
 A field is required unless its declared shape or attributes guarantee a value:
 
-| Declared shape or attribute                   | Requiredness  |
-| --------------------------------------------- | ------------- |
-| `Option<T>` (one outer layer)                 | Optional      |
-| `Option<T>` with a custom deserializer        | Required      |
-| `#[ortho_config(default = ...)]`              | Optional      |
-| Inferred clap default (`default_value`, `_t`) | Optional      |
-| `#[serde(default)]` on the field              | Optional      |
-| `#[serde(default)]` on the container          | Optional      |
-| `#[serde(skip)]` or `skip_deserializing`      | Not inspected |
-| `Vec<T>`, `BTreeMap<K, V>`, `HashMap<K, V>`   | Required      |
-| Any other scalar, map, or opaque type         | Required      |
+| Declared shape or attribute                    | Requiredness  |
+| ---------------------------------------------- | ------------- |
+| `Option<T>` (one outer layer)                  | Optional      |
+| `Option<T>` with a custom deserializer         | Required      |
+| `#[ortho_config(default = ...)]` with a loader | Optional      |
+| The same default on a schema-only type         | Required      |
+| Inferred clap default (`default_value`, `_t`)  | Optional      |
+| `#[serde(default)]` on the field               | Optional      |
+| `#[serde(default)]` on the container           | Optional      |
+| `#[serde(skip)]` or `skip_deserializing`       | Not inspected |
+| `Vec<T>`, `BTreeMap<K, V>`, `HashMap<K, V>`    | Required      |
+| Any other scalar, map, or opaque type          | Required      |
 
 Collections are required unless a default supplies them, because the loader
 emits an empty collection only through an explicit default or a merge overlay.
 The documentation IR's "collections are non-required" rule is descriptive and
 does not drive runtime decisions.
+
+The two default rows hold only where a loader materializes the declared value.
+`#[derive(OrthoConfig)]` emits one, and it covers only the fields of the type
+it is derived on; a type deriving the standalone schema is read by its parent's
+loader, which builds no defaults layer beneath itself. A declared default on
+such a type therefore never reaches the merged value and does not make its
+field optional.
 
 A field marked `#[serde(flatten)]` without the nested marker is not inspected:
 its keys do not appear under its own name, so any report would name a key the
@@ -194,6 +202,15 @@ default applies. The replacement also means the child's `Deserialize`
 implementation may never run, so `#[ortho_config(nested)]` cannot promise that
 the child's keys are the ones read: such a field is reported as an opaque leaf
 under its own key, and a flattened one contributes no composed requirement.
+
+A `#[serde(transparent)]` child is opaque for a different reason. Serde reads
+and writes its single non-skipped field directly, so the keys this child's
+schema records sit one level below the key the parent owns; composing them
+would name children no loader reads. Container attributes of an arbitrary child
+type are not visible to the parent's macro, so the child answers
+`RequiredConfigSchema::declares_nested_object` with `false`, and generated code
+composes through `SchemaChildren::compose`, which returns an opaque leaf for
+such a type.
 
 ### Canonical keys and aliases
 
@@ -285,6 +302,8 @@ nested marker, enum payloads, or selected-subcommand values merged through the
 Figment extraction helpers. Those paths keep their existing error behaviour. A
 field with a custom deserializer is reported as an opaque leaf when absent as a
 direct value; absent leaves inside a supplied opaque value remain Serde errors.
+A `#[serde(transparent)]` child is treated the same way: the field is reported
+under its own key, and the keys inside the forwarded value stay with Serde.
 
 ## Goals and non-goals
 
@@ -422,6 +441,31 @@ into. Earlier rounds read only the canonical key first, which reported
 `database.host` for a value holding both `database` and `db` and advertised a
 route that could not repair the load. Distinct spellings are counted, not raw
 aliases, because a rename can leave the canonical key also listed as an alias.
+
+### 2026-11-16 — opaque containers and unmaterialized defaults
+
+**A transparent container composes nothing.** `#[serde(transparent)]` reads and
+writes the container's single non-skipped field directly, so the keys its own
+schema names belong to the value stored _under_ the parent's key, not to the
+containing object. Composing them would advertise children no configuration
+file can supply at that level. The parent's macro cannot inspect the child's
+container attributes, and special-casing a path spelled `#[serde(transparent)]`
+would only cover children whose declaration the caller can see, so the child
+answers for itself: `RequiredConfigSchema::declares_nested_object` returns
+`false`, and the generated composition goes through `SchemaChildren::compose`,
+which yields an opaque leaf for such a type. The default answer stays `true`,
+so every existing schema keeps its children.
+
+**A declared default needs the loader that materializes it.** The requiredness
+matrix lists both default forms as optional, which is true only where a loader
+turns the declaration into a supply layer. `#[derive(OrthoConfig)]` builds a
+defaults struct from its own fields and merges it beneath every other layer;
+that is the only place a declared or inferred clap default enters the merged
+value. A type deriving the standalone schema supplies keys to its parent's
+loader, and that loader's defaults struct covers only the parent's own fields,
+so a default declared on the child never reaches the merged value. The schema
+generator therefore carries whether the companion derive materializes defaults
+and treats declared defaults as optional only when it does.
 
 ## References
 
