@@ -11,6 +11,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 use std::sync::OnceLock;
 use std::time::{Duration, Instant};
+use tempfile::TempDir;
 use test_helpers::process::run_with_deadline;
 
 #[path = "support/clap_error_fixture_lock.rs"]
@@ -119,11 +120,23 @@ fn build_lock_path() -> Result<PathBuf> {
 ///
 /// Each acquisition opens its own descriptor, which is exactly the situation
 /// of two test processes contending for one build; dropping the lock from
-/// [`fixture_build_lock::acquire`] would let this case succeed immediately
+/// [`fixture_build_lock::acquire_at`] would let this case succeed immediately
 /// rather than report the elapsed wait budget.
+///
+/// The lock lives in a directory this test owns. Contending on the suite's
+/// shared lock would put the outcome at the mercy of a sibling case's build,
+/// which is permitted to hold that lock for its whole 600-second budget rather
+/// than the 200 milliseconds under test.
 #[test]
 fn a_held_build_lock_blocks_a_second_acquisition() {
     use std::sync::mpsc;
+
+    // The assertions below are the outcome under test, so this case reports
+    // through them rather than through `Result`, which the workspace forbids a
+    // panicking function from returning.
+    let directory = TempDir::new().expect("create a directory for the lock file");
+    let path = directory.path().join("fixture-build.lock");
+    let held_path = path.clone();
 
     let (ready, ready_rx) = mpsc::channel();
     let (release, release_rx) = mpsc::channel::<()>();
@@ -132,8 +145,9 @@ fn a_held_build_lock_blocks_a_second_acquisition() {
             // Hold the lock under the same budget the real build path uses: a
             // sibling process may still be building, and the wait for its lock
             // is part of the build phase rather than of one fixture run.
-            let lock = fixture_build_lock::acquire(Instant::now(), FIXTURE_BUILD_DEADLINE)
-                .expect("the first acquisition should succeed");
+            let lock =
+                fixture_build_lock::acquire_at(&held_path, Instant::now(), FIXTURE_BUILD_DEADLINE)
+                    .expect("the first acquisition should succeed");
             ready.send(()).expect("the test should still be waiting");
             release_rx.recv().expect("the test should release the lock");
             drop(lock);
@@ -142,17 +156,23 @@ fn a_held_build_lock_blocks_a_second_acquisition() {
             .recv()
             .expect("the first acquisition should report readiness");
 
-        let error = fixture_build_lock::acquire(Instant::now(), Duration::from_millis(200))
-            .expect_err("a held lock must block a second acquisition");
+        // The attempt resolves before the holder is released, so every
+        // expectation below runs with the sender already used: a regression
+        // whose assertion fails reports that failure instead of leaving the
+        // holder blocked in `recv` while the scope waits for it to finish.
+        let attempt =
+            fixture_build_lock::acquire_at(&path, Instant::now(), Duration::from_millis(200));
+        release
+            .send(())
+            .expect("the holder should still be waiting");
+
+        let error = attempt.expect_err("a held lock must block a second acquisition");
         assert!(
             error
                 .to_string()
                 .contains("stayed held past its 200ms budget"),
             "the second acquisition should report the budget it was given, got: {error}"
         );
-        release
-            .send(())
-            .expect("the holder should still be waiting");
     });
 }
 
