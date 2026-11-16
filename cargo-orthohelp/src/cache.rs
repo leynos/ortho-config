@@ -289,4 +289,3 @@ fn try_open_dir(dir: &Dir, path: &Utf8Path) -> Result<Option<Dir>, OrthohelpErro
 #[cfg(test)]
 #[path = "cache_tests.rs"]
 mod tests;
-
