@@ -250,8 +250,16 @@ slow-timeout = { period = "120s", terminate-after = 8 }
 # here, under the script's own allowance, and every timed body then finds the
 # directories warm. (The same move as mdtablefix #728 and whitaker #518.)
 #
-# `--no-fail-fast` lets one failing test leave the rest of the warm-up run; the
-# tests themselves still run and report under nextest afterwards.
+# A failing test in the warm-up makes the script exit non-zero, and nextest
+# then runs none of the selected tests, so the run fails with that test's own
+# output. `--no-fail-fast` makes the warm-up run every binary before it fails,
+# so the failure list is complete.
+#
+# The script's allowance is 900s (three warning periods of 300s). It counts
+# against `[profile.default]`'s 2,300s global-timeout, which covers setup and
+# tests together and sits inside the 3,300s cargo watchdog. The cold builds
+# moved here from the test bodies rather than being added to the run, so the
+# 2,300s budget is not raised; the rest is left for the tests.
 [scripts.setup.nested-cargo-builds]
 command = [
   "cargo",
@@ -302,7 +310,7 @@ command = [
   "--test",
   "boundary",
 ]
-slow-timeout = { period = "300s", terminate-after = 12 }
+slow-timeout = { period = "300s", terminate-after = 3 }
 
 [[profile.default.scripts]]
 filter = 'binary(boolean_cli_trybuild) | binary(compile_fail) | binary(crate_path_trybuild) | binary(declarative_merge_trybuild) | binary(documentation_examples_rust_tests) | binary(env_source_trybuild) | binary(generated_lint_trybuild) | binary(identifier_artefact_e2e) | binary(localization_trybuild) | binary(localized_parse_trybuild) | binary(subcommand_trybuild) | binary(evidence_trybuild) | binary(compile_time) | binary(rstest_bdd) | binary(boundary) | binary(documentation_examples_tests) | binary(documentation_examples_loader_tests) | binary(documentation_installation_tests) | binary(nested_docs_ir) | binary(documented_command) | binary(agent_context_renderer_end_to_end) | binary(agent_context_output_end_to_end)'

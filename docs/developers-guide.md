@@ -383,16 +383,18 @@ script in `.config/nextest.toml` now runs those binaries once, through
 `cargo test --locked --all-features --no-fail-fast`, before nextest starts any
 test whose binary the `[[profile.default.scripts]]` filter names. The script is
 selected by that filter, so it runs only when such a binary is in the run. It
-uses the default profile's `--all-features` selection, which matches the
-coverage run, and its `--no-fail-fast` stops one failing test from ending the
-warm-up: the tests still run and report under nextest afterwards, so a failure
-is never hidden, only paid for twice. The script has its own allowance, 300 s
-warning periods with termination after twelve (3,600 s), because it carries the
-cold builds the per-test allowances no longer have to. The filter must name
-every binary that includes a shared nested-build module, so a new binary that
-builds a nested crate belongs in both the script command and the filter. Direct
-`cargo test` and `make test` do not run the script; they pay the cold build in
-the first test, as before.
+uses `--all-features`, which matches the coverage run. A failing test in the
+warm-up makes the script exit non-zero, and nextest then runs none of the
+selected tests: the run fails with that test's own output, and `--no-fail-fast`
+makes the warm-up run every binary first so the failure list is complete. The
+script's allowance is 900 s (three warning periods of 300 s). It counts against
+the default profile's 2,300 s `global-timeout`, which covers setup and tests
+together and sits inside the 3,300 s cargo watchdog; the cold builds moved into
+the script rather than being added to the run, so the budget is not raised. The
+filter must name every binary that includes a shared nested-build module, so a
+new binary that builds a nested crate belongs in both the script command and
+the filter. Direct `cargo test` and `make test` do not run the script; they pay
+the cold build in the first test, as before.
 
 #### Packaging must resolve the way a clean runner resolves
 
