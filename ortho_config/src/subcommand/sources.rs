@@ -128,32 +128,32 @@ where
 /// Finish a subcommand load, enumerating absent required values.
 ///
 /// Only the `_for` entry points call this, because only they carry a derived
-/// [`RequiredConfigSchema`]. The raw helpers keep their `DeserializeOwned`
-/// boundary: their callers may name a type with no schema metadata, and
-/// claiming otherwise would be a false promise.
+/// [`RequiredConfigSchema`]; the raw helpers keep their `DeserializeOwned`
+/// boundary, since a caller may name a type with no schema metadata.
 ///
-/// The report is labelled with the subcommand's clap name, which is what a
-/// user typed on the command line, and its routes are scoped to the namespaces
-/// this loader actually reads: `PREFIX_CMDS_<NAME>_*` variables and the
-/// `[cmds.<name>]` file section.
+/// The report is labelled with the subcommand's clap name, and its routes are
+/// scoped to the namespaces this loader reads: `PREFIX_CMDS_<NAME>_*`
+/// variables and the `[cmds.<name>]` file section.
 ///
-/// The merged figment is read twice: once as a JSON projection, which is what
-/// the pure collector inspects, and once as the extracted result. Only the
-/// first read may be JSON. A JSON number has no `nan` or `inf`, so serializing
-/// a configured non-finite float turns it into `null`, and deserializing from
-/// the projection would silently report `None` for an `Option<f64>` the user
-/// really set. The final extraction therefore reads the original figment, as
-/// the raw helpers do.
+/// The merged figment is read twice: as a JSON projection, which the pure
+/// collector inspects, and as the extracted result. Only the first read may be
+/// JSON: a JSON number has no `nan` or `inf`, so a configured non-finite float
+/// becomes `null`, and extracting from the projection would report `None` for
+/// a value really set. The final extraction reads the original figment.
 ///
-/// Every layer this loader reads is already JSON-bounded: CLI values pass
-/// through [`sanitized_provider`], TOML integers are `i64`s, and the
-/// environment provider yields only `bool`, `usize`/`isize`, float, string,
-/// array, and table values, so no route can carry a `u128` above `u64::MAX`.
+/// The projection is a diagnostic aid, so failing it must not fail the load.
+/// Every route is JSON-bounded, but the matches-aware loaders seed the figment
+/// with `T::default()` unsanitised, so a default holding a `u128` above
+/// `u64::MAX` reaches this function as a document JSON cannot represent.
+/// Nothing can be enumerated without a document, so that case falls back to
+/// the raw extraction; a genuinely broken merge still surfaces its error.
 pub(super) fn finish_with_required_values<T>(fig: &Figment, prefix: &Prefix) -> OrthoResult<T>
 where
     T: DeserializeOwned + CommandFactory + RequiredConfigSchema,
 {
-    let mut value: serde_json::Value = fig.extract().into_ortho_merge()?;
+    let Ok(mut value) = fig.extract::<serde_json::Value>() else {
+        return fig.extract().into_ortho_merge();
+    };
     // The derived finish path normalises an empty accumulator the same way: a
     // layer set that supplied nothing extracts as `Null`, which is not a JSON
     // object and would otherwise skip enumeration silently.

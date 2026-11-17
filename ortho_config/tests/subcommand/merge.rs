@@ -2,10 +2,13 @@
 
 use anyhow::{Context as _, Result, ensure};
 use cap_std::{ambient_authority, fs::Dir};
-use clap::Parser;
+use clap::{CommandFactory as _, FromArgMatches as _, Parser};
 use ortho_config::subcommand::Prefix;
 use ortho_config::{
-    MapEnv, OrthoConfig, SubcommandFileContext, load_and_merge_subcommand_for_with_sources_at,
+    MapEnv, OrthoConfig, SubcommandCliMatches, SubcommandFileContext,
+    load_and_merge_subcommand_for_with_matches_with_sources_at,
+    load_and_merge_subcommand_for_with_sources_at,
+    load_and_merge_subcommand_with_matches_with_sources_at,
     load_and_merge_subcommand_with_sources_at,
 };
 use rstest::rstest;
@@ -131,6 +134,112 @@ fn a_non_finite_float_survives_the_schema_aware_subcommand_merge(
         matches!(merged.ratio, Some(ratio) if ratio.is_nan()),
         "a configured nan must survive the merge, got {:?}",
         merged.ratio
+    );
+    Ok(())
+}
+
+mod wide_u128 {
+    //! A `u128` field deserializer for values JSON and Figment would reject.
+    //!
+    //! Figment exposes a wide number only through `deserialize_any`; a derived
+    //! `u128` field asks for `deserialize_u128`, which Figment does not
+    //! implement. A type in this test therefore needs its own visitor.
+
+    use serde::{Deserializer, de::Visitor};
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<u128, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct WideVisitor;
+
+        impl Visitor<'_> for WideVisitor {
+            type Value = u128;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                formatter.write_str("an unsigned integer")
+            }
+
+            fn visit_u64<E>(self, value: u64) -> Result<u128, E> {
+                Ok(u128::from(value))
+            }
+
+            fn visit_u128<E>(self, value: u128) -> Result<u128, E> {
+                Ok(value)
+            }
+        }
+
+        deserializer.deserialize_any(WideVisitor)
+    }
+}
+
+/// A subcommand whose `Default` holds a `u128` above `u64::MAX`.
+///
+/// `wide` is marked `cli_default_as_absent`, so clap's own default does not
+/// reach the CLI layer unless the user names the flag. The merged figment then
+/// carries the type's `Default` verbatim: the one shape where it holds a value
+/// JSON cannot represent even though the raw loader accepts it.
+#[derive(Debug, Deserialize, Serialize, OrthoConfig, Parser, PartialEq)]
+#[command(name = "test")]
+#[ortho_config(prefix = "APP_")]
+struct MergeWideDefault {
+    #[serde(deserialize_with = "wide_u128::deserialize")]
+    #[arg(long, default_value_t = 0)]
+    #[ortho_config(cli_default_as_absent)]
+    wide: u128,
+}
+
+impl Default for MergeWideDefault {
+    fn default() -> Self {
+        Self { wide: u128::MAX }
+    }
+}
+
+/// A wide default is data the requirement enumeration must not reject.
+///
+/// The matches-aware figment carries `T::default()` verbatim, so a `u128`
+/// above `u64::MAX` reaches the merge even though no CLI, file, or environment
+/// route can carry one. Projecting that figment into JSON fails, while the raw
+/// extraction accepts it through the field's own deserializer; the schema-aware
+/// loader must not turn a loadable configuration into an error.
+#[rstest]
+fn a_wide_default_survives_the_schema_aware_matches_merge(
+    isolated_root: Result<IsolatedRoot>,
+) -> Result<()> {
+    let isolated = isolated_root?;
+    let discovery = isolated.discovery();
+    let matches = MergeWideDefault::command().get_matches_from(["test"]);
+    let cli = MergeWideDefault::from_arg_matches(&matches).context("parse wide-default CLI")?;
+    ensure!(
+        cli.wide == 0,
+        "clap must leave the absent flag at its declared default, got {}",
+        cli.wide
+    );
+    let cli_matches = SubcommandCliMatches::new(&cli, &matches);
+
+    let raw = load_and_merge_subcommand_with_matches_with_sources_at(
+        &Prefix::new("APP_"),
+        &cli_matches,
+        SubcommandFileContext::new(isolated.path(), &discovery),
+        Arc::new(MapEnv::new()),
+    )
+    .context("raw matches merge of a wide default")?;
+    ensure!(
+        raw.wide == u128::MAX,
+        "the raw loader must accept the wide default, got {}",
+        raw.wide
+    );
+
+    let merged = load_and_merge_subcommand_for_with_matches_with_sources_at(
+        &cli_matches,
+        SubcommandFileContext::new(isolated.path(), &discovery),
+        Arc::new(MapEnv::new()),
+    )
+    .context("schema-aware matches merge of a wide default")?;
+    ensure!(
+        merged.wide == u128::MAX,
+        "the schema-aware loader must accept the wide default, got {}",
+        merged.wide
     );
     Ok(())
 }

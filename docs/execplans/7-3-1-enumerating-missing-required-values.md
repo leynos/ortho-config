@@ -642,6 +642,22 @@ with a compatibility probe rather than an assumption.
   `make test` then all exited 0 (2829 passed and 0 failed over 117 harness
   summaries; pytest 128 passed with 5 skipped).
 
+- [x] (2026-11-16) Repaired CodeRabbit's live finding on the JSON projection.
+  The review accepted the CLI-path rebuttal but kept the matches-aware path
+  open: those loaders seed the figment with `T::default()` unsanitised, so a
+  type whose `Default` holds a `u128` above `u64::MAX` presents a document
+  `serde_json::Value` cannot represent. A loader-level case reproduced it
+  before any change — the raw matches helper returned `u128::MAX` while the
+  schema-aware one failed with "JSON number out of range for key
+  `default.wide`" from `finish_with_required_values`. The repair treats the
+  projection as the diagnostic aid it is: a failed projection now falls back to
+  the raw extraction rather than rejecting a configuration the raw helpers
+  load, which skips enumeration for that document alone, and a genuinely broken
+  merge still surfaces its extraction error. The case
+  `a_wide_default_survives_the_schema_aware_matches_merge` drives both loaders
+  on that shape and pins their agreement. ADR-0025 gained a dated amendment
+  recording the limitation.
+
 ## Surprises & discoveries
 
 The full local suite aborted once at round c7 on

@@ -130,6 +130,20 @@ loader reads is data passed to that collector, not a second code path, so the
 truthfulness rule has a single place to be enforced and a single place to
 change.
 
+## Amendments
+
+### 2026-11-16 — a merged document JSON cannot represent
+
+The finish step projects the merged figment into a `serde_json::Value` for the
+collector. Every route is JSON-bounded, but the matches-aware loaders seed the
+figment with `T::default()` unsanitised, so a type whose `Default` holds a
+`u128` above `u64::MAX` presents a document JSON cannot represent while the raw
+helpers accept it through the field's own deserializer. A failed projection now
+falls back to the raw extraction rather than reject a configuration the raw
+helpers load, which skips enumeration for that document alone. The case
+`a_wide_default_survives_the_schema_aware_matches_merge` drives both loaders on
+that shape and pins the agreement.
+
 ## References
 
 - [ADR-0024: Enumerate missing required configuration values](adr-0024-enumerate-missing-required-values.md).
