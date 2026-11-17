@@ -213,29 +213,30 @@ fn assert_results(report: &Value, expected: Option<Finding>) -> TestResult {
         .and_then(Value::as_array)
         .ok_or("results should be an array")?;
     match expected {
-        Some(finding) => {
-            if results.len() != 1 {
-                return Err(format!("results should contain one finding, got {results:?}").into());
-            }
-            let result = results.first().ok_or("finding should be present")?;
-            assert_string_field(result, "rule_id", finding.rule_id)?;
-            assert_string_field(result, "code", finding.code)?;
-            assert_string_field(result, "severity", finding.severity)?;
-            let message = result
-                .get("message")
-                .and_then(Value::as_str)
-                .ok_or("result message should be a string")?;
-            if message.is_empty() {
-                return Err("result message should not be empty".into());
-            }
-            if result.get("location").is_none() {
-                return Err("result should contain location".into());
-            }
-            Ok(())
-        }
+        Some(finding) => assert_single_finding(results, &finding),
         None if results.is_empty() => Ok(()),
         None => Err(format!("results should be empty, got {results:?}").into()),
     }
+}
+
+fn assert_single_finding(results: &[Value], finding: &Finding) -> TestResult {
+    let [result] = results else {
+        return Err(format!("results should contain one finding, got {results:?}").into());
+    };
+    assert_string_field(result, "rule_id", finding.rule_id)?;
+    assert_string_field(result, "code", finding.code)?;
+    assert_string_field(result, "severity", finding.severity)?;
+    let message = result
+        .get("message")
+        .and_then(Value::as_str)
+        .ok_or("result message should be a string")?;
+    if message.is_empty() {
+        return Err("result message should not be empty".into());
+    }
+    if result.get("location").is_none() {
+        return Err("result should contain location".into());
+    }
+    Ok(())
 }
 
 fn assert_summary(report: &Value, expected: SummaryCounts) -> TestResult {
