@@ -121,37 +121,45 @@ pub(crate) fn collect_collection_strategies(
 ) -> syn::Result<CollectionStrategies> {
     let mut strategies = CollectionStrategies::default();
     for (field, attrs) in fields.iter().zip(field_attrs) {
-        if attrs.is_subcommand {
-            continue;
+        if !attrs.is_subcommand {
+            collect_field_strategy(field, attrs, &mut strategies)?;
         }
-        let Some(name) = field.ident.clone() else {
-            return Err(syn::Error::new_spanned(
-                field,
-                "unnamed (tuple) fields do not support merge strategies",
-            ));
-        };
-        if let Some(vec_ty) = vec_inner(&field.ty) {
-            let Some((vec_name, ty)) = process_vec_field(field, name.clone(), vec_ty, attrs)?
-            else {
-                continue;
-            };
-            strategies.append.push((vec_name, ty));
-            continue;
-        }
-
-        if btree_map_inner(&field.ty).is_some() {
-            let Some((map_name, ty)) =
-                process_btree_map_field(field, name.clone(), &field.ty, attrs)?
-            else {
-                continue;
-            };
-            strategies.map_replace.push((map_name, ty));
-            continue;
-        }
-
-        validate_non_collection_field(field, attrs)?;
     }
     Ok(strategies)
+}
+
+/// Record one field's merge strategy: append for vectors, replace for maps.
+///
+/// Any other field must not request a collection strategy.
+fn collect_field_strategy(
+    field: &syn::Field,
+    attrs: &FieldAttrs,
+    strategies: &mut CollectionStrategies,
+) -> syn::Result<()> {
+    let name = named_field(field)?;
+    if let Some(vec_ty) = vec_inner(&field.ty) {
+        strategies
+            .append
+            .extend(process_vec_field(field, name, vec_ty, attrs)?);
+        return Ok(());
+    }
+    if btree_map_inner(&field.ty).is_some() {
+        strategies
+            .map_replace
+            .extend(process_btree_map_field(field, name, &field.ty, attrs)?);
+        return Ok(());
+    }
+    validate_non_collection_field(field, attrs)
+}
+
+/// The field's identifier, or an error for a tuple field.
+fn named_field(field: &syn::Field) -> syn::Result<syn::Ident> {
+    field.ident.clone().ok_or_else(|| {
+        syn::Error::new_spanned(
+            field,
+            "unnamed (tuple) fields do not support merge strategies",
+        )
+    })
 }
 
 /// Builds the override struct definition and initialisation expression.
