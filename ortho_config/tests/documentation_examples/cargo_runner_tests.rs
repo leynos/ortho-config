@@ -2,7 +2,10 @@
 
 #[cfg(all(windows, target_env = "msvc", target_arch = "x86_64"))]
 use super::msvc_environment_is_prepared;
-use super::{CARGO_ENV_ALLOWLIST, cargo_command, prepare_cargo_command_for_target_before};
+use super::{
+    CARGO_ENV_ALLOWLIST, cargo_command, prepare_cargo_command_for_target_before,
+    with_prepared_environment,
+};
 #[cfg(all(windows, target_env = "msvc", target_arch = "x86_64"))]
 use super::{allowed_environment, first_output_line};
 use crate::process_runner::{self, Operation, Policy};
@@ -74,6 +77,27 @@ fn metadata_command_preserves_caller_target_directories() {
     assert_eq!(
         command_env(&command, "CARGO_BUILD_TARGET_DIR"),
         Some(OsStr::new("/configured/target"))
+    );
+}
+
+#[test]
+fn discovered_variables_cannot_lift_offline_mode() {
+    let discovered = vec![
+        (OsString::from("CARGO_NET_OFFLINE"), OsString::from("false")),
+        (OsString::from("INCLUDE"), OsString::from("/msvc/include")),
+    ];
+    // Only the command's environment is inspected; it is never run.
+    let command = with_prepared_environment(Command::new("child-under-test"), discovered);
+
+    assert_eq!(
+        command_env(&command, "CARGO_NET_OFFLINE"),
+        Some(OsStr::new("true")),
+        "a discovered CARGO_NET_OFFLINE must not undo offline mode"
+    );
+    assert_eq!(
+        command_env(&command, "INCLUDE"),
+        Some(OsStr::new("/msvc/include")),
+        "the other discovered variables must still reach the command"
     );
 }
 

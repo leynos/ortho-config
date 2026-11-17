@@ -43,13 +43,28 @@ pub(crate) fn prepare_cargo_command_for_target_before(
 ) -> Result<Command> {
     let prepared_environment = prepare_cargo_environment(state_directory, deadline)?;
     remaining_discovery_time(deadline, "prepare Cargo command")?;
-    let mut command = cargo_command(
-        working_directory,
-        Some(target_directory),
-        &CargoEnvironment::build(),
-    );
-    command.envs(prepared_environment.0);
-    Ok(command)
+    Ok(with_prepared_environment(
+        cargo_command(
+            working_directory,
+            Some(target_directory),
+            &CargoEnvironment::build(),
+        ),
+        prepared_environment.0,
+    ))
+}
+
+/// Apply discovered build-tool variables to a Cargo command without lifting offline mode.
+///
+/// The variables replace entries already on the command, so offline mode is
+/// stated again afterwards (Concordat NC-007): the last assignment wins, even
+/// over a `CARGO_NET_OFFLINE=false` among the discovered variables.
+pub(crate) fn with_prepared_environment(
+    mut command: Command,
+    variables: Vec<(OsString, OsString)>,
+) -> Command {
+    command.envs(variables);
+    command.env("CARGO_NET_OFFLINE", "true");
+    command
 }
 
 /// Prepare Cargo metadata without changing its caller-selected target paths.
