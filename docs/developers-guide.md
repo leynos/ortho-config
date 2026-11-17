@@ -374,6 +374,26 @@ no wall time (52.9 min), and `must_use_compile_tests`, still competing with the
 rest of the suite, took 523.5 s of its 600 s allowance, so the reservation was
 kept.
 
+#### The nested builds are warmed before any timed test starts
+
+The trybuild binaries and the binaries that drive a nested `cargo` build used
+to pay for a cold dependency build inside their own timed bodies, so a cold
+runner failed a sound assertion on its timeout. The `nested-cargo-builds` setup
+script in `.config/nextest.toml` now runs those binaries once, through
+`cargo test --locked --all-features --no-fail-fast`, before nextest starts any
+test whose binary the `[[profile.default.scripts]]` filter names. The script is
+selected by that filter, so it runs only when such a binary is in the run. It
+uses the default profile's `--all-features` selection, which matches the
+coverage run, and its `--no-fail-fast` stops one failing test from ending the
+warm-up: the tests still run and report under nextest afterwards, so a failure
+is never hidden, only paid for twice. The script has its own allowance, 300 s
+warning periods with termination after twelve (3,600 s), because it carries the
+cold builds the per-test allowances no longer have to. The filter must name
+every binary that includes a shared nested-build module, so a new binary that
+builds a nested crate belongs in both the script command and the filter. Direct
+`cargo test` and `make test` do not run the script; they pay the cold build in
+the first test, as before.
+
 #### Packaging must resolve the way a clean runner resolves
 
 The packaged contracts are the only place in this repository that exercises a
