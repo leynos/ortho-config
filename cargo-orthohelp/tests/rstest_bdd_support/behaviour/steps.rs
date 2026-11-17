@@ -288,18 +288,34 @@ fn collect_tree(dir: &Dir, prefix: &str, listing: &mut Vec<String>) -> StepResul
     // rather than after part of the tree has already been appended.
     let entries = dir.entries()?.collect::<Result<Vec<_>, _>>()?;
     for entry in entries {
-        let name = entry.file_name()?;
-        let path = if prefix.is_empty() {
-            name.clone()
-        } else {
-            format!("{prefix}/{name}")
-        };
-        if entry.file_type()?.is_dir() {
-            collect_tree(&dir.open_dir(&name)?, &path, listing)?;
-        }
-        listing.push(path);
+        collect_entry(dir, &entry, prefix, listing)?;
     }
     Ok(())
+}
+
+/// Appends one entry, and its descendants first when it is a directory.
+fn collect_entry(
+    dir: &Dir,
+    entry: &cap_std::fs_utf8::DirEntry,
+    prefix: &str,
+    listing: &mut Vec<String>,
+) -> StepResult<()> {
+    let name = entry.file_name()?;
+    let path = tree_path(prefix, &name);
+    if entry.file_type()?.is_dir() {
+        collect_tree(&dir.open_dir(&name)?, &path, listing)?;
+    }
+    listing.push(path);
+    Ok(())
+}
+
+/// Joins an entry name onto its parent's listing prefix.
+fn tree_path(prefix: &str, name: &str) -> String {
+    if prefix.is_empty() {
+        name.to_owned()
+    } else {
+        format!("{prefix}/{name}")
+    }
 }
 
 /// Provides a clean context for orthohelp scenarios.

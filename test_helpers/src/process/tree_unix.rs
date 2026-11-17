@@ -237,21 +237,31 @@ fn root_exit_is_waitable(_group: Pid) -> io::Result<bool> {
 fn group_has_writers(group: Pid) -> io::Result<bool> {
     let proc_directory = Dir::open_ambient_dir("/proc", ambient_authority())?;
     for entry_result in proc_directory.read_dir(".")? {
-        let directory_entry = entry_result?;
-        let name = directory_entry.file_name()?;
-        let Ok(process_id) = name.parse::<u32>() else {
-            continue;
-        };
-        let relative_stat = format!("{process_id}/stat");
-        let Some(stat) = read_proc_stat(|| proc_directory.read_to_string(relative_stat.as_str()))?
-        else {
-            continue;
-        };
-        if proc_stat_has_writer(&stat, group.as_raw())? {
+        if proc_entry_has_writer(&proc_directory, &entry_result?, group)? {
             return Ok(true);
         }
     }
     Ok(false)
+}
+
+/// Whether one `/proc` entry is a live process with a writer in `group`.
+///
+/// Non-process entries and processes that vanished mid-scan count as absent.
+#[cfg(target_os = "linux")]
+fn proc_entry_has_writer(
+    proc_directory: &Dir,
+    directory_entry: &cap_std::fs_utf8::DirEntry,
+    group: Pid,
+) -> io::Result<bool> {
+    let name = directory_entry.file_name()?;
+    let Ok(process_id) = name.parse::<u32>() else {
+        return Ok(false);
+    };
+    let relative_stat = format!("{process_id}/stat");
+    read_proc_stat(|| proc_directory.read_to_string(relative_stat.as_str()))?
+        .map_or(Ok(false), |stat| {
+            proc_stat_has_writer(&stat, group.as_raw())
+        })
 }
 
 /// Read a process stat entry while treating a vanished process as absent.
