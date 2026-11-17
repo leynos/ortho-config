@@ -43,14 +43,28 @@ pub(crate) fn prepare_cargo_command_for_target_before(
 ) -> Result<Command> {
     let prepared_environment = prepare_cargo_environment(state_directory, deadline)?;
     remaining_discovery_time(deadline, "prepare Cargo command")?;
-    Ok(with_prepared_environment(
-        cargo_command(
-            working_directory,
-            Some(target_directory),
-            &CargoEnvironment::build(),
-        ),
+    Ok(prepared_cargo_command(
+        working_directory,
+        target_directory,
+        &CargoEnvironment::build(),
         prepared_environment.0,
     ))
+}
+
+/// Build the documentation Cargo command from an environment and discovered variables.
+///
+/// This is the composition `prepare_cargo_command_for_target_before` returns,
+/// split out so a test can inject discovered variables.
+pub(crate) fn prepared_cargo_command(
+    working_directory: &Path,
+    target_directory: &Path,
+    environment: &CargoEnvironment,
+    variables: Vec<(OsString, OsString)>,
+) -> Command {
+    with_prepared_environment(
+        cargo_command(working_directory, Some(target_directory), environment),
+        variables,
+    )
 }
 
 /// Apply discovered build-tool variables to a Cargo command without lifting offline mode.

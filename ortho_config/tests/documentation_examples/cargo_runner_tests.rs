@@ -4,7 +4,7 @@
 use super::msvc_environment_is_prepared;
 use super::{
     CARGO_ENV_ALLOWLIST, cargo_command, prepare_cargo_command_for_target_before,
-    with_prepared_environment,
+    prepared_cargo_command,
 };
 #[cfg(all(windows, target_env = "msvc", target_arch = "x86_64"))]
 use super::{allowed_environment, first_output_line};
@@ -87,7 +87,14 @@ fn discovered_variables_cannot_lift_offline_mode() {
         (OsString::from("INCLUDE"), OsString::from("/msvc/include")),
     ];
     // Only the command's environment is inspected; it is never run.
-    let command = with_prepared_environment(Command::new("child-under-test"), discovered);
+    let environment =
+        super::cargo_environment::CargoEnvironment::from_lookup(CARGO_ENV_ALLOWLIST, |_| None);
+    let command = prepared_cargo_command(
+        Path::new("/repository"),
+        Path::new("/target"),
+        &environment,
+        discovered,
+    );
 
     assert_eq!(
         command_env(&command, "CARGO_NET_OFFLINE"),
