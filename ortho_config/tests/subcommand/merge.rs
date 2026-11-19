@@ -1,11 +1,11 @@
 //! Tests for merge helpers in subcommand flows.
 
-use anyhow::{Context as _, Result, ensure};
+use anyhow::{Context as _, Result, anyhow, ensure};
 use cap_std::{ambient_authority, fs::Dir};
 use clap::{CommandFactory as _, FromArgMatches as _, Parser};
 use ortho_config::subcommand::Prefix;
 use ortho_config::{
-    MapEnv, OrthoConfig, SubcommandCliMatches, SubcommandFileContext,
+    MapEnv, OrthoConfig, SubcommandCliMatches, SubcommandFileContext, SupplyRoute,
     load_and_merge_subcommand_for_with_matches_with_sources_at,
     load_and_merge_subcommand_for_with_sources_at,
     load_and_merge_subcommand_with_matches_with_sources_at,
@@ -240,6 +240,127 @@ fn a_wide_default_survives_the_schema_aware_matches_merge(
         merged.wide == u128::MAX,
         "the schema-aware loader must accept the wide default, got {}",
         merged.wide
+    );
+    Ok(())
+}
+
+/// A subcommand whose declared default only its own root loader materializes.
+///
+/// `reference` declares a default, which the generated defaults struct supplies
+/// when the type is loaded as the root. The selected-subcommand loaders build
+/// their figment from file, environment, and CLI layers instead, and the
+/// serialization skips the empty value the parser leaves behind, so the key is
+/// genuinely absent from the document they merge.
+#[derive(Debug, Deserialize, Serialize, OrthoConfig, Default, Parser, PartialEq)]
+#[command(name = "test")]
+#[ortho_config(prefix = "APP_")]
+struct MergeDeclaredDefault {
+    /// Absent from every scoped layer despite its declared default.
+    #[arg(skip)]
+    #[ortho_config(skip_cli, default = String::from("fallback"))]
+    #[serde(skip_serializing_if = "String::is_empty")]
+    reference: String,
+    /// Needed by the matches-aware entry point, and present through clap's
+    /// default, so it must never appear in the report.
+    #[arg(long, default_value = "2")]
+    #[ortho_config(default = 2, cli_default_as_absent)]
+    retries: u32,
+}
+
+/// The variable the subcommand's environment layer reads for `reference`.
+const DECLARED_REFERENCE_VAR: &str = "APP_CMDS_TEST_REFERENCE";
+
+/// Assert a scoped load reported `reference`, and nothing else, as absent.
+fn assert_reports_the_absent_declared_default<T>(
+    result: ortho_config::OrthoResult<T>,
+) -> Result<()> {
+    let error = result
+        .err()
+        .ok_or_else(|| anyhow!("a declared default is not a scoped supply layer"))?;
+    let ortho_config::OrthoError::MissingRequiredValues(report) = error.as_ref() else {
+        return Err(anyhow!("expected an enumerated report, got: {error}"));
+    };
+    let rendered: Vec<String> = report
+        .items()
+        .iter()
+        .map(|item| item.path().render())
+        .collect();
+    ensure!(
+        rendered == ["reference"],
+        "the report must name the absent declared default only, got {rendered:?}"
+    );
+    let item = report
+        .items()
+        .first()
+        .ok_or_else(|| anyhow!("the report is empty"))?;
+    ensure!(
+        item.routes().iter().any(|route| matches!(
+            route,
+            SupplyRoute::Environment { variable } if variable == DECLARED_REFERENCE_VAR
+        )),
+        "the report must offer {DECLARED_REFERENCE_VAR}, got {:?}",
+        item.routes()
+    );
+    ensure!(
+        item.routes().iter().any(|route| matches!(
+            route,
+            SupplyRoute::ConfigurationFile {
+                expects_object: false,
+                ..
+            }
+        )),
+        "the report must offer a scalar configuration-file route, got {:?}",
+        item.routes()
+    );
+    Ok(())
+}
+
+/// A declared default is a requirement of the scoped loaders, not a supply.
+#[rstest]
+fn a_declared_default_is_not_a_scoped_subcommand_supply(
+    isolated_root: Result<IsolatedRoot>,
+) -> Result<()> {
+    let isolated = isolated_root?;
+    let discovery = isolated.discovery();
+    assert_reports_the_absent_declared_default(load_and_merge_subcommand_for_with_sources_at(
+        &MergeDeclaredDefault::default(),
+        SubcommandFileContext::new(isolated.path(), &discovery),
+        Arc::new(MapEnv::new()),
+    ))?;
+
+    let matches = MergeDeclaredDefault::command().get_matches_from(["test"]);
+    let cli = MergeDeclaredDefault::from_arg_matches(&matches).context("parse declared CLI")?;
+    assert_reports_the_absent_declared_default(
+        load_and_merge_subcommand_for_with_matches_with_sources_at(
+            &SubcommandCliMatches::new(&cli, &matches),
+            SubcommandFileContext::new(isolated.path(), &discovery),
+            Arc::new(MapEnv::new()),
+        ),
+    )
+}
+
+/// Every advertised route repairs the load the report described.
+#[rstest]
+fn the_absent_declared_default_recovers_from_its_file_route(
+    isolated_root: Result<IsolatedRoot>,
+) -> Result<()> {
+    let isolated = isolated_root?;
+    let discovery = isolated.discovery();
+    let directory = Dir::open_ambient_dir(isolated.path(), ambient_authority())
+        .context("open declared-default fixture directory")?;
+    directory
+        .write(".app.toml", b"[cmds.test]\nreference = \"supplied\"")
+        .context("write declared-default fixture")?;
+    let merged = load_and_merge_subcommand_for_with_sources_at(
+        &MergeDeclaredDefault::default(),
+        SubcommandFileContext::new(isolated.path(), &discovery),
+        Arc::new(MapEnv::new()),
+    )
+    .context("a supplied declared default must load")?;
+    ensure!(
+        merged.reference == "supplied",
+        "the file route must supply the value, got {:?}",
+        merged.reference
     );
     Ok(())
 }

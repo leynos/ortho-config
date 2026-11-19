@@ -1181,7 +1181,10 @@ command in
 a missing required value is advertised as `ACME_SERVE_CMDS_SERVE_<FIELD>` and
 `cmds.serve.<field>`, which is exactly what that loader reads. Only the
 selected variant contributes requirements; the other variants are never
-consulted. The raw `DeserializeOwned` subcommand helpers, and their
+consulted. A field's `#[ortho_config(default = ...)]` does not excuse its
+absence here: these loaders never run the declaring type's defaults struct, so
+the value must arrive through a file, the environment, or a clap default the
+flag materializes. The raw `DeserializeOwned` subcommand helpers, and their
 `_with_sources` forms, keep the earlier behaviour and produce no report,
 because they never learn which type's schema to walk. The single-environment
 methods `load_and_merge_with_env` and `load_and_merge_with_matches_with_env` do

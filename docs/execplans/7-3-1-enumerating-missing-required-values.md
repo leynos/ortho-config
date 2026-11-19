@@ -338,7 +338,7 @@ with a compatibility probe rather than an assumption.
     (`tests/missing_required_child.rs`) loads from the platform environment
     with a quoted table as its only input, asserts that no environment section
     is rendered, and then recovers `host` and `port` from the advertised table.
-    ADR-0022 gains a third amendment; the design document and the
+    ADR-0024 records the environment-route rule; the design document and the
     improved-error design record the same rules.
 - [x] (2026-11-15) Fifth completeness assessment (round c5,
   `7-3-1-completeness-2026-11-15-c5`) found one environment-route defect against
@@ -357,8 +357,8 @@ with a compatibility probe rather than an assumption.
     `tests/support/missing_required_keys.rs`. It reports `database_.host` with
     no `env:` route, keeps the `file:database_.host` route, recovers from a
     `[database_]` table, and uses a separator-free root as the positive control
-    by recovering `MRT_DATABASE__HOST`. ADR-0022 gains a fourth amendment; the
-    design document and the improved-error design record the whole-path rule.
+    by recovering `MRT_DATABASE__HOST`. ADR-0024 records the whole-path rule;
+    the design document and the improved-error design record it.
 
 - [x] (2026-11-15) Sixth completeness assessment (round c6,
   `7-3-1-completeness-2026-11-15-c6`) found one correctness defect and two
@@ -381,8 +381,8 @@ with a compatibility probe rather than an assumption.
     the real-loader module `tests/support/missing_required_conflicts.rs`. It
     asserts the loader's missing-field error for the partial case, its
     duplicate-field error for two complete spellings, and that either spelling
-    on its own still recovers the value. ADR-0022 gains a fifth amendment; the
-    design document and the improved-error design record the same rule.
+    on its own still recovers the value. ADR-0024 records the two-spelling rule;
+    the design document and the improved-error design record the same rule.
   - V1 real-loader gaps closed by `tests/support/missing_required_declared.rs`:
     a container `#[serde(default)]` supplying every field, an explicit `null`
     through a JSON5 file, an empty collection under `merge_strategy = "append"`
@@ -657,6 +657,35 @@ with a compatibility probe rather than an assumption.
   `a_wide_default_survives_the_schema_aware_matches_merge` drives both loaders
   on that shape and pins their agreement. ADR-0025 gained a dated amendment
   recording the limitation.
+
+- [x] (2026-11-17) Answered the incremental review's four findings against
+  `18e59be6`. The substantive one is the mirror image of the earlier
+  `DefaultBacked` repair: composition demoted a child's declared defaults, but
+  the selected-subcommand check reads the root schema directly, and those
+  loaders never run the declaring type's generated defaults struct. A root
+  `#[ortho_config(default = ...)]` field absent from the file and environment
+  layers was therefore tolerated with no layer able to supply it, and the load
+  fell through to the deserializer's single-field error. A throwaway probe
+  confirmed it on both scoped entry points —
+  `Err(Merge { kind: MissingField("reference"), .. })` — before any change.
+  `ensure_no_missing_required_values_scoped` now demotes the root's
+  `DefaultBacked` fields with the same helper composition uses (made
+  `pub(crate)`), so a genuinely absent field is enumerated. A default clap
+  materializes still arrives through the command-line layer and is never
+  reported. `a_declared_default_is_not_a_scoped_subcommand_supply` drives both
+  scoped entry points and
+  `the_absent_declared_default_recovers_from_its_file_route` drives the
+  advertised route, both in `tests/subcommand/merge.rs`.
+
+  The other three findings are documentation and layout. §6.3 of
+  `docs/agent-native-cli-design.md` now qualifies the enumeration guarantee
+  with the matches-aware projection fallback and links ADR-0025. Three
+  amendment references in this plan pointed at ADR-0022 (the coverage-target
+  root) instead of ADR-0024; they now name ADR-0024 and the rule it records.
+  `tests/injected_current_dir.rs` had grown to 412 lines, so `StrictCmd`,
+  `STRICT_REFERENCE_VAR` and the report assertion moved to
+  `tests/support/strict_required.rs`, leaving the current-directory scenarios
+  and 331 lines behind.
 
 ## Surprises & discoveries
 

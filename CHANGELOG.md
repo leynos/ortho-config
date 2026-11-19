@@ -128,8 +128,10 @@ All notable changes to this project will be documented in this file.
   expose the child's flags. A selected subcommand is covered as well, and its
   report names that command's `PREFIX_CMDS_<NAME>_<FIELD>` variables and
   `[cmds.<name>]` file paths, so the advertised spellings are the ones the
-  loader really reads; only the selected variant contributes requirements. The
-  library never exits; callers decide how to present the report. See
+  loader really reads; only the selected variant contributes requirements, and
+  a declared default does not excuse absence because these loaders never run
+  the declaring type's defaults struct. The library never exits; callers decide
+  how to present the report. See
   [ADR-0024](docs/adrs/adr-0024-enumerate-missing-required-values.md), [ADR-0025](docs/adrs/adr-0025-enumerate-missing-values-for-selected-subcommands.md),
   and
   [the user's guide](docs/users-guide.md#recover-from-missing-required-values).

@@ -144,6 +144,21 @@ helpers load, which skips enumeration for that document alone. The case
 `a_wide_default_survives_the_schema_aware_matches_merge` drives both loaders on
 that shape and pins the agreement.
 
+### 2026-11-17 — a declared default is not a scoped supply layer
+
+Composition already demoted a child's `Activation::DefaultBacked` nodes, but
+the scoped check reads the root schema directly and left the root's own
+declared defaults tolerated. These loaders never run the declaring type's
+generated defaults struct, so no active layer could supply such a field: an
+absent value fell through to the deserializer's single-field error instead of
+being enumerated. `ensure_no_missing_required_values_scoped` now applies the
+same demotion to the root's fields, so the report names the absent key and its
+real routes. A default clap materializes still arrives through the command-line
+layer and is never reported.
+`a_declared_default_is_not_a_scoped_subcommand_supply` drives both scoped entry
+points, and `the_absent_declared_default_recovers_from_its_file_route` drives
+the advertised file route.
+
 ## References
 
 - [ADR-0024: Enumerate missing required configuration values](adr-0024-enumerate-missing-required-values.md).

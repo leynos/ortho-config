@@ -130,12 +130,22 @@ pub fn ensure_no_missing_required_values<T: RequiredConfigSchema>(
 /// `[cmds.<name>]` file section rather than the struct's own prefix and root.
 /// Its scope keeps the advertised routes reproducible with the loader that
 /// raised the error; the CLI hints still come from the derived schema.
+///
+/// The scoped loaders build their figment from file, environment, and
+/// command-line layers, and never run the declaring type's generated defaults
+/// struct. A declared default is therefore not a supply layer for this reading,
+/// and the root's [`Activation::DefaultBacked`] fields are required here. A
+/// default clap already materialises arrives through the command-line layer, so
+/// only a genuinely absent field is reported.
 pub(crate) fn ensure_no_missing_required_values_scoped<T: RequiredConfigSchema>(
     value: &Value,
     program: &str,
     scope: &RouteScope,
 ) -> OrthoResult<()> {
-    let fields = schema_of::<T>()?;
+    let fields: Vec<SchemaField> = schema_of::<T>()?
+        .into_iter()
+        .map(SchemaField::require_default_backed)
+        .collect();
     let hints = T::required_route_hints();
     let routes = collect::RouteContext {
         hints: &hints,

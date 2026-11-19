@@ -493,6 +493,15 @@ call, so a parent reports a key that no active layer supplies. A schema-only
 child is unaffected: it has no loader, so the generator already reports its
 declared defaults as required.
 
+The selected-subcommand loaders are the other reading that never runs the
+declaring type's defaults struct: they build their figment from file,
+environment, and command-line layers only.
+`ensure_no_missing_required_values_scoped` therefore applies the same demotion
+to the root's fields, so a declared default that no active layer supplies is
+enumerated with its real routes rather than left to the deserializer's first
+missing field. A default clap materializes still reaches the merged value
+through the command-line layer, so only a genuinely absent field is reported.
+
 `ortho_config/src/required_values/` owns the runtime side: `schema.rs` defines
 the model, `collect.rs` is the pure collector, and `mod.rs` exposes
 `ensure_no_missing_required_values` plus the program-label helper. The

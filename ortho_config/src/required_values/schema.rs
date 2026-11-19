@@ -186,8 +186,12 @@ impl SchemaField {
     /// rule to its own fields while it collects them, so a composed subtree
     /// arrives fully required without a second walk; an optional flatten
     /// demotes the result afterwards with [`Self::optional_subtree`].
+    ///
+    /// The selected-subcommand check applies it to the root as well: those
+    /// loaders build their figment from file, environment, and command-line
+    /// layers, and never run the declaring type's generated defaults struct.
     #[must_use]
-    fn require_default_backed(mut self) -> Self {
+    pub(crate) fn require_default_backed(mut self) -> Self {
         if self.activation == Activation::DefaultBacked {
             self.activation = Activation::Required;
         }
