@@ -11,7 +11,8 @@ green in hosted CI and were certified for the Markdown gates alone, as Progress
 records. A whole-plan assessment of `5ab1e7e9` then returned "not yet complete"
 with two fail-closed gaps in the source walk, both repaired in a candidate that
 passed its own nine-gate certificate and a hosted run including CodeScene. The
-replayed candidate awaits its gates and hosted checks (2026-11-19).
+replayed candidate `02c37347` has since passed the same certificate, so it
+awaits its hosted checks and the two assessments (2026-11-19).
 
 This ExecPlan is a living document. Keep Constraints, Tolerances, Risks,
 Progress, Surprises & discoveries, Decision log, Outcomes & retrospective,
@@ -849,6 +850,29 @@ stopping and reporting.
         ADR-0023 (structured output) keep their numbers, so the sweep was by
         exact filename and by the documents that name the gate, not by number
         alone.
+
+- [x] (2026-11-19) Every gate passes on frozen candidate `02c37347`, the head
+      and change set identical at the start and end of the run.
+      - `make check-fmt` (113 files unchanged), `make typecheck` (10 m 44 s),
+        and `make lint` (rustdoc, Clippy, then Whitaker, finishing at
+        100.0% `interrogate`, 1044/1044 items).
+      - `make docstring-coverage` (100.0%, 1044/1044) run separately so a
+        Whitaker abort cannot mask it, `make markdownlint` (0 issues; the
+        spelling gate clean and `typos.toml` unchanged), and `make nixie` (all
+        diagrams validated).
+      - `make test-workflow-contracts` (729 passed, 1 skipped) and `make test`
+        (exit 0). Inside that run the boundary target reports 44 passed, 0
+        failed, and 10 ignored in 481 s, and the Python phase 128 passed and 5
+        skipped.
+      - A standalone `make boundary` taken first on this candidate went red:
+        ten failures, every one an
+        `exceeded the N second deadline` kill with
+        `Blocking waiting for file lock on package cache` in the same log and
+        no rustc or assertion diagnostic anywhere. The same target then
+        passed inside `make test` once the host's compile queue drained, which
+        attributes the red to host saturation rather than to this change; the
+        failed log is kept at
+        `/tmp/boundary-saturation-02c37347-ortho-config-11-2-1.out`.
 
 ## Surprises & discoveries
 
