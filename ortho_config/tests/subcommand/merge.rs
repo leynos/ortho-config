@@ -17,6 +17,18 @@ use std::sync::Arc;
 
 use super::fixtures::{IsolatedRoot, isolated_root};
 
+/// Write a `[cmds.test]` section into the fixture root's `.app.toml`.
+///
+/// Every case here exercises the same scoped loader against one file section,
+/// so the write is shared rather than repeated per test.
+fn write_scoped_section(isolated: &IsolatedRoot, section: &str) -> Result<()> {
+    let directory = Dir::open_ambient_dir(isolated.path(), ambient_authority())
+        .context("open scoped merge fixture directory")?;
+    directory
+        .write(".app.toml", format!("[cmds.test]\n{section}"))
+        .context("write scoped merge fixture")
+}
+
 #[derive(Debug, Deserialize, Serialize, Default, PartialEq, Parser)]
 #[command(name = "test")]
 struct MergeArgs {
@@ -39,11 +51,7 @@ struct MergeArgs {
 fn merge_helper_combines_defaults_and_cli(isolated_root: Result<IsolatedRoot>) -> Result<()> {
     let isolated = isolated_root?;
     let discovery = isolated.discovery();
-    let directory = Dir::open_ambient_dir(isolated.path(), ambient_authority())
-        .context("open merge helper fixture directory")?;
-    directory
-        .write(".app.toml", b"[cmds.test]\nfoo = \"file\"")
-        .context("write merge helper fixture")?;
+    write_scoped_section(&isolated, "foo = \"file\"")?;
     let cli = MergeArgs {
         foo: Some("cli".into()),
         bar: None,
@@ -78,11 +86,7 @@ struct MergePrefixed {
 fn merge_wrapper_respects_prefix(isolated_root: Result<IsolatedRoot>) -> Result<()> {
     let isolated = isolated_root?;
     let discovery = isolated.discovery();
-    let directory = Dir::open_ambient_dir(isolated.path(), ambient_authority())
-        .context("open prefixed merge fixture directory")?;
-    directory
-        .write(".app.toml", b"[cmds.test]\nfoo = \"file\"")
-        .context("write prefixed merge fixture")?;
+    write_scoped_section(&isolated, "foo = \"file\"")?;
     let cli = MergePrefixed { foo: None };
     let merged = load_and_merge_subcommand_for_with_sources_at(
         &cli,
@@ -119,11 +123,7 @@ fn a_non_finite_float_survives_the_schema_aware_subcommand_merge(
 ) -> Result<()> {
     let isolated = isolated_root?;
     let discovery = isolated.discovery();
-    let directory = Dir::open_ambient_dir(isolated.path(), ambient_authority())
-        .context("open non-finite merge fixture directory")?;
-    directory
-        .write(".app.toml", b"[cmds.test]\nratio = nan")
-        .context("write non-finite merge fixture")?;
+    write_scoped_section(&isolated, "ratio = nan")?;
     let merged = load_and_merge_subcommand_for_with_sources_at(
         &MergeNonFinite::default(),
         SubcommandFileContext::new(isolated.path(), &discovery),
@@ -346,11 +346,7 @@ fn the_absent_declared_default_recovers_from_its_file_route(
 ) -> Result<()> {
     let isolated = isolated_root?;
     let discovery = isolated.discovery();
-    let directory = Dir::open_ambient_dir(isolated.path(), ambient_authority())
-        .context("open declared-default fixture directory")?;
-    directory
-        .write(".app.toml", b"[cmds.test]\nreference = \"supplied\"")
-        .context("write declared-default fixture")?;
+    write_scoped_section(&isolated, "reference = \"supplied\"")?;
     let merged = load_and_merge_subcommand_for_with_sources_at(
         &MergeDeclaredDefault::default(),
         SubcommandFileContext::new(isolated.path(), &discovery),
