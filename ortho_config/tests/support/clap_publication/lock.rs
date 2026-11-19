@@ -3,7 +3,7 @@
 //! The lock records the resolution this workspace actually builds, so it is the
 //! primary identity source: it carries the exact version, source and registry
 //! checksum for every package. Selection refuses a missing or duplicated name
-//! rather than taking the first match, because ADR-0022 requires an ambiguous
+//! rather than taking the first match, because ADR-0028 requires an ambiguous
 //! resolution to stop the gate instead of choosing silently.
 
 use anyhow::{Context, Result, bail, ensure};

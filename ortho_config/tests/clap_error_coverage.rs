@@ -1,6 +1,6 @@
 //! Pre-publication coverage gate for the resolved clap error inventory.
 //!
-//! ADR-0022 makes this the mechanical signal checked before publishing: the
+//! ADR-0028 makes this the mechanical signal checked before publishing: the
 //! workspace lock and `cargo metadata --locked --offline` must agree on the
 //! supported `clap` and `clap_builder` identities, `clap_builder` must be
 //! reached through exactly one normal facade edge, and the `ErrorKind` source

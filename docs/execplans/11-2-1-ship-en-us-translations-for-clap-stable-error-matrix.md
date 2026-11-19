@@ -3,14 +3,15 @@
 Status: M3 complete — the matrix, the en-US strings, the runtime consultation,
 the pre-publication gate, the consumer and developer documentation, and the
 roadmap checkbox are all in place. The branch has been replayed onto
-`origin/main` after PR #664 merged and the review findings of `5912818894` are
-dispositioned. Candidate `a0ba5f1b` passed the full nine-gate certificate; its
-two documentation successors `6d421d5f` and `5ab1e7e9` are green in hosted CI
-and were certified for the Markdown gates alone, as Progress records. A
-whole-plan assessment of `5ab1e7e9` then returned "not yet complete" with two
-fail-closed gaps in the source walk, both repaired in the candidate this
-document now tracks. That repair passed its nine-gate certificate and a hosted
-run that includes CodeScene, and it awaits the assessment reply (2026-11-16).
+`origin/main` at `0dbd7bd7`, after main released v0.11.0 and published its own
+ADR-0023, so this branch's notes are re-versioned to v0.12.0 and its gate ADR
+is renumbered to 0024. Candidate `a0ba5f1b` passed the full nine-gate
+certificate; its two documentation successors `6d421d5f` and `5ab1e7e9` are
+green in hosted CI and were certified for the Markdown gates alone, as Progress
+records. A whole-plan assessment of `5ab1e7e9` then returned "not yet complete"
+with two fail-closed gaps in the source walk, both repaired in a candidate that
+passed its own nine-gate certificate and a hosted run including CodeScene. The
+replayed candidate awaits its gates and hosted checks (2026-11-19).
 
 This ExecPlan is a living document. Keep Constraints, Tolerances, Risks,
 Progress, Surprises & discoveries, Decision log, Outcomes & retrospective,
@@ -30,7 +31,7 @@ The deliverable of this branch is the feature, its pre-publication gate, and
 the governing documents that describe them. M0 established that the approved
 build-time mechanism cannot bind consumers to their governing Clap resolution.
 At the user's request the pre-publication workspace gate replaced it, and M0.1
-amended the design, recorded ADR-0023, and reconciled the roadmap and the
+amended the design, recorded ADR-0028, and reconciled the roadmap and the
 developers' guide. M1 onward implements the matrix, strings, runtime
 integration, and gate.
 
@@ -152,7 +153,7 @@ stopping and reporting.
       feasibility; original build-time mechanism reached its stop condition.
 - [x] (2026-11-09) Select the pre-publication workspace gate after M0.
 - [x] (2026-11-09) M0.1: amended design §6.1.1, §6.1, and §12; recorded
-      [ADR-0023](../adrs/adr-0023-pre-publication-clap-coverage-gate.md);
+      [ADR-0028](../adrs/adr-0028-pre-publication-clap-coverage-gate.md);
       reconciled roadmap 11.2.1 and the developers' guide; indexed the ADR.
 - [x] (2026-11-10) M1: implemented the canonical matrix, the ten new en-US
       strings, runtime consultation, and the V1–V3 tests. The matrix,
@@ -493,7 +494,7 @@ stopping and reporting.
         declarations, and a file declaring no `ErrorKind` are refused with a
         named reason. Deterministic witnesses replace the drawn-sample record
         the assessor offered as an alternative.
-      - Documentation: the design's §6.1.1, ADR-0023 item 6, and the
+      - Documentation: the design's §6.1.1, ADR-0028 item 6, and the
         developers' guide's module split, contract, fixtures, and
         troubleshooting row all state the nested-declaration refusal. The
         decision log records that the crate root Cargo reports supersedes the
@@ -773,7 +774,7 @@ stopping and reporting.
         control still passes. Both probes were reversed byte-identically.
       - Documentation follows the behaviour: the developers' guide describes
         the item-macro and module-file refusals and the new fixture, design
-        §6.1.1 records both shapes, and ADR-0023's negative-control paragraph
+        §6.1.1 records both shapes, and ADR-0028's negative-control paragraph
         names the new controls.
       - The nine commit gates pass in one sequential run on this repair
         candidate, each started once and none retried.
@@ -820,6 +821,34 @@ stopping and reporting.
       - Hosted run `43823049487` on the repaired head is fully green,
         CodeScene included. This entry is again the only change after that
         run, so the same transfer applies.
+
+- [x] (2026-11-19) Replay onto `origin/main` and a third ADR renumber. Main
+      released v0.11.0 and, separately, published
+      `adr-0023-explicit-structured-output-declarations.md`, so the numbering
+      this branch adopted on 2026-11-15 collided again.
+      - `origin/main` is `0dbd7bd7`, and the branch's commits were replayed
+        with Git's text merge: `merge.weave.driver` was overridden to
+        `git merge-file --zdiff3` for the operation, as the estate baseline
+        directs for an unattended rebase of a long-lived branch. The three
+        "Merge main into the clap error matrix branch" commits were dropped,
+        because a rebase replays no merges.
+      - The merge that carried the v0.11.0 re-version, `6761e1ab`, was one of
+        those dropped merges, so its resolution was rebuilt as ordinary
+        commits. The clap entries return to a `## Unreleased` section above
+        main's `## [0.11.0] - 2026-11-15`; the released
+        `docs/v0-11-0-migration-guide.md` returns to main's text with only its
+        own "Two areas … three bullets" miscount corrected to "Three"; the
+        clap sections become `docs/v0-12-0-migration-guide.md` again; and
+        `docs/contents.md` and the users' guide's upgrade list index it.
+      - The gate ADR moves to
+        `adr-0028-pre-publication-clap-coverage-gate.md`, with its heading and
+        every inbound reference renumbered in the same commit: the design,
+        `docs/contents.md`, the developers' guide, both migration guides, the
+        `CHANGELOG`, the `ortho_config` manifest comment, the gate and fixture
+        module docs, and this plan. Main's ADR-0022 (coverage target root) and
+        ADR-0023 (structured output) keep their numbers, so the sweep was by
+        exact filename and by the documents that name the gate, not by number
+        alone.
 
 ## Surprises & discoveries
 
@@ -1071,7 +1100,7 @@ nested inside a function rather than at item level.
   compile time. No build-script fixture or generated build output is needed.
 - 2026-11-09: M0.1 complete. Design §6.1.1 is retitled "Pre-publication
   coverage gate" and states the workspace-only limit; §6.1 and §12 point at it;
-  ADR-0023 records the decision and the rejected alternatives; roadmap 11.2.1
+  ADR-0028 records the decision and the rejected alternatives; roadmap 11.2.1
   and the developers' guide no longer claim a build script or a consumer
   guarantee; `docs/contents.md` indexes the ADR.
 - 2026-10-14: include `InvalidSubcommand` and all three sentinels, following the
@@ -1132,6 +1161,13 @@ nested inside a function rather than at item level.
   fails closed, and the alias control stays beside the new control so the two
   directions of the filter are pinned together.
 
+- 2026-11-19: renumber the gate ADR a second time, to 0024. Main published
+  ADR-0023 for explicit structured-output declarations while this branch held
+  0023, and main's numbering is published, so this branch yields. The
+  re-versioning decision of 2026-11-15 stands unchanged: the clap entries stay
+  under `## Unreleased`, the v0.11.0 guide stays as released, and the clap
+  migration sections live in `docs/v0-12-0-migration-guide.md`.
+
 ## Outcomes & retrospective
 
 The implementation is complete and delivery is not; Progress records the
@@ -1141,7 +1177,7 @@ users' guide enumerates the matrix, names the override identifiers, and
 documents the display-only and missing-input behaviour; the developers' guide
 owns the gate's troubleshooting procedure and its variant-intake steps; the
 roadmap records 11.2.1 as done with its finding and validation notes; and
-ADR-0023 records the mechanism.
+ADR-0028 records the mechanism.
 
 The gate reached its final shape over five whole-plan assessment rounds, and
 each round removed a way for the count to describe a build the compiler does
@@ -1307,7 +1343,7 @@ Trace the three requirements as follows:
 - R2, design §6.2 exhaustive public matrix: M1, independent inventory,
   uniqueness, public-import, override, and pass-through tests.
 - R3, design §6.1.1 total-count mechanism, as amended by
-  [ADR-0023](../adrs/adr-0023-pre-publication-clap-coverage-gate.md): M0
+  [ADR-0028](../adrs/adr-0028-pre-publication-clap-coverage-gate.md): M0
   evidence and selected deviation; M0.1, design/ADR/roadmap reconciliation; M2,
   workspace identity gate, source count comparison, matrix const assertion, and
   deliberate drift controls.
@@ -1335,7 +1371,7 @@ Read these references before implementation; they own the surrounding rules:
 - [ADR 0015](../adrs/adr-0015-localization-runtime-boundary.md) and the
   [users' guide](../users-guide.md) describe the extracted runtime boundary;
   keep Clap-specific APIs in `ortho_config`.
-- [ADR 0023](../adrs/adr-0023-pre-publication-clap-coverage-gate.md) owns the
+- [ADR 0028](../adrs/adr-0028-pre-publication-clap-coverage-gate.md) owns the
   pre-publication coverage gate and supersedes the build-time identity
   mechanism design §6.1.1 previously proposed.
 - [ADR 0017](../adrs/adr-0017-consumer-side-prover-tooling.md), the

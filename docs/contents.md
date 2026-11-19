@@ -121,7 +121,7 @@
   review the ordered summary-locale preference, the resource-and-build
   acceptance rule, the same-language fallback, and the decision to report the
   choice through tracing rather than a schema field.
-- [ADR-0022: Pre-publication clap coverage gate](adrs/adr-0022-pre-publication-clap-coverage-gate.md):
+- [ADR-0028: Pre-publication clap coverage gate](adrs/adr-0028-pre-publication-clap-coverage-gate.md):
   review the test-only workspace gate for `ErrorKind` growth, the build-time
   identity mechanism it supersedes, and the limits of the guarantee.
 - [Archived v0.8.0 roadmap](archive/v0-8-0-roadmap.md): review completed
@@ -173,9 +173,11 @@
   `renderer` field when building documentation IR or `AgentCommand` literals,
   optionally declare how a command renders, collect bridge-cache metrics from
   the CLI, and adopt the shared test subprocess helpers.
-- [v0.12.0 migration guide](v0-12-0-migration-guide.md): no required code
-  changes; optionally call `with_use_isolating(false)` to remove the Unicode
-  isolation marks `Fluent` writes around interpolated values.
+- [v0.12.0 migration guide](v0-12-0-migration-guide.md): optionally call
+  `with_use_isolating(false)` to remove the Unicode isolation marks `Fluent`
+  writes around interpolated values; re-check a `clap-error-missing-subcommand`
+  override; and enumerate `CLAP_ERROR_IDS` rather than hard-coding the
+  translated error kinds.
 
 ## Testing and documentation references
 

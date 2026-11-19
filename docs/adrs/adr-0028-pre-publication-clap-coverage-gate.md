@@ -1,4 +1,4 @@
-# Architectural decision record (ADR) 0022: Pre-publication clap coverage gate
+# Architectural decision record (ADR) 0028: Pre-publication clap coverage gate
 
 ## Status
 
