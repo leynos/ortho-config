@@ -11,8 +11,9 @@ green in hosted CI and were certified for the Markdown gates alone, as Progress
 records. A whole-plan assessment of `5ab1e7e9` then returned "not yet complete"
 with two fail-closed gaps in the source walk, both repaired in a candidate that
 passed its own nine-gate certificate and a hosted run including CodeScene. The
-replayed candidate `02c37347` has since passed the same certificate, so it
-awaits its hosted checks and the two assessments (2026-11-19).
+replayed candidate `02c37347` has since passed the same certificate, and the
+published head `4908409f` — that candidate plus this record — is green on every
+hosted job, so only the two assessments remain (2026-11-19).
 
 This ExecPlan is a living document. Keep Constraints, Tolerances, Risks,
 Progress, Surprises & discoveries, Decision log, Outcomes & retrospective,
@@ -131,6 +132,13 @@ stopping and reporting.
 - Medium impact, medium likelihood: changing the missing-argument help variant
   to pass-through affects existing BDD expectations. Update those expectations
   deliberately while retaining actual `MissingSubcommand` translation tests.
+- Medium impact, medium likelihood, and outside this change's control: the
+  Windows `nested-cargo-builds` setup script has little headroom left. It
+  passed this branch's rerun at 716 s against its 900 s allowance, and failed
+  outright at 897 s on the prior attempt, while the same script passed at 637 s
+  on PR #710's green run. The allowance and the warm-up's membership belong to
+  main's NC-010 work, so a slower runner can fail this job on any branch; the
+  remedy is that work, not a change here.
 
 ## Progress
 
@@ -873,6 +881,26 @@ stopping and reporting.
         attributes the red to host saturation rather than to this change; the
         failed log is kept at
         `/tmp/boundary-saturation-02c37347-ortho-config-11-2-1.out`.
+
+- [x] (2026-11-19) Hosted checks are green on the published head `4908409f`.
+      Run `44603476091` passed on attempt 2: all eight CI jobs (`build-test`
+      on Linux and Windows, both advisory Clippy legs, the MSRV build, and the
+      three packaging dry runs), `CodeScene Code Health Review`, and
+      `Gecko Security Review`.
+      - Attempt 1 failed only `build-test (windows)`. Nextest's
+        `nested-cargo-builds` setup script reached its 900 s allowance
+        (`TERMINATING [>900.000s]`, `error: setup script failed`, exit 105)
+        with `0/3097` tests run, so no test failed and the run never reached
+        the suite. The same job passed on a bounded rerun with
+        `SETUP PASS [715.915s]`, then `[281.249s]` for the second invocation.
+      - The warm-up was near the boundary on both attempts: it was compiling
+        `boundary` when the timer fired at 897 s on attempt 1, and finished
+        at 716 s on attempt 2, against `SETUP PASS [636.929s]` and
+        `[271.610s]` on PR #710's green run. That attributes the red to
+        runner speed rather than to a larger warm-up or a defect, since this
+        change adds no binary to the setup script's list; the two new
+        `tests/ui/clap_error_*.rs` fixtures are compiled by the already-listed
+        `compile_fail` binary.
 
 ## Surprises & discoveries
 
