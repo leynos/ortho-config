@@ -1401,7 +1401,7 @@ before moving to the next milestone.
 can add a variant the shipped matrix does not classify. The workspace detects
 that before publication with a test-only gate, specified in
 [design §6.1.1](cli-localization-design.md#611-pre-publication-coverage-gate)
-and [ADR-0022](adrs/adr-0022-pre-publication-clap-coverage-gate.md). It adds no
+and [ADR-0024](adrs/adr-0024-pre-publication-clap-coverage-gate.md). It adds no
 build script, writes no `rustc-env` value, and runs in no consumer build.
 
 ### Ownership and pieces

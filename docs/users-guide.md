@@ -2741,6 +2741,11 @@ how JSON mode frames its streams is roadmap 7.2.4.
 Each release with compatibility notes has a migration guide that separates
 required changes from improvements that can be adopted later:
 
+- [v0.12.0 migration guide](v0-12-0-migration-guide.md) — from v0.11.0.
+  Re-check an override of `clap-error-missing-subcommand`, which no longer
+  restyles the help `clap` prints for a missing required argument or
+  subcommand, and iterate `CLAP_ERROR_IDS` rather than hard-coding the
+  translated error kinds.
 - [v0.11.0 migration guide](v0-11-0-migration-guide.md) — from v0.10.0. Only
   Rust code that builds documentation IR or `AgentCommand` literals needs a
   change; JSON, Fluent catalogues, and derived configuration do not.

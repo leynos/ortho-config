@@ -7,7 +7,7 @@ v0.10.0 to v0.11.0. Applications that derive their configuration and read agent
 context need no code changes: every new capability is opt-in, and the wire
 contract stays additive.
 
-Two areas deserve a review before release:
+Three areas deserve a review before release:
 
 - Rust code that builds documentation IR or an `AgentCommand` with a struct
   literal must name the new `renderer` and `output` fields;
@@ -16,11 +16,9 @@ Two areas deserve a review before release:
 - authors who want to describe how a command renders, or what structured output
   it supports, can now adopt a `renderer(...)` or `output(...)` declaration.
 
-JSON consumers need no change. Fluent catalogues need no change for the additions this release makes, with one exception: an override of
-`clap-error-missing-subcommand` no longer reaches the help `clap` prints when a
-required argument or subcommand is absent, as §12 explains. The documentation IR
-version stays at 2.0, because the new fields are optional and omitted when
-undeclared.
+JSON consumers need no change, and neither do Fluent catalogues. The
+documentation IR version stays at 2.0, because the new fields are optional and
+omitted when undeclared.
 
 ## Impact at a glance
 
@@ -38,8 +36,6 @@ undeclared.
 | **Optional**           | Test subprocesses          | Depend on `ortho_config_test_helpers` and call `run_with_deadline`.                  |
 | **Optional**           | Process-mutating helpers   | Replace `env::set_var`, `env::lock`, `cwd::set_dir` with a `MapEnv`.                 |
 | **Optional**           | Injected environment       | Load with `load_from_iter_with_env` and pin the directory on a `MapEnv`.             |
-| **Optional if used** | Clap error overrides       | Re-check an override of `clap-error-missing-subcommand`; see §12.            |
-| **Optional**           | Clap error inventory       | Iterate `CLAP_ERROR_IDS` instead of hard-coding identifiers; see §13.        |
 
 _Table 1: Application-facing work when moving from v0.10.0 to v0.11.0._
 
@@ -365,62 +361,3 @@ policy, and receives one ordered report.
 See
 [Validate skill manifests against commands](users-guide.md#validate-skill-manifests-against-commands)
 for the contract and a worked example.
-
-## 12. Re-check an override for missing-input help
-
-v0.11.0 classifies three `clap` error kinds as display-only: `DisplayHelp`,
-`DisplayVersion`, and `DisplayHelpOnMissingArgumentOrSubcommand`. The
-localization pipeline never substitutes a translated body for a display-only
-kind, so missing-input help — the help `clap` prints when a required argument
-or subcommand is absent — stays `clap`'s own text and keeps `clap`'s error exit
-status.
-
-An application that overrode `clap-error-missing-subcommand` to restyle that
-help no longer sees the override applied there. The identifier still translates
-the `MissingSubcommand` kind, so keep the override if that diagnostic still
-needs consumer copy. Missing-input help has no translated identifier of its own.
-
-No other catalogue entry changes meaning: the three display identifiers are
-never looked up, and every translated identifier in the
-[user's guide](users-guide.md#translate-or-override-clap-parse-errors) keeps
-its earlier behaviour.
-
-## 13. Enumerate the translated clap error kinds
-
-v0.11.0 publishes its clap error inventory as data.
-`ortho_config::CLAP_ERROR_IDS` lists every `clap::error::ErrorKind` this
-release classifies, paired with an `ortho_config::ClapErrorTranslation` that is
-either `Translated(identifier)` — the Fluent identifier a consumer override
-targets — or `DisplayOnly`, the three kinds `clap` renders itself. Both are
-exported from `ortho_config` and from `ortho_config::localizer`, so either path
-works.
-
-`ClapErrorTranslation` is `#[non_exhaustive]`: a match over it needs a wildcard
-arm, so a later release can add an outcome without breaking your build.
-Enumerate `CLAP_ERROR_IDS` rather than hard-coding identifiers when you build a
-coverage test or a translator brief.
-
-The inventory describes `clap_builder` 4.6.7, the version this workspace
-resolves, and ships translated en-US text for 14 of its 17 kinds:
-`InvalidValue`, `UnknownArgument`, `InvalidSubcommand`, `NoEquals`,
-`ValueValidation`, `TooManyValues`, `TooFewValues`, `WrongNumberOfValues`,
-`ArgumentConflict`, `MissingRequiredArgument`, `MissingSubcommand`,
-`InvalidUtf8`, `Io`, and `Format`. The other three — `DisplayHelp`,
-`DisplayVersion`, and `DisplayHelpOnMissingArgumentOrSubcommand` — are
-display-only and are never looked up.
-
-Four identifiers predate this matrix and keep their earlier spelling, so an
-override catalogue written against an older release keeps resolving:
-`clap-error-invalid-value`, `clap-error-unknown-argument`,
-`clap-error-missing-argument` (for `MissingRequiredArgument`), and
-`clap-error-missing-subcommand`. Every other translated row uses the spelling
-that `clap-error-<kebab-cased kind>` derives.
-
-A consumer that resolves a different `clap` release keeps this matrix. When
-`clap` reports a kind the matrix does not list, localization first derives
-`clap-error-<kebab-cased kind>` and looks that up; only when no catalogue
-defines it — neither the embedded one nor an override — does the error keep
-`clap`'s own text, with a warning event. See the
-[pre-publication coverage gate](developers-guide.md#the-pre-publication-clap-coverage-gate)
-and [ADR-0022](adrs/adr-0022-pre-publication-clap-coverage-gate.md) for how
-the table stays bound to the resolved version.

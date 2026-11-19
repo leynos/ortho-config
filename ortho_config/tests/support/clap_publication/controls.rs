@@ -1,6 +1,6 @@
 //! Durable negative controls for the publication gate.
 //!
-//! ADR-0022 requires each refusal to be demonstrated against a committed
+//! ADR-0024 requires each refusal to be demonstrated against a committed
 //! fixture, so these tests are ordinary unit tests over
 //! `tests/fixtures/clap_publication/` rather than mutations of the real lock or
 //! registry cache. Every control asserts the reason for the failure, not merely

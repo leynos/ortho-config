@@ -1,6 +1,6 @@
 //! Reviewed identities and the `cargo metadata` cross-checks.
 //!
-//! ADR-0022 requires the gate to confirm the lock against
+//! ADR-0024 requires the gate to confirm the lock against
 //! `cargo metadata --locked --offline`, to follow the `clap` → `clap_builder`
 //! normal edge, and to refuse an ambiguous resolution before any count is
 //! compared. The reviewed constants below are the only place the supported

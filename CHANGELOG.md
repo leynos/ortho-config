@@ -19,7 +19,7 @@ All notable changes to this project will be documented in this file.
   consumer build. See:
   - [Translate or override clap parse errors](docs/users-guide.md#translate-or-override-clap-parse-errors)
   - [Design §6.1.1](docs/cli-localization-design.md#611-pre-publication-coverage-gate)
-  - [ADR-0023](docs/adrs/adr-0023-pre-publication-clap-coverage-gate.md)
+  - [ADR-0024](docs/adrs/adr-0024-pre-publication-clap-coverage-gate.md)
 
 ### Changed (clap error behaviour)
 
@@ -134,6 +134,7 @@ All notable changes to this project will be documented in this file.
   including a deny-mode policy violation, and `2` for Clap's usage rejection.
   No diagnostic field carries them; a positive `summary.deny` count
   distinguishes a policy denial from any other failure.
+
 ### Changed (source compatibility)
 
 - **Breaking for struct-literal construction:** documentation IR
