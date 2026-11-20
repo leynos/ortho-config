@@ -119,7 +119,7 @@ All notable changes to this project will be documented in this file.
   error to detect absence must match the new variant. Presence semantics are
   unchanged: a present `null`, an empty collection, and an explicit value all
   still count as supplied. See
-  [the migration guide](docs/v0-11-0-migration-guide.md#12-match-the-enumerated-missing-value-error).
+  [the migration guide](docs/v0-11-0-migration-guide.md#13-match-the-enumerated-missing-value-error).
 
 ### Added (missing required values)
 
@@ -188,6 +188,27 @@ All notable changes to this project will be documented in this file.
   `RequiredConfigSchema` on the type where needed. See
   [the migration guide](docs/v0-11-0-migration-guide.md#13-adopt-nested-requirement-schemas-or-widen-your-own-helpers)
   for the exact edits.
+
+### Added (profile redaction)
+
+- **Profile field redaction (roadmap 9.1.2).** A field declared
+  `#[ortho_config(profile_field = "secret")]` or
+  `profile_field = "reference_only"` keeps its public descriptor while the
+  value-bearing metadata that would publish it is removed before any artefact
+  leaves the process: the default, the field's own examples, CLI
+  `possible_values`, nested enum members, and, once any field in a tree is
+  protected, every command-level example. `DocMetadata::redacted_for_output`
+  owns the rule, and the derive, the `cargo-orthohelp` pipeline, the generated
+  bridge, and the agent-context bridge all apply it. Agent context gains sorted
+  `profiles.redaction` records and a names-only `profiles.available_names`
+  catalogue, and the bridge cache key carries the `profile-redaction-v1` salt
+  so entries written under an older policy are never reused. Loading is
+  unaffected: a protected value still resolves from a flag, the environment, a
+  file, or a profile. `FieldMetadata` gained a `profile_field` field, so struct
+  literals must name it; see
+  [the v0.11.0 migration guide](docs/v0-11-0-migration-guide.md#15-optionally-protect-a-fields-value-from-published-documentation)
+  and
+  [the users' guide](docs/users-guide.md#keep-profile-values-out-of-generated-documentation).
 
 ### Removed (test helpers)
 

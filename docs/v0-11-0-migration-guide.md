@@ -7,14 +7,16 @@ v0.10.0 to v0.11.0. Applications that derive their configuration and read agent
 context need no code changes: every new capability is opt-in, and the wire
 contract stays additive.
 
-Two areas deserve a review before release:
+Four areas deserve a review before release:
 
 - Rust code that builds documentation IR or an `AgentCommand` with a struct
   literal must name the new `renderer` and `output` fields;
 - test code that imports `ortho_config_test_helpers::figment` must move to
-  injected sources; and
+  injected sources;
 - authors who want to describe how a command renders, or what structured output
-  it supports, can now adopt a `renderer(...)` or `output(...)` declaration.
+  it supports, can now adopt a `renderer(...)` or `output(...)` declaration; and
+- authors who want a field's value kept out of generated documentation can now
+  mark it with `profile_field`.
 
 JSON consumers need no change, and neither do Fluent catalogues. The
 documentation IR version stays at 2.0, because the new fields are optional and
@@ -27,10 +29,13 @@ omitted when undeclared.
 | **Required**           | Dependency versions        | Update every OrthoConfig crate requirement to v0.11.0 together.                      |
 | **Required if called** | Documentation-IR literals  | Name `renderer: None` and `output: None`, or the declared records, in `DocMetadata`. |
 | **Required if called** | `AgentCommand` literals    | Supply `renderer: RendererContract::default()` and `output: None`.                   |
+| **Required if called** | `FieldMetadata` literals   | Name `profile_field: None`, or the declared label.                                   |
 | **Required if called** | Figment Jail test helpers  | Replace `figment::with_jail` and `figment_error` with injected sources.              |
 | **Optional**           | Renderer declarations      | Add `renderer(human(...), machine(...))` to a command that needs it.                 |
 | **Optional**           | Output declarations        | Add `output(supports_json = true, stdout = "data", ...)` to a command that needs it. |
 | **Optional**           | Agent-native policy checks | Read the projected `renderer` and `output` blocks from agent context.                |
+| **Optional**           | Profile field protection   | Add `profile_field = "secret"` or `"reference_only"` to a field.                     |
+| **Optional**           | Agent-context redaction    | Read `profiles.redaction` and `profiles.available_names` from agent context.         |
 | **Optional**           | Skill manifest validation  | Supply an explicit effective command surface to the validator.                       |
 | **Optional**           | Bridge-cache metrics       | Enable the `metrics` feature; the CLI exports the counters as `tracing`.             |
 | **Optional**           | Test subprocesses          | Depend on `ortho_config_test_helpers` and call `run_with_deadline`.                  |
@@ -352,7 +357,7 @@ now use one `MapEnv` behind both layers:
 See the
 [user's guide](users-guide.md#use-one-environment-and-inject-the-working-directory).
 
-## 11. Optionally validate skill manifests
+## 12. Optionally validate skill manifests
 
 `cargo_orthohelp::skill_validation` checks the command references and
 structured examples a consumer extracted from a skill manifest against the same
@@ -365,7 +370,7 @@ See
 [Validate skill manifests against commands](users-guide.md#validate-skill-manifests-against-commands)
 for the contract and a worked example.
 
-## 12. Match the enumerated missing-value error
+## 13. Match the enumerated missing-value error
 
 A derived loader no longer reports an absent required value as a Serde
 deserialization error. After every layer is merged, the generated `finish`
@@ -408,7 +413,7 @@ value reached you as a deserialization error in `OrthoError::Merge`. The raw
 the earlier Figment finish, because their callers may name a type with no
 derived schema.
 
-## 13. Adopt nested requirement schemas, or widen your own helpers
+## 14. Adopt nested requirement schemas, or widen your own helpers
 
 `#[derive(OrthoConfig)]` already emits the companion `RequiredConfigSchema`
 implementation, so most applications adopt nothing. Two cases need work.
@@ -461,3 +466,51 @@ so it supplies a field renamed with `#[serde(rename = "...")]` only when that
 identifier is also an accepted `#[serde(alias = "...")]`. Call
 `ortho_config::ensure_no_missing_required_values::<T>` directly to check a
 value you have already merged yourself.
+
+## 15. Optionally protect a field's value from published documentation
+
+Nothing is required. A field marked `profile_field = "secret"` or
+`profile_field = "reference_only"` keeps its public descriptor, but the
+value-bearing metadata that would publish it is removed before any artefact
+leaves the process. Adoption is opt-in per field, and loading is unaffected: a
+protected value still resolves from a flag, the environment, a file, or a
+profile.
+
+```rust,ignore
+#[derive(Deserialize, OrthoConfig)]
+#[ortho_config(prefix = "APP_", profiles)]
+struct Settings {
+    /// Confidential token issued by the service.
+    #[ortho_config(profile_field = "secret")]
+    token: String,
+}
+```
+
+The accepted labels, the slots each removes, and the projection that applies
+them are described in
+[the users' guide](users-guide.md#keep-profile-values-out-of-generated-documentation),
+and the contract and its boundaries are recorded in
+[ADR-0024](adrs/adr-0024-profile-field-redaction.md).
+
+Upgrading code that consumes the metadata:
+
+- `FieldMetadata` gained `profile_field: Option<ProfileFieldExposure>`. The
+  struct is not `#[non_exhaustive]`, so a struct literal must name the field:
+  `profile_field: None` for an ordinary field, or the declared label.
+- `ProfileFieldExposure` and `ProfileFieldRedaction` are newly exported from
+  the crate root. Both are additive.
+- Agent context gains `profiles.redaction`, one record per protected field
+  naming its tokenized command path, field name, optional file key, and
+  exposure label, plus `profiles.available_names`, a sorted catalogue of
+  validated profile names that carries no profile body. Both are omitted when
+  empty, so a document that supplies neither is byte-identical to v0.10.0
+  output.
+- `OrthoError` gained the `DuplicateProfileRedaction` and
+  `ProfileMetadataOnUnsupported` variants. `OrthoError` is `#[non_exhaustive]`,
+  so a match that already carries a wildcard arm needs no new arm.
+- `cargo-orthohelp` folds the salt `profile-redaction-v1` into every bridge
+  cache key. Metadata cached by an older release misses and is regenerated
+  rather than reused, so no entry can carry a value the new policy would remove.
+
+The wire contract stays additive: `profile_field` is omitted when undeclared,
+and documentation IR stays at 2.0.

@@ -5,8 +5,10 @@ in the pull request.
 
 This execution plan is a living document. Keep Constraints, Tolerances, Risks,
 Progress, Surprises & discoveries, Decision log, Outcomes & retrospective,
-Conformance basis, and Verification plan current at every milestone. All APIs
-and files described as proposed below are future work.
+Conformance basis, and Verification plan current at every milestone. The
+behavioural contracts below record the approved design as delivered by M1–M3;
+where an earlier revision says *propose*, it describes the interface the
+implementation realized, not remaining work.
 
 ## Purpose / big picture
 
@@ -156,7 +158,7 @@ contains support, selector, and optional listing-command metadata. Static
 context contains no active selection or profile bodies. `list_command`
 population and discovery/store helpers remain roadmap 9.1.3 work.
 
-## Behavioural contracts and proposed interfaces
+## Behavioural contracts (implemented)
 
 ### Classification and disclosure boundary
 
@@ -870,6 +872,38 @@ exclusion as it stood at that milestone; it no longer applies.
   `verus` (27 verified, 0 errors), `test` (114 Cargo test targets then 128
   pytest tests), and `test-workflow-contracts` (748 passed, 2 skipped). Logs are
   `/tmp/pr593-*-9-1-2-gate7.out`.
+
+- [x] (2026-11-20) Rebase onto `main` at `0dbd7bd7`. Main had landed the
+  structured-output declarations (its ADR-0023), a nextest setup script, and
+  dependency bumps while this branch waited. Five files conflicted:
+  `cargo-orthohelp/src/schema/mod.rs`, because main still mirrored the IR types
+  this branch re-exports; `docs/contents.md`, because both sides appended ADR
+  entries; the agent-context bridge, because main added `output` to the doctest
+  while this branch split the profile and sort steps out of it; the derive's
+  parse re-exports, against main's `output_attrs` additions; and the simple-run
+  and scenario registries, because both sides added entries. The resolution
+  keeps this branch's re-export design and adds main's `ExitClass`,
+  `OutputMetadata`, and `StdoutPurpose` names, restores the branch's
+  `serde_field_is_flattened` re-export, gives the property fixtures
+  `output: None`, and makes main's output tests handle the fallible bridge.
+  Main had taken ADR-0023 for its own record, so the redaction record moved
+  again, to ADR-0024, and every reference follows it. No delivered behaviour
+  changed.
+
+- [x] (2026-11-20) Reconcile the review's pre-merge documentation and
+  compile-time rows against the delivered source.
+  `docs/v0-11-0-migration-guide.md` gained section 15 for the opt-in, its
+  `FieldMetadata`, agent-context, error, and cache consequences, and two
+  Impact-at-a-glance rows; `CHANGELOG.md` gained the matching
+  `### Added (profile redaction)` entry; the developers' guide gained an *Agent
+  context* subsection naming the private metadata fields and their validating
+  builders; and this plan's stale future-work sentence and "proposed
+  interfaces" heading were corrected. The guide's duplicated `## 11` heading
+  was renumbered so the new section follows a unique sequence. Three trybuild
+  compile-fail cases now pin the derive's rejections of an unknown label, a
+  duplicate annotation, and a flattened container, each asserting the
+  diagnostic's field span through a committed `.stderr` fixture. No delivered
+  behaviour changed.
 
 ## Surprises & discoveries
 

@@ -1,0 +1,5 @@
+error: duplicate profile_field annotation; a field has exactly one disclosure classification
+  --> tests/ui/profile_field_duplicate_annotation.rs:12:62
+   |
+12 |     #[ortho_config(profile_field = "secret", profile_field = "reference_only")]
+   |                                                              ^^^^^^^^^^^^^^^^

@@ -1,0 +1,5 @@
+error: profile_field cannot be applied to a flattened container because its emitted metadata has no descendant fields; mark the leaf fields on the child type instead
+  --> tests/ui/profile_field_on_flattened_container.rs:18:36
+   |
+18 |     #[ortho_config(profile_field = "secret")]
+   |                                    ^^^^^^^^
