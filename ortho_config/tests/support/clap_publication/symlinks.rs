@@ -77,6 +77,31 @@ fn refusal(result: Result<()>) -> String {
     }
 }
 
+/// Stages a compiled decoy beside an inventory hidden behind `alias`.
+///
+/// `crate_root` is the whole `lib.rs`, so each control states the declaration
+/// shape it is about. `alias` is the module file the walk must fail to read: a
+/// symlink to `contained`, a non-Rust file the walk never parses. Returns the
+/// refusal message, which is empty only if the walk accepted the tree.
+fn refusal_for_hidden_inventory(crate_root: &str, alias: &str, contained: &str) -> Result<String> {
+    let (directory, tree) = staged_tree()?;
+    tree.write("lib.rs", crate_root)
+        .context("write the crate root")?;
+    tree.write("decoy.rs", ALIASED_ERROR_KIND)
+        .context("write the compiled decoy")?;
+    if let Some((parent, _)) = alias.rsplit_once('/') {
+        tree.create_dir(parent)
+            .with_context(|| format!("create {parent} for the nested module file"))?;
+    }
+    tree.write(contained, CONTAINED_ERROR_KIND)
+        .context("write the contained inventory")?;
+    tree.symlink(contained, alias)
+        .with_context(|| format!("alias the contained inventory as {alias}"))?;
+    Ok(refusal(
+        count_error_kinds_under(staged_root(&directory)?).map(|_| ()),
+    ))
+}
+
 /// A symlink alias is not read as a second declaration.
 ///
 /// The inventory covers every regular `.rs` file under the crate root. A
@@ -110,17 +135,8 @@ fn symlink_alias_is_counted_once() -> Result<()> {
 /// inventory is four variants long.
 #[test]
 fn symlinked_module_file_is_refused() -> Result<()> {
-    let (directory, tree) = staged_tree()?;
-    tree.write("lib.rs", "mod decoy;\n\nmod error;\n")
-        .context("write the crate root")?;
-    tree.write("decoy.rs", ALIASED_ERROR_KIND)
-        .context("write the compiled decoy")?;
-    tree.write("inventory.txt", CONTAINED_ERROR_KIND)
-        .context("write the contained inventory")?;
-    tree.symlink("inventory.txt", "error.rs")
-        .context("alias the contained inventory as a module file")?;
-
-    let message = refusal(count_error_kinds_under(staged_root(&directory)?).map(|_| ()));
+    let message =
+        refusal_for_hidden_inventory("mod decoy;\n\nmod error;\n", "error.rs", "inventory.txt")?;
     ensure!(
         message.contains("resolves to no file this walk reads"),
         "{message:?} should name the unresolved module file",
@@ -137,17 +153,11 @@ fn symlinked_module_file_is_refused() -> Result<()> {
 /// four-variant inventory, and would certify the three-variant decoy beside it.
 #[test]
 fn conditional_symlinked_module_file_is_refused() -> Result<()> {
-    let (directory, tree) = staged_tree()?;
-    tree.write("lib.rs", "mod decoy;\n\n#[cfg(all())]\nmod error;\n")
-        .context("write the crate root")?;
-    tree.write("decoy.rs", ALIASED_ERROR_KIND)
-        .context("write the compiled decoy")?;
-    tree.write("inventory.txt", CONTAINED_ERROR_KIND)
-        .context("write the contained inventory")?;
-    tree.symlink("inventory.txt", "error.rs")
-        .context("alias the contained inventory as a conditional module file")?;
-
-    let message = refusal(count_error_kinds_under(staged_root(&directory)?).map(|_| ()));
+    let message = refusal_for_hidden_inventory(
+        "mod decoy;\n\n#[cfg(all())]\nmod error;\n",
+        "error.rs",
+        "inventory.txt",
+    )?;
     ensure!(
         message.contains("is conditional and resolves to no file this walk reads"),
         "{message:?} should name the conditional module whose source is unreadable",
@@ -165,9 +175,7 @@ fn conditional_symlinked_module_file_is_refused() -> Result<()> {
 /// even though it can never be certified.
 #[test]
 fn conditional_inline_module_hop_is_still_resolved() -> Result<()> {
-    let (directory, tree) = staged_tree()?;
-    tree.write(
-        "lib.rs",
+    let message = refusal_for_hidden_inventory(
         concat!(
             "mod decoy;\n",
             "\n",
@@ -177,18 +185,9 @@ fn conditional_inline_module_hop_is_still_resolved() -> Result<()> {
             "    pub use inventory::ErrorKind;\n",
             "}\n",
         ),
-    )
-    .context("write the crate root")?;
-    tree.write("decoy.rs", ALIASED_ERROR_KIND)
-        .context("write the compiled decoy")?;
-    tree.create_dir("error")
-        .context("create the directory of the conditional module")?;
-    tree.write("error/inventory.txt", CONTAINED_ERROR_KIND)
-        .context("write the contained inventory")?;
-    tree.symlink("inventory.txt", "error/inventory.rs")
-        .context("alias the contained inventory as a nested module file")?;
-
-    let message = refusal(count_error_kinds_under(staged_root(&directory)?).map(|_| ()));
+        "error/inventory.rs",
+        "error/inventory.txt",
+    )?;
     ensure!(
         message.contains("resolves to no file this walk reads"),
         "{message:?} should name the nested module file the walk cannot read",

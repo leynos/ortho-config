@@ -20,8 +20,11 @@ certificate and a hosted run. A whole-plan assessment of `b3b9d21f` then
 returned "not yet complete" with two more: a local `macro_rules!` that shadows
 the standard macro an inert list trusts, and a conditional inline module whose
 declared file the walk skipped. Both are repaired in code head `2522013d`,
-which carries a full local certificate, and the record head `b7db4156` is green
-on every hosted job (2026-11-20).
+which carries a full local certificate, and the record head `213fd827` is green
+on every job of the pull-request lane (2026-11-20). The hosted CodeScene check
+then flagged one advisory duplication in the new symlink controls; a further
+candidate extracts their shared staging, and its certificate is recorded in
+Progress.
 
 This ExecPlan is a living document. Keep Constraints, Tolerances, Risks,
 Progress, Surprises & discoveries, Decision log, Outcomes & retrospective,
@@ -1069,6 +1072,16 @@ stopping and reporting.
         `ortho_config` carrying 7.2.3 is published before `cargo-orthohelp`;
         issue #414 tracks an earlier instance of the same class.
 
+- [x] (2026-11-20) The hosted CodeScene check's one advisory finding is
+      repaired by decomposition, not suppression. The check flagged code
+      duplication in `symlinks.rs` (code health 9.39): the three refusal
+      controls staged the same decoy, hidden inventory and symlink. A single
+      `refusal_for_hidden_inventory` helper now stages that shape and returns
+      the refusal message, so each control states only its crate root, its
+      symlinked module file, and the message it requires. `cs review` scores
+      the file 10.0 with no findings, and `cs delta origin/main` reports no
+      issues in the checked changes.
+
 ## Surprises & discoveries
 
 The plan first incorporated merged PR #651 at
@@ -1463,6 +1476,11 @@ Whitaker's rolling suite introduced at `880939d1` fired only in files
 byte-identical to `origin/main`, and main answered it in `1f4a5775`; the branch
 took main's version by merging rather than duplicating the refactor, so no
 branch-owned source carries the finding.
+
+The hosted CodeScene check's one advisory finding, a duplication among the new
+symlink controls, is repaired by extracting the staging they shared; the file
+now reviews at 10.0 and the delta against `origin/main` reports no issues in
+the checked changes. No CodeScene issue is outstanding.
 
 No acceptance blocker is open against a published head, and the last recorded
 one has cleared. The code head carrying the 2026-11-20 repairs, `2522013d`,
