@@ -5,8 +5,10 @@ in the pull request.
 
 This execution plan is a living document. Keep Constraints, Tolerances, Risks,
 Progress, Surprises & discoveries, Decision log, Outcomes & retrospective,
-Conformance basis, and Verification plan current at every milestone. All APIs
-and files described as proposed below are future work.
+Conformance basis, and Verification plan current at every milestone. The
+behavioural contracts below record the approved design as delivered by M1–M3;
+where an earlier revision says *propose*, it describes the interface the
+implementation realized, not remaining work.
 
 ## Purpose / big picture
 
@@ -156,7 +158,7 @@ contains support, selector, and optional listing-command metadata. Static
 context contains no active selection or profile bodies. `list_command`
 population and discovery/store helpers remain roadmap 9.1.3 work.
 
-## Behavioural contracts and proposed interfaces
+## Behavioural contracts (implemented)
 
 ### Classification and disclosure boundary
 
@@ -888,6 +890,21 @@ exclusion as it stood at that milestone; it no longer applies.
   Main had taken ADR-0023 for its own record, so the redaction record moved
   again, to ADR-0024, and every reference follows it. No delivered behaviour
   changed.
+
+- [x] (2026-11-20) Reconcile the review's pre-merge documentation and
+  compile-time rows against the delivered source.
+  `docs/v0-11-0-migration-guide.md` gained section 13 for the opt-in, its
+  `FieldMetadata`, agent-context, error, and cache consequences, and two
+  Impact-at-a-glance rows; `CHANGELOG.md` gained the matching
+  `### Added (profile redaction)` entry; the developers' guide gained an *Agent
+  context* subsection naming the private metadata fields and their validating
+  builders; and this plan's stale future-work sentence and "proposed
+  interfaces" heading were corrected. The guide's duplicated `## 11` heading
+  was renumbered so the new section follows a unique sequence. Three trybuild
+  compile-fail cases now pin the derive's rejections of an unknown label, a
+  duplicate annotation, and a flattened container, each asserting the
+  diagnostic's field span through a committed `.stderr` fixture. No delivered
+  behaviour changed.
 
 ## Surprises & discoveries
 

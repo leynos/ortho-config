@@ -569,6 +569,11 @@ name `profiles: None`. The runtime "which profile is active" concern is
 `SelectedProfile` and `ProfileLoadOutcome`, deliberately separate from the
 static agent-context contract.
 
+Roadmap 9.1.2 extends the same declaration with redaction records and a
+names-only profile catalogue. Those fields are private and set through
+validating builders, described under [Agent context](#agent-context) in
+*Profile field disclosure* below.
+
 ### Renderer metadata ownership
 
 Renderer metadata (ADR-0016) is declared through the sibling `renderer(...)`
@@ -1645,6 +1650,37 @@ projects before writing IR JSON, and the IR-to-agent-context bridge projects
 before deriving records. A new renderer therefore needs no redaction code, and
 adding a value-bearing slot to `FieldMetadata` means extending the projection,
 the model, and the sentinel catalogue together.
+
+### Agent context
+
+The declaration carries the protected-field view in two private metadata
+fields, set only through validating builders:
+
+- `with_redaction(records)` attaches one `ProfileFieldRedaction` per protected
+  field and canonicalizes their order by `(command_path, field_name)`. The
+  record carries the tokenized command path, the emitted field name, the
+  optional existing file key spelling, and the exposure label; it carries no
+  value. A repeated identity is rejected with
+  `OrthoError::DuplicateProfileRedaction` rather than resolved arbitrarily, and
+  records attached to an unsupported declaration are rejected with
+  `OrthoError::ProfileMetadataOnUnsupported`.
+- `with_available_names(names)` attaches the consumer's catalogue of validated
+  `ProfileName` values, sorted and deduplicated. The catalogue holds names
+  only: a profile body must never be added to it. Supplying a catalogue does
+  not opt an application into profiles, so an unsupported declaration ignores
+  the call instead of failing it.
+
+`redaction()` and `available_names()` are the read-only accessors. Both lists
+are omitted from the wire when empty, so the unsupported
+`{ "supported": false }` shape stays byte-identical, and serialization refuses
+a declaration whose public `supported` flag was cleared after metadata was
+attached. Deserialization runs the same validation, so a hand-edited document
+cannot smuggle records onto an unsupported declaration or repeat an identity.
+
+The `cargo-orthohelp` bridge derives the records from the *projected* metadata,
+never from the raw tree, so the redaction list and the redacted command
+metadata describe the same disclosure boundary. Keep that ordering when the
+bridge is restructured.
 
 ### Cache invalidation
 
