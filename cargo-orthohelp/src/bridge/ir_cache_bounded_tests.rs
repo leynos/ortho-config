@@ -1,9 +1,10 @@
 //! Tests for the bounded IR cache comparison and idempotent publishing.
 //!
-//! The read bound is proved through [`bounded_body_matches`] and a reader that
-//! records how many bytes it surrendered, so the tests do not depend on
-//! allocation instrumentation. Filesystem behaviour is exercised through a
-//! capability directory owned by a shared `rstest` fixture.
+//! The read bound is proved through [`compare_cache_entry`], the comparison
+//! the publish path performs, and a reader that records how many bytes it
+//! surrendered, so the tests do not depend on allocation instrumentation.
+//! Filesystem behaviour is exercised through a capability directory owned by a
+//! shared `rstest` fixture.
 
 use std::io::{self, Read};
 use std::time::{Duration, Instant, SystemTime};
@@ -105,10 +106,13 @@ fn wait_for_a_later_tick(
 }
 
 /// A body reader that records how many bytes the comparison consumes.
-struct CountingReader<'a> {
-    body: &'a [u8],
-    consumed: usize,
-    read_calls: usize,
+///
+/// The property tests in the sibling `bounded_proptests` module share it, so
+/// the observable bound is recorded the same way in both places.
+pub(super) struct CountingReader<'a> {
+    pub(super) body: &'a [u8],
+    pub(super) consumed: usize,
+    pub(super) read_calls: usize,
 }
 
 impl Read for CountingReader<'_> {
@@ -130,7 +134,7 @@ impl Read for CountingReader<'_> {
 }
 
 impl<'a> CountingReader<'a> {
-    fn new(body: &'a [u8]) -> Self {
+    pub(super) fn new(body: &'a [u8]) -> Self {
         CountingReader {
             body,
             consumed: 0,
@@ -139,13 +143,18 @@ impl<'a> CountingReader<'a> {
     }
 }
 
+/// A length mismatch is rejected by the publish comparison without a read.
+///
+/// This drives the function `cached_ir_matches` calls, so it fails if a
+/// comparison that reads the body before checking its length is reintroduced
+/// on the publish path.
 #[test]
-fn a_length_mismatch_performs_no_body_reads() {
+fn the_publish_comparison_reads_no_body_on_a_length_mismatch() {
     let json = "cached IR";
     let mut reader = CountingReader::new(b"a cached body that is plainly longer");
     let cached_len = reader.body.len() as u64;
 
-    let matches = bounded_body_matches(&mut reader, cached_len, json).expect("compare body");
+    let matches = compare_cache_entry(&mut reader, cached_len, true, json).expect("compare body");
 
     assert!(!matches, "a longer body must not match");
     assert_eq!(
@@ -164,7 +173,8 @@ fn an_equal_length_comparison_reads_at_most_one_byte_past_the_payload() {
     grown.extend_from_slice(&[b'x'; 64]);
     let mut reader = CountingReader::new(&grown);
 
-    let matches = bounded_body_matches(&mut reader, json.len() as u64, json).expect("compare body");
+    let matches =
+        compare_cache_entry(&mut reader, json.len() as u64, true, json).expect("compare body");
 
     assert!(
         !matches,
@@ -183,7 +193,8 @@ fn an_identical_body_matches_without_overreading() {
     let json = "cached IR";
     let mut reader = CountingReader::new(json.as_bytes());
 
-    let matches = bounded_body_matches(&mut reader, json.len() as u64, json).expect("compare body");
+    let matches =
+        compare_cache_entry(&mut reader, json.len() as u64, true, json).expect("compare body");
 
     assert!(matches, "identical content must match");
     assert_eq!(
@@ -294,12 +305,13 @@ fn write_ir_cache_propagates_a_non_missing_read_failure(
     Ok(())
 }
 
-/// A large mismatched cache entry is replaced without being read.
+/// A large mismatched cache entry is replaced.
 ///
 /// The pre-existing file is several megabytes, while the new payload is a few
-/// bytes short. Their lengths differ, so the comparison returns after the
-/// metadata check; the `bounded_body_matches` tests above prove that the body
-/// is not read in that case. Replacing the entry is the observable outcome.
+/// bytes short, so the metadata lengths differ and the publish comparison
+/// returns without reading the body. The observable outcome here is the
+/// replacement; the bound that keeps the multi-megabyte body out of memory is
+/// proved by the `compare_cache_entry` seam tests above, not by this test.
 #[rstest]
 #[expect(
     clippy::panic_in_result_fn,

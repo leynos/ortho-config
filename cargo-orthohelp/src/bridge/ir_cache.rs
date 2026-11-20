@@ -113,23 +113,14 @@ fn open_cache_entry(dir: &cap_std::fs_utf8::Dir) -> std::io::Result<cap_std::fs_
 
 /// Reports whether the cached IR is byte-for-byte identical to `json`.
 ///
-/// The comparison is bounded by `json`'s length: the cache file's size is
-/// checked first, and the body is then read through a `take` limit of
-/// `json.len() + 1` bytes. A cache entry whose length differs can therefore
-/// never be read into memory, which keeps an attacker-influenced `ir.json`
-/// from forcing an allocation proportional to its own size on the normal
-/// publish path.
-///
-/// The limit is one byte beyond the expected payload so that a file which
-/// grows between the metadata check and the read still fails the comparison
-/// instead of being silently truncated into a false match.
+/// The entry is opened, its metadata is read, and the whole comparison is
+/// delegated to [`compare_cache_entry`]. This function never touches the body
+/// itself, so that comparison is the only place a publish can read cached
+/// content, and the read bound proved against it is the bound the publish path
+/// obeys.
 ///
 /// Read failures are propagated rather than treated as misses, so unreadable
-/// cache state cannot be overwritten without inspection. An entry that is not
-/// a regular file is rejected for the same reason: a directory has no body to
-/// compare, and reading or blocking in the open of any other special file
-/// would stall the build, so neither can be reported as a harmless content
-/// mismatch.
+/// cache state cannot be overwritten without inspection.
 fn cached_ir_matches(paths: &BridgeCache, json: &str) -> Result<bool, OrthohelpError> {
     let Some(dir) = open_optional_dir(paths.cache_dir.as_path())? else {
         return Ok(false);
@@ -149,37 +140,55 @@ fn cached_ir_matches(paths: &BridgeCache, json: &str) -> Result<bool, OrthohelpE
         path: paths.ir_path.clone(),
         source: err,
     })?;
-    if !metadata.is_file() {
-        return Err(OrthohelpError::Io {
+
+    compare_cache_entry(file, metadata.len(), metadata.is_file(), json).map_err(|source| {
+        OrthohelpError::Io {
             path: paths.ir_path.clone(),
-            source: std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                "cache entry is not a regular file",
-            ),
-        });
-    }
-    bounded_body_matches(file, metadata.len(), json).map_err(|source| OrthohelpError::Io {
-        path: paths.ir_path.clone(),
-        source,
+            source,
+        }
     })
 }
 
-/// Compares a cached body with `json`, reading at most `json.len() + 1` bytes.
+/// Compares an opened cache entry with `json`, reading at most `json.len() + 1`
+/// bytes.
 ///
-/// This is the bounded kernel of [`cached_ir_matches`], separated so the read
-/// bound can be tested with a reader that records consumption rather than
-/// relying on allocation instrumentation. `cached_len` is the size metadata
-/// reported; when it disagrees with `json` the body is not read at all, so a
-/// file-sized mismatch costs one `stat` and no allocation.
-fn bounded_body_matches(reader: impl Read, cached_len: u64, json: &str) -> std::io::Result<bool> {
+/// This is the whole comparison a publish performs: [`cached_ir_matches`]
+/// opens the entry and hands the handle here, and nothing else on the publish
+/// path reads cached content. Keeping the regular-file rejection, the length
+/// check and the bounded read in one function lets the bound be tested through
+/// a reader that records consumption, rather than through allocation
+/// instrumentation.
+///
+/// `cached_len` is the size metadata reported. When it disagrees with `json`
+/// the body is not read at all, so a file-sized mismatch costs one `stat` and
+/// no allocation. The limit is one byte beyond the expected payload so that a
+/// file which grows between the metadata check and the read still fails the
+/// comparison instead of being silently truncated into a false match.
+///
+/// An entry that is not a regular file is rejected rather than compared: a
+/// directory has no body to compare, and reading or blocking in the open of
+/// any other special file would stall the build, so neither can be reported as
+/// a harmless content mismatch.
+fn compare_cache_entry(
+    body: impl Read,
+    cached_len: u64,
+    is_regular_file: bool,
+    json: &str,
+) -> std::io::Result<bool> {
+    if !is_regular_file {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "cache entry is not a regular file",
+        ));
+    }
+
     let expected_len = json.len() as u64;
     if cached_len != expected_len {
         return Ok(false);
     }
 
     let mut buffer = Vec::with_capacity(json.len().saturating_add(1));
-    reader
-        .take(expected_len.saturating_add(1))
+    body.take(expected_len.saturating_add(1))
         .read_to_end(&mut buffer)?;
 
     Ok(buffer == json.as_bytes())
@@ -239,8 +248,12 @@ pub(super) fn write_ir_cache(
 #[path = "ir_cache_tests.rs"]
 mod tests;
 
-// The bounded-comparison tests live in their own module so that neither file
+// The bounded-comparison tests live in their own modules so that no file
 // outgrows the repository's per-file length limit.
 #[cfg(test)]
 #[path = "ir_cache_bounded_tests.rs"]
 mod bounded_tests;
+
+#[cfg(test)]
+#[path = "ir_cache_bounded_proptests.rs"]
+mod bounded_proptests;
