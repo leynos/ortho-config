@@ -21,7 +21,7 @@ use super::fixtures::{IsolatedRoot, isolated_root};
 ///
 /// Every case here exercises the same scoped loader against one file section,
 /// so the write is shared rather than repeated per test.
-fn write_scoped_section(isolated: &IsolatedRoot, section: &str) -> Result<()> {
+pub(super) fn write_scoped_section(isolated: &IsolatedRoot, section: &str) -> Result<()> {
     let directory = Dir::open_ambient_dir(isolated.path(), ambient_authority())
         .context("open scoped merge fixture directory")?;
     directory
@@ -138,7 +138,7 @@ fn a_non_finite_float_survives_the_schema_aware_subcommand_merge(
     Ok(())
 }
 
-mod wide_u128 {
+pub(super) mod wide_u128 {
     //! A `u128` field deserializer for values JSON and Figment would reject.
     //!
     //! Figment exposes a wide number only through `deserialize_any`; a derived

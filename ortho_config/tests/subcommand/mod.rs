@@ -9,3 +9,4 @@ mod fixtures;
 mod merge;
 mod nesting;
 mod prefix;
+mod wide_default_fallback;
