@@ -827,7 +827,7 @@ exclusion as it stood at that milestone; it no longer applies.
   list, routes `profile_field` through the same helper shape, and keeps main's
   extracted `cache_tests.rs`, whose pinned cache-key vector was recomputed for
   the disclosure salt (`v1-9a0f5582851e611582e4dd0ddf4ea78e`). The redaction
-  record is renumbered ADR-0023 and every reference follows it. No delivered
+  record is renumbered ADR-0026 and every reference follows it. No delivered
   behaviour changed.
 - [x] (2026-11-16) Full gates on the rebased candidate `ee34e606`. All eight
   targets passed: `check-fmt` (106 files unchanged), `markdownlint` (0 issues;
