@@ -1214,6 +1214,21 @@ stopping and reporting.
       pass, and dropping the prefix strip fails
       `case_19_raw_identifier_include` alone.
 
+- [x] (2026-11-21) The Round-18 candidate carries a full local certificate on
+      the frozen tree `94195beb`. Check-fmt left 113 files unchanged, typecheck
+      and lint both passed, and lint reported rustdoc, Clippy, Whitaker and
+      docstring coverage green (1044/1044, 100.0%). Markdownlint found 0 issues
+      in 113 files with the spelling gate clean, nixie validated every diagram,
+      and the workflow contracts ran 729 passed and 1 skipped in 43.58s.
+      `make test` ran 122 binaries with 3210 tests passed, 0 failed and 44
+      ignored in 11m21.63s, its boundary target at 44 passed and 10 ignored in
+      131.55s, and the Python suite at 128 passed and 5 skipped. A standalone
+      `make boundary` on the same tree passed with 44 passed, 0 failed and 10
+      ignored in 40.32s. The first attempt at this certificate failed the
+      spelling sub-gate on three `-ise` spellings introduced by the new prose;
+      they were corrected to `-ize` before the tree was committed, so the
+      certified tree is the committed one.
+
 ## Surprises & discoveries
 
 The plan first incorporated merged PR #651 at
