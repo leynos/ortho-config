@@ -81,22 +81,40 @@ fn refusal(result: Result<()>) -> String {
 ///
 /// `crate_root` is the whole `lib.rs`, so each control states the declaration
 /// shape it is about. `alias` is the module file the walk must fail to read: a
-/// symlink to `contained`, a non-Rust file the walk never parses. Returns the
-/// refusal message, which is empty only if the walk accepted the tree.
-fn refusal_for_hidden_inventory(crate_root: &str, alias: &str, contained: &str) -> Result<String> {
+/// symlink to `hidden`, a non-Rust file staged in the alias's own directory.
+/// The target is written relative to the link's parent, because that is how a
+/// symlink target resolves; a target carrying the alias's directory again
+/// would leave the link dangling, and a dangling link proves nothing about a
+/// compiler that loads a longer inventory. The link is read back through the
+/// capability before the walk runs, so the control fails loudly if its premise
+/// ever stops holding. Returns the refusal message, which is empty only if the
+/// walk accepted the tree.
+fn refusal_for_hidden_inventory(crate_root: &str, alias: &str, hidden: &str) -> Result<String> {
     let (directory, tree) = staged_tree()?;
     tree.write("lib.rs", crate_root)
         .context("write the crate root")?;
     tree.write("decoy.rs", ALIASED_ERROR_KIND)
         .context("write the compiled decoy")?;
-    if let Some((parent, _)) = alias.rsplit_once('/') {
-        tree.create_dir(parent)
-            .with_context(|| format!("create {parent} for the nested module file"))?;
-    }
-    tree.write(contained, CONTAINED_ERROR_KIND)
+    let hidden_path = match alias.rsplit_once('/') {
+        Some((parent, _)) => {
+            tree.create_dir(parent)
+                .with_context(|| format!("create {parent} for the nested module file"))?;
+            format!("{parent}/{hidden}")
+        }
+        None => hidden.to_owned(),
+    };
+    tree.write(&hidden_path, CONTAINED_ERROR_KIND)
         .context("write the contained inventory")?;
-    tree.symlink(contained, alias)
-        .with_context(|| format!("alias the contained inventory as {alias}"))?;
+    tree.symlink(hidden, alias)
+        .with_context(|| format!("alias {hidden_path} as {alias}"))?;
+    let resolved = tree
+        .read_to_string(alias)
+        .with_context(|| format!("the staged alias {alias} should resolve to {hidden_path}"))?;
+    ensure!(
+        resolved == CONTAINED_ERROR_KIND,
+        "the staged alias {alias} should read the contained inventory, found {} bytes",
+        resolved.len(),
+    );
     Ok(refusal(
         count_error_kinds_under(staged_root(&directory)?).map(|_| ()),
     ))
@@ -186,7 +204,7 @@ fn conditional_inline_module_hop_is_still_resolved() -> Result<()> {
             "}\n",
         ),
         "error/inventory.rs",
-        "error/inventory.txt",
+        "inventory.txt",
     )?;
     ensure!(
         message.contains("resolves to no file this walk reads"),

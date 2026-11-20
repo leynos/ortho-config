@@ -25,7 +25,12 @@ on every job of the pull-request lane (2026-11-20). The hosted CodeScene check
 then flagged one advisory duplication in the new symlink controls; candidate
 `bb0fa4a3` extracts their shared staging, passed the re-taken certificate, and
 is green on every hosted job including CodeScene (2026-11-20), as Progress
-records.
+records. A further assessment on candidate `0895fffc` found two fail-closed
+gaps in the macro and symlink controls. The code head in this branch's next
+commit repairs both — macro names resolve against the definitions textually in
+scope at each call, the macro names a call's arguments invoke are resolved too,
+and each symlink control's target resolves to the inventory it hides — with a
+control for each and with non-vacuity probes (2026-11-20), as Progress records.
 
 This ExecPlan is a living document. Keep Constraints, Tolerances, Risks,
 Progress, Surprises & discoveries, Decision log, Outcomes & retrospective,
@@ -1095,6 +1100,25 @@ stopping and reporting.
       diagnostic, so the boundary certificate is the run inside `make test`.
       Hosted run `44712173544` then passed all eight jobs on `bb0fa4a3`, and
       its `CodeScene Code Health Review (main)` check completes `success`.
+- [x] (2026-11-20) The eighth whole-plan assessment found two fail-closed gaps,
+      and each is repaired with a control that fails without the repair. Macro
+      names now resolve against the definitions textually in scope at each
+      call: an item list is walked in source order and a definition enters the
+      scope only as it is met, so a later redefinition no longer describes an
+      earlier call that the compiler expands with the earlier transcription. A
+      call's arguments are audited too, because an item-position parameter
+      pastes them into the item list, so `paste! { include!("inventory.inc") }`
+      is refused even though neither the transcription nor the argument spells
+      `ErrorKind`. The new fixtures are `module_tree/redefined_macro` and
+      `module_tree/macro_argument_include`. Each symlink control now stages a
+      link whose target is relative to the link's own directory and reads the
+      link back before the walk runs: the earlier nested control passed a
+      target that resolved from the link's parent, so it left a dangling link
+      and proved only that the walk skips symlinks, not that the compiler would
+      load a longer inventory. Non-vacuity: pre-collecting the definitions
+      fails `redefined_macro` alone while the other fourteen table cases pass,
+      dropping the argument audit fails `macro_argument_include` alone, and the
+      earlier symlink target shape fails the resolution assertion.
 
 ## Surprises & discoveries
 
@@ -1460,6 +1484,14 @@ inspected files separately.
   walk would otherwise never resolve. The walk therefore carries a certified
   set and an inspected set, and a file reached both ways is re-walked under the
   stronger certification.
+- 2026-11-20: resolve a `macro_rules!` name against the definitions textually
+  in scope at the call, and audit the macro names a call's arguments invoke. A
+  name is in scope only after its definition, so an item list is walked in
+  source order; reading every definition in the list first let a later
+  redefinition describe an earlier call. An item-position parameter pastes the
+  arguments into the item list, so `paste! { include!("inventory.inc") }` is a
+  second route that spells neither the inventory's name nor an unresolved
+  transcription token.
 
 ## Outcomes & retrospective
 
@@ -1496,14 +1528,19 @@ symlink controls, is repaired by extracting the staging they shared; the file
 now reviews at 10.0 and the delta against `origin/main` reports no issues in
 the checked changes. No CodeScene issue is outstanding.
 
-No acceptance blocker is open against a published head, and the last recorded
-one has cleared. The code head carrying the 2026-11-20 repairs, `2522013d`,
-carries a full local gate certificate, and the record head `b7db4156` is green
-on every job of the pull-request lane. The dispatch-only `Publish dry run` is
-red again on the code head, and that red is release ordering inherited from
-main rather than a defect in this change. On `6d421d5f`, run `43796595772`
-completed with step 38 green on Linux and step 37 on Windows, because that head
-predates main's #661; `ef46b48d` then made `cargo-orthohelp` import
+Two acceptance items remain open on this branch. The standalone `make boundary`
+target has no green local run on the repaired tree: two attempts were
+load-blocked under compile-admission saturation (35 passed, 9 failed, 10
+ignored in 905.20 s, then 34 passed, 10 failed, 10 ignored in 907.83 s), every
+failure an allowance kill with no assertion or rustc diagnostic, while the same
+target passed inside `make test` on the same tree and twice on the hosted Linux
+job. The dispatch-only `Publish dry run` is red on the code head, and that red
+is release ordering inherited from main rather than a defect in this change.
+The code head carrying the 2026-11-20 repairs, `2522013d`, carries a full local
+gate certificate, and the record head `b7db4156` is green on every job of the
+pull-request lane. On `6d421d5f`, run `43796595772` completed with step 38
+green on Linux and step 37 on Windows, because that head predates main's #661;
+`ef46b48d` then made `cargo-orthohelp` import
 `ortho_config::agent_context::{ExitClass, OutputContract, StdoutPurpose}`,
 which the published `ortho_config` 0.11.0 does not have. Every
 `cargo-orthohelp` file naming those types is byte-identical to `origin/main`,
