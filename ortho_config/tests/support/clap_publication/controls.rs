@@ -251,6 +251,18 @@ fn unconditional_module_chain_is_counted() -> Result<()> {
     "macro_wrapped_include",
     "its expansion can declare items this walk cannot read"
 )]
+// A local `assert_eq!` shadows the prelude macro the inert list trusts, so the
+// name must be resolved to the local transcription before it is believed inert.
+#[case::shadowed_inert_macro(
+    "shadowed_inert_macro",
+    "its expansion can declare items this walk cannot read"
+)]
+// The same shadowing applies at item level: a local `compile_error!` is not the
+// diagnostic-only macro, so a name-only exemption would accept its splice.
+#[case::shadowed_item_macro(
+    "shadowed_item_macro",
+    "its expansion can declare items this walk cannot read"
+)]
 // A tree without a reported crate root is refused rather than guessed at.
 #[case::no_crate_root("no_crate_root", "expected a crate root lib.rs")]
 fn module_tree_is_refused(#[case] fixture: &str, #[case] expected: &str) -> Result<()> {

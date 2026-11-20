@@ -2,15 +2,17 @@
 //!
 //! A committed symlink does not survive a Windows checkout, where it
 //! materialises as a text file naming its target, so each tree here is staged
-//! in a temporary directory at test time. The two controls sit together
-//! because they answer opposite halves of one question: which symlinks the walk
-//! may ignore and which it must refuse.
+//! in a temporary directory at test time. The controls sit together because
+//! they answer opposite halves of one question: which symlinks the walk may
+//! ignore and which it must refuse.
 //!
 //! The walk reads regular `.rs` files only. That is what stops an alias from
 //! being counted as a second declaration, and it is also why a declared module
 //! file that is a symlink leaves the compiler loading source the walk never
-//! parses. The first control requires the alias to stay uncounted; the second
-//! requires the module it hides to be refused rather than silently skipped.
+//! parses. The first control requires the alias to stay uncounted; the others
+//! require the module a symlink hides to be refused rather than silently
+//! skipped, whether the declaration carrying it is conditional or sits below a
+//! conditional inline module.
 
 use anyhow::{Context, Result, ensure};
 use camino::Utf8Path;
@@ -149,6 +151,47 @@ fn conditional_symlinked_module_file_is_refused() -> Result<()> {
     ensure!(
         message.contains("is conditional and resolves to no file this walk reads"),
         "{message:?} should name the conditional module whose source is unreadable",
+    );
+    Ok(())
+}
+
+/// A module declared below a conditional inline module is still resolved.
+///
+/// Skipping a conditional inline module also skips every declaration in its
+/// body, and `#[cfg(all())]` means the compiler compiles that body. Here the
+/// skipped declaration names a module file that is a symlink, so a walk that
+/// leaves the body unaudited certifies the three-variant decoy while the
+/// compiler exports the four-variant inventory. The body is therefore inspected
+/// even though it can never be certified.
+#[test]
+fn conditional_inline_module_hop_is_still_resolved() -> Result<()> {
+    let (directory, tree) = staged_tree()?;
+    tree.write(
+        "lib.rs",
+        concat!(
+            "mod decoy;\n",
+            "\n",
+            "#[cfg(all())]\n",
+            "pub mod error {\n",
+            "    pub mod inventory;\n",
+            "    pub use inventory::ErrorKind;\n",
+            "}\n",
+        ),
+    )
+    .context("write the crate root")?;
+    tree.write("decoy.rs", ALIASED_ERROR_KIND)
+        .context("write the compiled decoy")?;
+    tree.create_dir("error")
+        .context("create the directory of the conditional module")?;
+    tree.write("error/inventory.txt", CONTAINED_ERROR_KIND)
+        .context("write the contained inventory")?;
+    tree.symlink("inventory.txt", "error/inventory.rs")
+        .context("alias the contained inventory as a nested module file")?;
+
+    let message = refusal(count_error_kinds_under(staged_root(&directory)?).map(|_| ()));
+    ensure!(
+        message.contains("resolves to no file this walk reads"),
+        "{message:?} should name the nested module file the walk cannot read",
     );
     Ok(())
 }

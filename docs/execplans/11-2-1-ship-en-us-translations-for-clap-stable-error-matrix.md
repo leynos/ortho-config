@@ -15,8 +15,12 @@ replayed candidate `02c37347` has since passed the same certificate, and the
 published head `4908409f` — that candidate plus its record — is green on every
 hosted job. A whole-plan assessment of `4908409f` then returned "not yet
 complete" with two further fail-closed gaps in the source walk, both repaired
-with a control apiece in a candidate that awaits its own certificate and hosted
-checks (2026-11-19).
+with a control apiece in candidate `b3b9d21f`, which passed the same
+certificate and a hosted run. A whole-plan assessment of `b3b9d21f` then
+returned "not yet complete" with two more: a local `macro_rules!` that shadows
+the standard macro an inert list trusts, and a conditional inline module whose
+declared file the walk skipped. Both are repaired in the candidate under test,
+which awaits its own certificate and hosted checks (2026-11-20).
 
 This ExecPlan is a living document. Keep Constraints, Tolerances, Risks,
 Progress, Surprises & discoveries, Decision log, Outcomes & retrospective,
@@ -970,6 +974,45 @@ stopping and reporting.
         available; it exercises `ortho_l10n`'s runtime boundary, which this
         change does not touch.
 
+- [x] (2026-11-20) Seventh whole-plan assessment (Assessment-ID
+      `EP-11-2-1-whole-plan-b3b9d21f-20261120T0136Z`, head `b3b9d21f`)
+      returned "not yet complete" with two fail-closed gaps, both repaired in
+      this candidate, each with a control that fails without its fix.
+      - **A local macro definition was read as the standard macro of its
+        name.** The inert lists were consulted by name before the declaring
+        file's own `macro_rules!` scope, so a locally defined `assert_eq!` or
+        `compile_error!` whose transcription splices `include!` was trusted as
+        the standard macro. Rust lets a local definition shadow a prelude or
+        `std` macro, so resolution now comes first and the lists decide only
+        names the file leaves to the prelude; a nested invocation resolves the
+        same way.
+      - **A conditional module was skipped rather than inspected.** The walk
+        passed over any conditional `mod`, so a `mod inventory;` nested inside
+        a conditional inline module whose file is a symlink was never resolved
+        and never refused. The walk now carries two certifications: a file
+        reached through any conditional hop is *inspected*, so its
+        declarations are still audited and an unreadable declared file still
+        fails closed, but it may not supply the count.
+      - Controls: `module_tree/shadowed_inert_macro/` and
+        `module_tree/shadowed_item_macro/` stage the two shadowing shapes and
+        join the `module_tree_is_refused` cases;
+        `conditional_inline_module_hop_is_still_resolved` stages the
+        conditional nesting in a temporary directory beside the existing
+        conditional-symlink control.
+      - Non-vacuity was probed by reverting each guard in turn and restoring it
+        byte-identically (`cmp` clean): without the resolution order both
+        shadowing cases fail with an empty message, and without the inspection
+        mode the conditional-hop case does the same.
+      - Whitaker's 400-line cap forced a split: the walk moved to
+        `support/clap_publication/reachability.rs`, leaving `source.rs` to
+        locate, enumerate, and count; `mod.rs`'s module map names the new
+        module.
+      - The resolved `clap_builder` 4.6.7 inventory still counts 17 and the
+        `clap_error_coverage` target passes 59 tests, so the stricter rules
+        reject none of that crate's real source.
+      - Design §6.1.1 and ADR-0024's negative-control paragraph record both
+        refusals.
+
 ## Surprises & discoveries
 
 The plan first incorporated merged PR #651 at
@@ -1200,6 +1243,24 @@ the gate has to admit: no `include!` anywhere, one column-0 item macro,
 `#[cfg(not(feature = "std"))] compile_error!(..)`, and the assertions macro
 nested inside a function rather than at item level.
 
+A macro's name is not its meaning. The gate kept a list of standard macros it
+would trust without reading, and the list was consulted by name alone, so a
+file that defined its own `assert_eq!` as an `include!` splice had that splice
+read as an assertion. `macro_rules!` shadows a prelude macro of the same name,
+and the same rule reaches an item-level `compile_error!`. Resolution order, not
+list membership, carries the trust: the declaring file's own definitions must
+be consulted first, and a name list can only speak for names the file does not
+define.
+
+Skipping a conditional subtree is not the same as being safe about it. Once a
+`mod` carried a condition, the walk left the whole subtree unread, on the
+argument that the condition might keep it out of the build. That argument only
+covers the *count*: a condition can hold, so the file may perfectly well be
+compiled, and a declaration inside it can name a file the walk then never
+resolves. Inspecting the subtree while refusing to certify it closes that
+without weakening the count, which is why the walk now tracks certified and
+inspected files separately.
+
 ## Decision log
 
 - 2026-10-14: propose the design's build-script mechanism, with M0 as an
@@ -1301,26 +1362,45 @@ nested inside a function rather than at item level.
   `mod` whose default file names resolve to nothing is now refused; one that
   does resolve is still not certified, so the unconditional-reachability rule
   is unchanged.
+- 2026-11-20: resolve a macro name against the declaring file's own
+  `macro_rules!` scope before either inert list, at item level and for nested
+  invocations. A list says what a standard macro of that name expands to, not
+  what this file's definition of the name does, and Rust lets a local
+  definition shadow a prelude macro. Consulting the list first accepted a local
+  `assert_eq!` and a local `compile_error!` that spliced `include!`, while
+  consulting the scope first still admits the standard names the resolved
+  `clap_builder` uses.
+- 2026-11-20: inspect a conditional module subtree instead of skipping it. A
+  conditional hop cannot supply the count, because the gate cannot evaluate the
+  condition, but its body and its declared files are still audited: a condition
+  that holds compiles them, and a declaration inside one can name a file the
+  walk would otherwise never resolve. The walk therefore carries a certified
+  set and an inspected set, and a file reached both ways is re-walked under the
+  stronger certification.
 
 ## Outcomes & retrospective
 
 The implementation is complete and delivery is not; Progress records the
-current candidate and each repair. Acceptance criteria E1–E4 are met and
-evidenced in Progress; none is outstanding as an implementation obligation. The
-users' guide enumerates the matrix, names the override identifiers, and
-documents the display-only and missing-input behaviour; the developers' guide
-owns the gate's troubleshooting procedure and its variant-intake steps; the
-roadmap records 11.2.1 as done with its finding and validation notes; and
-ADR-0024 records the mechanism.
+current candidate and each repair. Acceptance criteria E1–E4 are implemented
+and evidenced in Progress, and none is outstanding as an implementation
+obligation. What this section does not claim is that the gate's refusal set is
+closed: two successive assessment rounds each found a shape the preceding round
+had certified, so the next round may find another. The users' guide enumerates
+the matrix, names the override identifiers, and documents the display-only and
+missing-input behaviour; the developers' guide owns the gate's troubleshooting
+procedure and its variant-intake steps; the roadmap records 11.2.1 as done with
+its finding and validation notes; and ADR-0024 records the mechanism.
 
-The gate reached its final shape over six whole-plan assessment rounds, and
-each round removed a way for the count to describe a build the compiler does
-not make: a conditional `mod` hop or file-level `#![cfg]`, a condition applied
-through a nested `cfg_attr`, a `#[path]` redirect, an assumed `src/lib.rs`, a
-declaration nested in an inline module — conditional or not, because a `cfg`
-condition can hold and the gate cannot evaluate it — and finally a nested macro
-invocation or a conditional declaration whose module file the walk reads. A
-compiling or counted shape the gate cannot prove now fails closed.
+The gate is not claimed to have reached its final shape. Seven whole-plan
+assessment rounds have each removed a way for the count to describe a build the
+compiler does not make: a conditional `mod` hop or file-level `#![cfg]`, a
+condition applied through a nested `cfg_attr`, a `#[path]` redirect, an assumed
+`src/lib.rs`, a declaration nested in an inline module — conditional or not,
+because a `cfg` condition can hold and the gate cannot evaluate it — a nested
+macro invocation, a conditional declaration whose module file the walk cannot
+read, a local `macro_rules!` that shadows the standard macro an inert list
+would trust, and a conditional subtree skipped before its declared file was
+resolved. A compiling or counted shape the gate cannot prove now fails closed.
 
 The hosted `Lint` blocker is cleared. The `bumpy-road-function` finding that
 Whitaker's rolling suite introduced at `880939d1` fired only in files
@@ -1328,15 +1408,18 @@ byte-identical to `origin/main`, and main answered it in `1f4a5775`; the branch
 took main's version by merging rather than duplicating the refactor, so no
 branch-owned source carries the finding.
 
-No acceptance blocker remains, and the last recorded one has cleared. The
-dispatch-only `Publish dry run` passes on both platforms: on `6d421d5f`, run
-`43796595772` completed `build-test (linux)` with step 38 green and
-`build-test (windows)` with step 37 green, alongside the fully green
-pull-request run `43792388534` on the same commit. The release-ordering failure
-recorded in earlier rounds — `cargo-orthohelp` verifying against the registry's
-then-published `ortho_config`, which predated the agent-context policy types —
-was red on `f891f86b` in run `43740038649` and is not reproducible on this
-head. The earlier record is superseded rather than deleted.
+No acceptance blocker is open against a published head, and the last recorded
+one has cleared. The candidate carrying the 2026-11-20 repairs is not yet
+certified — its local gates and hosted run are pending, and Progress records
+them as outstanding rather than as passed. The dispatch-only `Publish dry run`
+passes on both platforms: on `6d421d5f`, run `43796595772` completed
+`build-test (linux)` with step 38 green and `build-test (windows)` with step 37
+green, alongside the fully green pull-request run `43792388534` on the same
+commit. The release-ordering failure recorded in earlier rounds —
+`cargo-orthohelp` verifying against the registry's then-published
+`ortho_config`, which predated the agent-context policy types — was red on
+`f891f86b` in run `43740038649` and is not reproducible on this head. The
+earlier record is superseded rather than deleted.
 
 The local wall-clock reds recorded in earlier rounds are superseded. Every one
 was a deadline or allowance kill with no assertion, output or exit-status
