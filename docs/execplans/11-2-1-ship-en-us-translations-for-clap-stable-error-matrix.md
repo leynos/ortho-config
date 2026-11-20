@@ -22,9 +22,10 @@ the standard macro an inert list trusts, and a conditional inline module whose
 declared file the walk skipped. Both are repaired in code head `2522013d`,
 which carries a full local certificate, and the record head `213fd827` is green
 on every job of the pull-request lane (2026-11-20). The hosted CodeScene check
-then flagged one advisory duplication in the new symlink controls; a further
-candidate extracts their shared staging, and its certificate is recorded in
-Progress.
+then flagged one advisory duplication in the new symlink controls; candidate
+`bb0fa4a3` extracts their shared staging, passed the re-taken certificate, and
+is green on every hosted job including CodeScene (2026-11-20), as Progress
+records.
 
 This ExecPlan is a living document. Keep Constraints, Tolerances, Risks,
 Progress, Surprises & discoveries, Decision log, Outcomes & retrospective,
@@ -1081,6 +1082,19 @@ stopping and reporting.
       symlinked module file, and the message it requires. `cs review` scores
       the file 10.0 with no findings, and `cs delta origin/main` reports no
       issues in the checked changes.
+
+- [x] (2026-11-20) The extraction candidate carries its own certificate and a
+      green hosted run. Check-fmt, typecheck, lint, markdownlint, nixie, the
+      workflow contracts and `make test` all pass on the tree that became
+      `bb0fa4a3`: 122 Rust targets ran with 3202 tests passed and none failed,
+      the boundary target was green inside `make test` (44 passed, 0 failed, 10
+      ignored in 109.94 s), and the Python suite reported 128 passed, 5
+      skipped. A standalone `make boundary` on the same tree was load-blocked
+      under compile-admission saturation (34 passed, 10 failed, 10 ignored in
+      907.83 s), every failure an allowance kill with no assertion or rustc
+      diagnostic, so the boundary certificate is the run inside `make test`.
+      Hosted run `44712173544` then passed all eight jobs on `bb0fa4a3`, and
+      its `CodeScene Code Health Review (main)` check completes `success`.
 
 ## Surprises & discoveries
 
