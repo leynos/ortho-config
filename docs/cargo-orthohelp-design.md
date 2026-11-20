@@ -872,11 +872,13 @@ Publishing a newly generated IR compares it with the existing entry before
 replacing the file, so identical content keeps its modification time. The
 comparison is bounded by the new payload's length: the entry's size is checked
 through metadata first, and its body is then read through a limit of one byte
-beyond that length. A larger or otherwise mismatched entry is therefore never
-read into memory. An entry that is not a regular file is reported as a read
-failure instead of being treated as a harmless mismatch and overwritten. On
-Unix the entry is opened with `O_NONBLOCK`, so a FIFO at the cache path is
-rejected rather than stalling the build in an open that waits for a writer.
+beyond that length. An entry whose metadata length differs from the new
+payload's length is therefore never read into memory; a same-length entry with
+different content is read, but never beyond that bound. An entry that is not a
+regular file is reported as a read failure instead of being treated as a
+harmless mismatch and overwritten. On Unix the entry is opened with
+`O_NONBLOCK`, so a FIFO at the cache path is rejected rather than stalling the
+build in an open that waits for a writer.
 
 Digests are SHA-256 and the crate-internal `cargo-orthohelp/src/hex.rs` helper
 renders full digests as 64 lowercase hexadecimal digits. `sha2` 0.11 returns
