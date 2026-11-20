@@ -19,8 +19,9 @@ with a control apiece in candidate `b3b9d21f`, which passed the same
 certificate and a hosted run. A whole-plan assessment of `b3b9d21f` then
 returned "not yet complete" with two more: a local `macro_rules!` that shadows
 the standard macro an inert list trusts, and a conditional inline module whose
-declared file the walk skipped. Both are repaired in the candidate under test,
-which awaits its own certificate and hosted checks (2026-11-20).
+declared file the walk skipped. Both are repaired in code head `2522013d`,
+which carries a full local certificate and awaits its hosted checks
+(2026-11-20).
 
 This ExecPlan is a living document. Keep Constraints, Tolerances, Risks,
 Progress, Surprises & discoveries, Decision log, Outcomes & retrospective,
@@ -1013,6 +1014,40 @@ stopping and reporting.
       - Design §6.1.1 and ADR-0024's negative-control paragraph record both
         refusals.
 
+- [x] (2026-11-20) The `2522013d` repair carries a full local certificate.
+      A standalone `make boundary` attempt taken earlier in the round was
+      destroyed by compile-admission saturation and is superseded by the green
+      boundary run inside `make test`.
+      - `make fmt`, then `make check-fmt` (113 files unchanged),
+        `make typecheck`, and `make lint` (rustdoc, Clippy, then Whitaker,
+        finishing at 100.0% `interrogate`, 1044/1044 items).
+      - `make markdownlint` (0 issues; the spelling gate clean and
+        `typos.toml` unchanged), `make nixie`, and
+        `make test-workflow-contracts` (729 passed, 1 skipped).
+      - `make test` exited 0. Inside that run the boundary target reports
+        44 passed, 0 failed, and 10 ignored in 346.98 s, and the Python phase
+        128 passed and 5 skipped.
+      - The focused `clap_error_coverage` target passed 59 tests in 48.64 s,
+        including `resolved_clap_builder_inventory_matches_the_reviewed_total`,
+        so the stricter walk still counts the real `clap_builder` 4.6.7
+        inventory as 17.
+      - The standalone `make boundary` attempt reported 35 passed, 9 failed,
+        and 10 ignored in 905.20 s, and every failure is an allowance kill
+        rather than an assertion: six `cargo package` invocations exceeded the
+        309 second deadline, one `cargo test` was reduced to a 4 second
+        remainder, one reported the 900 second shared allowance exhausted
+        while waiting for a sibling, and `concurrent_runs_are_serialized`
+        timed out waiting for its first probe to start. The log carries
+        `[build-limits] ... waiting for a compile slot`, and
+        `build-limits-status` read `capacity 4, held 4, healthy` with dozens
+        of queued compiler groups and a load average of 27-31 on 24 cores. The
+        same target passed inside `make test` once the queue drained, which
+        attributes the red to saturation rather than to this change; the log
+        is kept at
+        `/tmp/boundary-saturation-2522013d-ortho-config-11-2-1.out`.
+      - Hosted checks on `2522013d` are pending; the record commit that carries
+        this bullet changes documentation only.
+
 ## Surprises & discoveries
 
 The plan first incorporated merged PR #651 at
@@ -1409,17 +1444,17 @@ took main's version by merging rather than duplicating the refactor, so no
 branch-owned source carries the finding.
 
 No acceptance blocker is open against a published head, and the last recorded
-one has cleared. The candidate carrying the 2026-11-20 repairs is not yet
-certified — its local gates and hosted run are pending, and Progress records
-them as outstanding rather than as passed. The dispatch-only `Publish dry run`
-passes on both platforms: on `6d421d5f`, run `43796595772` completed
-`build-test (linux)` with step 38 green and `build-test (windows)` with step 37
-green, alongside the fully green pull-request run `43792388534` on the same
-commit. The release-ordering failure recorded in earlier rounds —
-`cargo-orthohelp` verifying against the registry's then-published
-`ortho_config`, which predated the agent-context policy types — was red on
-`f891f86b` in run `43740038649` and is not reproducible on this head. The
-earlier record is superseded rather than deleted.
+one has cleared. The code head carrying the 2026-11-20 repairs, `2522013d`, now
+carries a full local gate certificate; only its hosted run is pending, and
+Progress records that observation as outstanding rather than as passed. The
+dispatch-only `Publish dry run` passes on both platforms: on `6d421d5f`, run
+`43796595772` completed `build-test (linux)` with step 38 green and
+`build-test (windows)` with step 37 green, alongside the fully green
+pull-request run `43792388534` on the same commit. The release-ordering failure
+recorded in earlier rounds — `cargo-orthohelp` verifying against the registry's
+then-published `ortho_config`, which predated the agent-context policy types —
+was red on `f891f86b` in run `43740038649` and is not reproducible on this
+head. The earlier record is superseded rather than deleted.
 
 The local wall-clock reds recorded in earlier rounds are superseded. Every one
 was a deadline or allowance kill with no assertion, output or exit-status
