@@ -11,9 +11,10 @@
 //! bindings the item-macro audit has to resolve, `macros` holds the item-macro
 //! refusals, `tokens` reads the rendered token streams they inspect, `symlinks`
 //! stages the trees that prove which symlinks the walk may ignore and which it
-//! must refuse, and `files` confines the reads to capability handles.
-//! `tests/clap_error_coverage.rs` wires them together in the published order:
-//! metadata, lock, identity, edge, count.
+//! must refuse, `module_tree` holds the committed trees that prove which module
+//! shapes the walk follows and which it refuses, and `files` confines the reads
+//! to capability handles. `tests/clap_error_coverage.rs` wires them together in
+//! the published order: metadata, lock, identity, edge, count.
 
 mod audit;
 mod files;
@@ -31,6 +32,9 @@ mod classes;
 
 #[cfg(test)]
 mod controls;
+
+#[cfg(test)]
+mod module_tree;
 
 #[cfg(test)]
 mod properties;

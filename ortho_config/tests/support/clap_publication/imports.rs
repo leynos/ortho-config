@@ -16,12 +16,17 @@
 //! A `#[macro_use]` module is the third route. It imports every `macro_rules!`
 //! name its target declares into the enclosing scope and the modules below it,
 //! so an inert name is trusted only where the crate declares no macro of that
-//! name or `#[macro_use]` appears nowhere. `#[macro_use] extern crate` imports
-//! names from another crate entirely, which no local set can bound.
+//! name or `#[macro_use]` appears nowhere. The attribute can itself be applied
+//! through `cfg_attr`, including a nested one, and Rust expands it before the
+//! import happens, so the attribute is resolved recursively rather than by its
+//! immediate spelling. `#[macro_use] extern crate` imports names from another
+//! crate entirely, which no local set can bound.
 
 use std::collections::BTreeSet;
 
 use syn::{Attribute, Ident, Item, ItemMod, UseTree};
+
+use super::audit::applies_attribute;
 
 /// What the `use` items of one item list can bind.
 #[derive(Debug, Default)]
@@ -137,9 +142,13 @@ impl CrateScope {
     }
 }
 
-/// Whether the attributes carry `#[macro_use]`.
+/// Whether the attributes apply `#[macro_use]`, directly or through `cfg_attr`.
+///
+/// `#[cfg_attr(all(), macro_use)]` names `cfg_attr` on the item, so a check of
+/// the immediate path would miss an import Rust really performs: `all()` holds,
+/// the attribute is applied, and the helper's macros reach the modules below.
+/// The shared attribute search expands the condition's consequence, which is
+/// the same reason `cfg` and `path` are resolved that way.
 fn has_macro_use(attributes: &[Attribute]) -> bool {
-    attributes
-        .iter()
-        .any(|attribute| attribute.path().is_ident("macro_use"))
+    applies_attribute(attributes, "macro_use")
 }
