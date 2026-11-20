@@ -1193,6 +1193,27 @@ stopping and reporting.
       standalone `make boundary` on the same tree passed with 44 passed, 0
       failed and 10 ignored in 21.73s.
 
+- [x] (2026-11-21) The ninth whole-plan assessment found two further
+      fail-closed gaps, and each is repaired with a control that fails without
+      the repair. Attribute matching is now one recursive search
+      (`audit::applies_attribute`) shared by `cfg`, `path` and `macro_use`, so
+      `#[cfg_attr(all(), macro_use)]` imports its macros exactly as the direct
+      spelling does, a nested `cfg_attr` included; the new fixture
+      `module_tree/cfg_attr_macro_use` compiles under
+      `rustc --edition=2024 --crate-type=lib` and is refused. A rendered token
+      can carry a raw identifier, and `proc-macro2` 1.0.107 prints `r#include`
+      with its prefix, so `tokens::macro_name` strips `r#` before resolving the
+      name; `module_tree/raw_identifier_include` wraps
+      `r#include!("inventory.inc")` in a local `macro_rules! wrapper` and is
+      refused. The module-tree controls moved to their own `module_tree`
+      submodule so both files stay well inside the 400-line cap, and the
+      direct `macro_use_inert_macro` control is retained beside the new
+      `cfg_attr` one. Non-vacuity, each mutation restored byte-identically:
+      restoring the immediate-path `macro_use` check fails
+      `case_18_cfg_attr_macro_use` alone while the other nineteen table cases
+      pass, and dropping the prefix strip fails
+      `case_19_raw_identifier_include` alone.
+
 ## Surprises & discoveries
 
 The plan first incorporated merged PR #651 at

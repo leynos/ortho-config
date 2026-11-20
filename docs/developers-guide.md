@@ -1439,10 +1439,14 @@ build script, writes no `rustc-env` value, and runs in no consumer build.
   macro this file defines with `macro_rules!` has tokens the gate can scan, and
   it accepts one when neither the transcription nor the call's arguments can
   spell `ErrorKind`; `compile_error!` is allowed because it produces no item. A
-  `mod` declaration whose file the walk cannot read is refused as well: the
-  walk skips symlinks so an alias is not counted twice, which means a module
-  file that is a symlink leaves the compiler loading source the walk never
-  parses.
+  name a transcription invokes is resolved the same way, and an inert name is
+  trusted only where no import could have rebound it: an exact `use` binding,
+  an internal glob bounded by the crate's own names, or a `#[macro_use]` module
+  — including one applied through `cfg_attr` — makes it ambiguous. A raw
+  identifier such as `r#include` resolves as its plain spelling. A `mod`
+  declaration whose file the walk cannot read is refused as well: the walk
+  skips symlinks so an alias is not counted twice, which means a module file
+  that is a symlink leaves the compiler loading source the walk never parses.
 - `ortho_config/tests/support/clap_reviewed.rs` holds
   `CLAP_ERROR_KIND_COUNT`, the reviewed total. The gate and
   `tests/clap_error_matrix.rs` both read it, so the two cannot drift: the
@@ -1462,11 +1466,14 @@ build script, writes no `rustc-env` value, and runs in no consumer build.
   refusals are proved against the shape metadata actually emits.
   `module_tree/macro_generated_definition/` pairs a decoy with an inventory that
   `include!` splices from a contained `inventory.inc`, which the Rust source
-  walk does not read. The symlink trees cannot be committed — a symlink
-  materializes as a text file on a Windows checkout — so `symlinks` stages them
-  in a temporary directory: one aliases the declaring module and must stay
-  uncounted, the other makes a declared module file a symlink and must be
-  refused.
+  walk does not read. `module_tree/cfg_attr_macro_use/` and
+  `module_tree/raw_identifier_include/` stage the two further spellings of that
+  splice: a `#[macro_use]` applied through `cfg_attr(all(), …)`, and a
+  transcription that spells `include!` as `r#include!`. The symlink trees
+  cannot be committed — a symlink materializes as a text file on a Windows
+  checkout — so `symlinks` stages them in a temporary directory: one aliases
+  the declaring module and must stay uncounted, the other makes a declared
+  module file a symlink and must be refused.
 - `ortho_config/tests/fixtures/clap_matrix/drifted_rows.rs` holds the matrix
   drift fixtures. It is a committed module rather than loose data because the
   checks it exercises are typed over `ErrorKind` and `ClapErrorTranslation`;

@@ -49,6 +49,20 @@ fn is_cfg_attribute(attribute: &Attribute) -> bool {
     attribute.path().is_ident("cfg") || attribute.path().is_ident("cfg_attr")
 }
 
+/// Whether any attribute applies `name`, directly or through `cfg_attr`.
+///
+/// The search recurses because Rust expands a `cfg_attr` into the attributes
+/// it names, and a nested `cfg_attr` can apply the same attribute again. A
+/// `cfg_attr` condition the gate cannot evaluate counts as a match, because an
+/// unreadable attribute must not be the reason a module or a binding is
+/// trusted. Each caller decides what the match costs it: `cfg` and `path` make
+/// a module refuse, while `macro_use` makes an inert name ambiguous.
+pub(super) fn applies_attribute(attributes: &[Attribute], name: &str) -> bool {
+    attributes
+        .iter()
+        .any(|attribute| meta_applies(&attribute.meta, name))
+}
+
 /// Whether any attribute can remove its item from the build.
 ///
 /// `#[cfg(..)]` always can. `#[cfg_attr(cond, ..)]` cannot by itself — it only
@@ -58,9 +72,7 @@ fn is_cfg_attribute(attribute: &Attribute) -> bool {
 /// `#![cfg_attr(docsrs, feature(doc_cfg))]`, which leaves the file in every
 /// build, so refusing every `cfg_attr` would fail the real package.
 pub(super) fn has_presence_conditional_attribute(attributes: &[Attribute]) -> bool {
-    attributes
-        .iter()
-        .any(|attribute| meta_applies(&attribute.meta, "cfg"))
+    applies_attribute(attributes, "cfg")
 }
 
 /// Whether a `mod` declaration names the file to load instead of the default.
@@ -69,9 +81,7 @@ pub(super) fn has_presence_conditional_attribute(attributes: &[Attribute]) -> bo
 /// that applies one — can make the compiler load a different file, so the
 /// declaration is refused rather than followed as if the default held.
 pub(super) fn declares_module_path(attributes: &[Attribute]) -> bool {
-    attributes
-        .iter()
-        .any(|attribute| meta_applies(&attribute.meta, "path"))
+    applies_attribute(attributes, "path")
 }
 
 /// Whether `meta` names `name`, or a `cfg_attr` applies something that does.

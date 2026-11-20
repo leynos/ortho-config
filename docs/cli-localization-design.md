@@ -518,8 +518,11 @@ well as to one at item level: a locally defined wrapper can call `include!`
 while its own transcription spells no `ErrorKind`, so trusting an unresolved
 nested name would hide the same splice one level down. A nested name must
 resolve to a transcription in the file or be a standard macro that expands only
-to an expression, statement, or literal. Those standard names are consulted
-only where nothing else in the module claims them: Rust lets a `macro_rules!`
+to an expression, statement, or literal. A rendered name can carry `r#`,
+because a raw identifier keeps its prefix, and Rust resolves `r#include` to
+`include`; the prefix is therefore removed before the name is resolved, rather
+than the invocation left unrecognized. Those standard names are consulted only
+where nothing else in the module claims them: Rust lets a `macro_rules!`
 definition shadow a prelude or `std` macro, so a local `assert_eq!` or
 `compile_error!` is a splice of its own rather than the macro its name
 suggests, and a `use` item binds the same way.
@@ -534,22 +537,25 @@ unresolved name in its module. A `#[macro_use]` module is a third route that
 needs no `use` item at the call at all: the attribute imports every
 `macro_rules!` name its target declares into the enclosing scope and the
 modules below it, so a crate carrying one is trusted only for names it declares
-no macro of. `#[macro_use] extern crate` imports names from another crate
-entirely, so it refuses every unresolved name. `compile_error!` is allowed
-where those conditions hold, because it produces no item. Separately, a `mod`
-declaration whose file the walk cannot read is refused: the walk reads regular
-`.rs` files only, so that a symlink alias is not counted as a second
-declaration, which also means a declared module file that is a symlink leaves
-the compiler loading source the walk never parses. Each symlink control stages
-its link with a target relative to the link's own directory and reads the link
-back before the walk runs, so the inventory it hides is one the compiler would
-really load rather than a dangling name. A condition does not exempt that check
-either, for the same reason it does not exempt the declaration itself: the gate
-resolves the file before it sets a conditional module aside. A conditional
-module is inspected rather than skipped for the same reason. It cannot supply
-the count, but its body and its file are still walked, because a condition that
-holds would compile them, and a declaration inside it could name a module file
-the walk never reads. So neither a conditional `mod error;` whose file is a
+no macro of. A `cfg_attr` can apply the attribute as well, directly or through
+a further `cfg_attr`, and the compiler applies it before the import happens, so
+the attribute is resolved recursively rather than by its immediate spelling.
+`#[macro_use] extern crate` imports names from another crate entirely, so it
+refuses every unresolved name. `compile_error!` is allowed where those
+conditions hold, because it produces no item. Separately, a `mod` declaration
+whose file the walk cannot read is refused: the walk reads regular `.rs` files
+only, so that a symlink alias is not counted as a second declaration, which
+also means a declared module file that is a symlink leaves the compiler loading
+source the walk never parses. Each symlink control stages its link with a
+target relative to the link's own directory and reads the link back before the
+walk runs, so the inventory it hides is one the compiler would really load
+rather than a dangling name. A condition does not exempt that check either, for
+the same reason it does not exempt the declaration itself: the gate resolves
+the file before it sets a conditional module aside. A conditional module is
+inspected rather than skipped for the same reason. It cannot supply the count,
+but its body and its file are still walked, because a condition that holds
+would compile them, and a declaration inside it could name a module file the
+walk never reads. So neither a conditional `mod error;` whose file is a
 symlink, nor a `mod` declaration nested inside a conditional inline module, can
 hide an inventory behind a condition that is true.
 
