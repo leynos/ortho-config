@@ -46,10 +46,10 @@ Feature: Profile metadata keeps sensitive values private
     When I rerun cargo-orthohelp with cache for the profile-redaction fixture
     Then the cached IR is reused
 
-  Scenario: A pre-change cache entry is never reused
+  Scenario: An entry the current cache key does not name is never reused
     Given a temporary output directory
     And the orthohelp cache is empty
-    And a pre-change cache entry retains a protected sentinel
+    And a cache entry under an unrelated key retains a protected sentinel
     When I run cargo-orthohelp with no-build for the profile-redaction fixture
     Then the command fails due to missing cache
-    And the pre-change cache entry was not rewritten
+    And the unrelated cache entry was not rewritten

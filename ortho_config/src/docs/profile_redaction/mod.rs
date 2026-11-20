@@ -202,6 +202,41 @@ impl DocMetadata {
         self
     }
 
+    /// Returns a group of sibling documents projected as one unit.
+    ///
+    /// A public boundary that returns several documents at once — the
+    /// generated `OrthoConfigSubcommandDocs` methods return one document per
+    /// enum variant — must decide the command-example rule over the group, not
+    /// per document. When any member declares a protected field, every
+    /// member's command-level examples are suppressed; when none does, the
+    /// documents are returned unchanged apart from their own projection.
+    ///
+    /// Each member is projected exactly once, so a document a child boundary
+    /// already projected keeps its result and only takes the group decision.
+    /// Members are projected in the caller's order.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use ortho_config::docs::DocMetadata;
+    ///
+    /// # fn demo(documents: Vec<DocMetadata>) {
+    /// let projected = DocMetadata::redacted_group_for_output(documents);
+    /// assert!(projected.iter().all(|doc| doc.fields.iter()
+    ///     .all(|field| field.profile_field.is_none() || field.default.is_none())));
+    /// assert!(projected.iter().all(|doc| doc.sections.examples.is_empty()
+    ///     || doc.fields.iter().all(|field| field.profile_field.is_none())));
+    /// # }
+    /// ```
+    #[must_use]
+    pub fn redacted_group_for_output(mut documents: Vec<Self>) -> Vec<Self> {
+        let has_protected = documents.iter().any(Self::contains_protected_field);
+        for document in &mut documents {
+            document.redact_node(has_protected);
+        }
+        documents
+    }
+
     /// Reports whether this subtree declares any protected field.
     fn contains_protected_field(&self) -> bool {
         #[cfg(test)]

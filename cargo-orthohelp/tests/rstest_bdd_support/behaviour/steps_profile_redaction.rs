@@ -12,7 +12,7 @@ use super::profile_redaction_support::{
     COMMAND_EXAMPLE_SENTINELS, ORDINARY_ROOT_TYPE, REDACTION_ROOT_TYPE, REFERENCE_SENTINELS,
     SECRET_SENTINELS, UNSUPPORTED_ROOT_TYPE, UNSUPPORTED_SENTINELS, all_protected_sentinels,
     paired_named_contexts, require, run_agent_context, run_all_formats, run_checked,
-    seed_pre_change_cache, sentinel_categories,
+    seed_unrelated_cache_entry, sentinel_categories,
 };
 use super::steps::{OrthoHelpContext, StepResult, run_orthohelp};
 use super::steps_cache::record_cache_state;
@@ -154,9 +154,9 @@ fn fixture_declares_hidden_and_file_only_fields() -> StepResult<()> {
     )
 }
 
-#[given("a pre-change cache entry retains a protected sentinel")]
-fn seed_pre_change_entry(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
-    seed_pre_change_cache(orthohelp_context)
+#[given("a cache entry under an unrelated key retains a protected sentinel")]
+fn seed_unrelated_entry(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
+    seed_unrelated_cache_entry(orthohelp_context)
 }
 
 // ---------------------------------------------------------------------------

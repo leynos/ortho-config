@@ -744,10 +744,11 @@ label survive. When any field in the tree is protected, every command-level
 example in the tree is removed as well, because an unstructured example cannot
 be mapped back to the fields it exercises. The projection is applied by the
 derive, by the `cargo-orthohelp` pipeline, by the generated bridge, and again
-at the agent-context boundary, and the agent-context cache identity includes
-the disclosure-policy salt. The full contract, including the
-flattened-container rejection, is recorded in
-[ADR-0024](adrs/adr-0024-profile-field-redaction.md).
+at the agent-context boundary; a subcommand selector that returns several
+documents applies it to the returned group, so the command-example rule is
+decided once for every sibling. The agent-context cache identity includes the
+disclosure-policy salt. The full contract, including the flattened-container
+rejection, is recorded in [ADR-0024](adrs/adr-0024-profile-field-redaction.md).
 
 Agent context also carries a names-only catalogue: validated `ProfileName`
 values, sorted and deduplicated, with no profile body. Supplying names

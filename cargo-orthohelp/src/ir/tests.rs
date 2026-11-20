@@ -74,7 +74,11 @@ fn protected_field() -> FieldMetadata {
         }),
         env: None,
         file: None,
-        examples: Vec::new(),
+        examples: vec![Example {
+            title_id: None,
+            code: SECRET_EXAMPLE.to_owned(),
+            body_id: None,
+        }],
         links: Vec::new(),
         notes: Vec::new(),
         profile_field: Some(ProfileFieldExposure::Secret),
@@ -127,6 +131,15 @@ fn localize_unprojected() -> super::LocalizedDocMetadata {
 
 #[test]
 fn direct_entry_projects_protected_slots() {
+    let raw = unprojected_tree();
+    let raw_child = raw.subcommands.first().expect("child command present");
+    let raw_field = raw_child.fields.first().expect("protected field present");
+    assert!(
+        !raw_field.examples.is_empty(),
+        "the fixture must start with a protected field example, or the \
+         assertion below cannot detect a retained one"
+    );
+
     let localized = localize_unprojected();
     let child = localized
         .subcommands

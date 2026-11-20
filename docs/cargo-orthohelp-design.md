@@ -340,11 +340,16 @@ A field may carry `profile_field: Option<ProfileFieldExposure>`, with the
 single owner in `ortho_config::docs`: `DocMetadata::redacted_for_output`
 removes protected defaults, field examples, CLI possible values, and nested
 enum members, and removes every command-level example when any field in the
-tree is protected. `cargo-orthohelp` does not implement or vary that policy.
-Its schema module re-exports the `ortho_config::docs` types, its pipeline
-projects deserialized IR before rendering, its bridge projects before writing
-IR JSON, and its agent-context adapter projects at its public boundary and
-derives protected-field records from the projected tree.
+tree is protected. A boundary that returns several documents at once — the
+derived `OrthoConfigSubcommandDocs` selector returns one node per enum variant
+— uses `DocMetadata::redacted_group_for_output`, which applies the
+command-example rule across the group so a protected field in one member
+suppresses every member's command examples. `cargo-orthohelp` does not
+implement or vary that policy. Its schema module re-exports the
+`ortho_config::docs` types, its pipeline projects deserialized IR before
+rendering, its bridge projects before writing IR JSON, and its agent-context
+adapter projects at its public boundary and derives protected-field records
+from the projected tree.
 
 `ir::localize_doc` is a public boundary in its own right, because a library
 caller may hand it unprojected metadata. It projects its argument once, before
@@ -372,10 +377,10 @@ setting it must not echo.
 
 Formal evidence covers the projection's semantics, not the binary. A Verus
 model in `verus/profile_redaction.rs` mirrors the production slots and proves
-noninterference and projection integrity over an unbounded preorder encoding of
-the command tree. Verus cannot reason about `String`, `Vec`, or serde
-attributes, so the model is a specification rather than generated code, and the
-correspondence is discharged by the differential property tests in
+noninterference and projection integrity over an unbounded parent-before-child
+encoding of the command tree. Verus cannot reason about `String`, `Vec`, or
+serde attributes, so the model is a specification rather than generated code,
+and the correspondence is discharged by the differential property tests in
 `ortho_config/src/docs/profile_redaction/` together with the golden and
 contract suites in `cargo-orthohelp/tests/`; the developers' guide records that
 residual boundary.
@@ -555,7 +560,12 @@ variant vocabulary:
 
 - **Single-field tuple variants** (`Run(RunArgs)`) delegate to the inner
   argument struct's `OrthoConfigDocs` implementation, override `app_name` with
-  the clap command label, and regenerate `about_id`.
+  the clap command label, and regenerate `about_id`. That child implementation
+  may be handwritten, so the derived selector is a disclosure boundary in its
+  own right: it projects the whole group of nodes it returns with
+  `DocMetadata::redacted_group_for_output`, deciding the command-example rule
+  once over the group rather than trusting each member. See
+  [ADR-0024](adrs/adr-0024-profile-field-redaction.md).
 - **Unit variants** (`Start`, `Stop`, `Status`) emit a minimal `DocMetadata`
   node: command label, generated `about_id`, default heading identifiers, and
   empty `fields` and `subcommands`. A service or daemon CLI is built from

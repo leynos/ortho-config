@@ -104,21 +104,33 @@ and ordinary field slots are preserved unchanged. The projection is idempotent
 and performs exactly two linear traversals: one to decide whether any protected
 field exists, then one projection pass over the whole tree.
 
-The policy has two method forms over that one implementation.
+The policy has three method forms over that one implementation.
 `redacted_for_output` borrows and returns a projected copy;
 `into_redacted_for_output` consumes the document and projects it in place, so a
-caller that already owns the tree pays no clone. Every public conversion
-boundary applies one of them exactly once over the whole document it returns,
-and private recursion never re-projects a subtree: the command-example decision
-is global, so a nested application would repeat work and risk a subtree-local
-decision. Derived metadata composes boundaries, because each generated
-`OrthoConfigDocs` and `OrthoConfigSubcommandDocs` method is itself public and
-both traits document handwritten implementations as supported; no public method
-may return unprojected metadata.
+caller that already owns the tree pays no clone; and
+`redacted_group_for_output` projects a group of sibling documents that one
+boundary returns together. The group form exists because the generated
+`OrthoConfigSubcommandDocs` methods return one document per enum variant and
+the command-example rule is decided over the group: when any member declares a
+protected field, every member's command examples go. Every public conversion
+boundary applies one of them exactly once over the whole document — or whole
+group of documents — it returns, and private recursion never re-projects a
+subtree: the command-example decision is global, so a nested application would
+repeat work and risk a subtree-local decision. Derived metadata composes
+boundaries, because each generated `OrthoConfigDocs` and
+`OrthoConfigSubcommandDocs` method is itself public and both traits document
+handwritten implementations as supported; no public method may return
+unprojected metadata. The subcommand selector is the case that makes this
+load-bearing: its variants are composed through the child's public
+`OrthoConfigDocs` method, which a handwritten implementation may answer with
+unprojected metadata, so the selector projects the group it returns rather than
+trusting its members.
 
 ### Boundaries
 
-- The derive emits metadata that has already been projected.
+- The derive emits metadata that has already been projected, and its
+  subcommand selector projects the group of child documents it returns, so a
+  handwritten child cannot pass an unprojected document through.
 - The `cargo-orthohelp` pipeline projects deserialized IR before rendering, so a
   handwritten or legacy JSON document cannot bypass the policy.
 - The generated bridge projects before writing IR JSON.
@@ -170,9 +182,11 @@ value-bearing slots are modelled individually, while slots the policy preserves
 verbatim are collapsed, because projecting them is the identity.
 
 Production stores the command tree as nested `subcommands`. The model stores it
-as a flat preorder sequence of commands, each naming its parent by index, and
-an explicit `is_tree_like` invariant requires a single root at index zero with
-every other command's parent strictly earlier. That encoding makes depth
+as a flat parent-before-child sequence of commands, each naming its parent by
+index, and an explicit `is_tree_like` invariant requires a single root at index
+zero with every other command's parent strictly earlier. Any topological order
+satisfies that invariant; production's preorder linearization is one instance,
+and no obligation depends on which order is chosen. That encoding makes depth
 unbounded, which is what a topology-preservation claim needs, and it is forced
 rather than preferred: Verus rejects structural recursion through a `Seq` of
 nodes. The recursive traversal is therefore covered by differential property
