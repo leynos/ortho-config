@@ -125,3 +125,30 @@ fn symlinked_module_file_is_refused() -> Result<()> {
     );
     Ok(())
 }
+
+/// A conditional module file the walk cannot read is refused, not skipped.
+///
+/// The condition does not make the declaration unreachable: `#[cfg(all())]`
+/// always holds, so the compiler loads `error.rs` exactly as it would an
+/// unconditional hop. A walk that skips every conditional declaration before
+/// resolving its file never notices that `error.rs` is a symlink to the
+/// four-variant inventory, and would certify the three-variant decoy beside it.
+#[test]
+fn conditional_symlinked_module_file_is_refused() -> Result<()> {
+    let (directory, tree) = staged_tree()?;
+    tree.write("lib.rs", "mod decoy;\n\n#[cfg(all())]\nmod error;\n")
+        .context("write the crate root")?;
+    tree.write("decoy.rs", ALIASED_ERROR_KIND)
+        .context("write the compiled decoy")?;
+    tree.write("inventory.txt", CONTAINED_ERROR_KIND)
+        .context("write the contained inventory")?;
+    tree.symlink("inventory.txt", "error.rs")
+        .context("alias the contained inventory as a conditional module file")?;
+
+    let message = refusal(count_error_kinds_under(staged_root(&directory)?).map(|_| ()));
+    ensure!(
+        message.contains("is conditional and resolves to no file this walk reads"),
+        "{message:?} should name the conditional module whose source is unreadable",
+    );
+    Ok(())
+}

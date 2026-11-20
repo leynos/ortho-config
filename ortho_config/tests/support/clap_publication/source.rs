@@ -39,10 +39,11 @@ use cargo_metadata::Package;
 use syn::{Item, ItemMod};
 
 use super::audit::{
-    audit_definition, declares_module_path, has_presence_conditional_attribute, refuse_item_macros,
+    audit_definition, declares_module_path, has_presence_conditional_attribute,
     refuse_nested_error_kinds, reject_cfg_attributes,
 };
 use super::library::library_crate_root;
+use super::macros::refuse_item_macros;
 
 /// The crate root a library package compiles first when it declares no path.
 const CRATE_ROOT: &str = "lib.rs";
@@ -259,26 +260,45 @@ impl Reachability<'_> {
     /// Follows the unconditional modules among `items`, declared below `prefix`.
     fn visit_items(&mut self, items: &[Item], prefix: &Utf8Path, depth: usize) -> Result<()> {
         for item in items {
-            let Item::Mod(module) = item else { continue };
-            if declares_module_path(&module.attrs) {
-                bail!(
-                    "`mod {name}` below {prefix} carries a `#[path]` attribute; the compiler may \
-                     load a file this walk does not follow, so the inventory is unprovable",
-                    name = module.ident,
-                );
-            }
-            if has_presence_conditional_attribute(&module.attrs) {
-                continue;
-            }
-            match &module.content {
-                Some((_, nested)) => {
-                    let inline = prefix.join(module.ident.to_string());
-                    self.visit_items(nested, &inline, depth + 1)?;
-                }
-                None => self.visit_declared_files(module, prefix, depth)?,
+            if let Item::Mod(module) = item {
+                self.visit_module(module, prefix, depth)?;
             }
         }
         Ok(())
+    }
+
+    /// Follows one `mod` declaration according to its condition and shape.
+    fn visit_module(&mut self, module: &ItemMod, prefix: &Utf8Path, depth: usize) -> Result<()> {
+        if declares_module_path(&module.attrs) {
+            bail!(
+                "`mod {name}` below {prefix} carries a `#[path]` attribute; the compiler may \
+                 load a file this walk does not follow, so the inventory is unprovable",
+                name = module.ident,
+            );
+        }
+        if has_presence_conditional_attribute(&module.attrs) {
+            return self.skip_conditional_module(module, prefix);
+        }
+        match &module.content {
+            Some((_, nested)) => {
+                let inline = prefix.join(module.ident.to_string());
+                self.visit_items(nested, &inline, depth + 1)
+            }
+            None => self.visit_declared_files(module, prefix, depth),
+        }
+    }
+
+    /// Leaves a conditional module unvisited, still refusing an unreadable hop.
+    ///
+    /// An inline module keeps its own body in this file, so skipping it reads
+    /// nothing the walk would otherwise have missed. A file declaration is
+    /// different: [`ensure_conditional_source_is_readable`] checks the file the
+    /// compiler could still load.
+    fn skip_conditional_module(&self, module: &ItemMod, prefix: &Utf8Path) -> Result<()> {
+        match module.content {
+            Some(_) => Ok(()),
+            None => self.ensure_conditional_source_is_readable(module, prefix),
+        }
     }
 
     /// Follows the files one `mod name;` declaration below `prefix` resolves to.
@@ -299,6 +319,28 @@ impl Reachability<'_> {
         for candidate in candidates {
             self.visit_file(&candidate, depth + 1)?;
         }
+        Ok(())
+    }
+
+    /// Refuses a conditional module whose compiled source this walk cannot read.
+    ///
+    /// A condition is not evidence that the compiler skips the declaration:
+    /// `#[cfg(all())]` always holds, and the gate cannot evaluate any condition.
+    /// When such a declaration resolves to no file the walk reads — a symlinked
+    /// module file, for instance — the compiler can still load an inventory the
+    /// count never parses, so the hop fails closed instead of being skipped.
+    fn ensure_conditional_source_is_readable(
+        &self,
+        module: &ItemMod,
+        prefix: &Utf8Path,
+    ) -> Result<()> {
+        ensure!(
+            !module_files(prefix, module, self.sources).is_empty(),
+            "`mod {name}` below {prefix} is conditional and resolves to no file this walk reads; \
+             the condition may hold, so the compiler can load source the gate has not inspected \
+             and the inventory is unprovable",
+            name = module.ident,
+        );
         Ok(())
     }
 }

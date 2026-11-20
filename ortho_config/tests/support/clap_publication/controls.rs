@@ -244,6 +244,13 @@ fn unconditional_module_chain_is_counted() -> Result<()> {
     "macro_generated_definition",
     "its expansion can declare items this walk cannot read"
 )]
+// A local wrapper whose visible transcription spells no `ErrorKind` but calls
+// `include!` hides the same splice one level down, so the unresolved nested
+// name must be refused rather than trusted.
+#[case::macro_wrapped_include(
+    "macro_wrapped_include",
+    "its expansion can declare items this walk cannot read"
+)]
 // A tree without a reported crate root is refused rather than guessed at.
 #[case::no_crate_root("no_crate_root", "expected a crate root lib.rs")]
 fn module_tree_is_refused(#[case] fixture: &str, #[case] expected: &str) -> Result<()> {

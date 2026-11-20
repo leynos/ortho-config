@@ -12,8 +12,11 @@ records. A whole-plan assessment of `5ab1e7e9` then returned "not yet complete"
 with two fail-closed gaps in the source walk, both repaired in a candidate that
 passed its own nine-gate certificate and a hosted run including CodeScene. The
 replayed candidate `02c37347` has since passed the same certificate, and the
-published head `4908409f` — that candidate plus this record — is green on every
-hosted job, so only the two assessments remain (2026-11-19).
+published head `4908409f` — that candidate plus its record — is green on every
+hosted job. A whole-plan assessment of `4908409f` then returned "not yet
+complete" with two further fail-closed gaps in the source walk, both repaired
+with a control apiece in a candidate that awaits its own certificate and hosted
+checks (2026-11-19).
 
 This ExecPlan is a living document. Keep Constraints, Tolerances, Risks,
 Progress, Surprises & discoveries, Decision log, Outcomes & retrospective,
@@ -902,6 +905,71 @@ stopping and reporting.
         `tests/ui/clap_error_*.rs` fixtures are compiled by the already-listed
         `compile_fail` binary.
 
+- [x] (2026-11-19) Sixth whole-plan assessment (Assessment-ID
+      `EP-11-2-1-whole-plan-4908409f-20261119T2057Z`, head `4908409f`)
+      returned "not yet complete" with two fail-closed gaps in the source walk.
+      Both are repaired, each with a control that fails without its fix.
+      - **An unresolved nested macro was trusted.**
+        `transcription_is_clean` accepted an invoked name the file does not
+        define, on the argument that the macro "only receives tokens the
+        transcription supplied". A wrapper defeats that argument: its
+        transcription is `include!("inventory.inc")`, which spells no
+        `ErrorKind`, so the seventeen-variant decoy beside it was counted while
+        the included file declared eighteen. A nested name must now resolve to
+        a transcription in the file or be in `INERT_NESTED_MACROS`, the
+        standard macros that expand only to an expression, statement, or
+        literal.
+      - **A conditional module was skipped before its file was resolved.** Any
+        `mod` carrying a presence condition was passed over, so
+        `#[cfg(all())] mod error;` with a symlinked `error.rs` hid an inventory
+        behind a condition that always holds. A conditional declaration whose
+        default file names resolve to nothing is now refused; one that resolves
+        is still not certified.
+      - Controls: `module_tree/macro_wrapped_include/` stages the wrapper, the
+        decoy, and the included inventory and joins the `module_tree_is_refused`
+        cases; `conditional_symlinked_module_file_is_refused` stages the
+        conditional symlink in a temporary directory beside the existing alias
+        control.
+      - Non-vacuity was probed by reverting each guard in turn and restoring it
+        byte-identically (`cmp` clean): without the nested refusal the wrapper
+        case fails with an empty message, and without the resolution check the
+        conditional symlink case does the same.
+      - The resolved `clap_builder` 4.6.7 inventory still counts 17 and the
+        whole `clap_error_coverage` target passes (56 tests), so the stricter
+        nested rule rejects none of that crate's real transcriptions.
+      - Documentation follows the behaviour: design §6.1.1 records both
+        refusals, and ADR-0024's negative-control paragraph names both controls.
+
+- [x] (2026-11-20) Certifying that repair took two structural corrections,
+      and the standalone `make boundary` certificate was attempted but
+      destroyed by compile-admission saturation.
+      - Clippy's `excessive_nesting` refused the conditional branch added
+        inside `visit_items`. The walk now hands one declaration at a time to
+        `visit_module`, and `skip_conditional_module` leaves an inline module
+        alone without a nested `if`.
+      - Whitaker's `module-max-lines` then measured `audit.rs` at 413 lines
+        against the repository's 400-line cap. The item-macro refusals moved
+        unchanged into `support/clap_publication/macros.rs`: `audit.rs` keeps
+        the attribute and declaration-shape refusals at 166 lines and the new
+        module holds 264. `source.rs` imports `refuse_item_macros` from
+        `super::macros`, and `mod.rs`'s module map names it.
+      - `make check-fmt`, `make typecheck`, `make lint` (Clippy, Whitaker, and
+        `docstring-coverage` at 100%), `make test-workflow-contracts`
+        (729 passed, 1 skipped), `make markdownlint` and `make nixie` passed on
+        the repair.
+      - `make boundary` finished 32 passed and 12 failed in 908.50 s, and every
+        failure came from the contract's single 900 second shared allowance
+        rather than from an assertion: nested consumer builds exceeded 440 s
+        once and 298 s six times, two consumer tests were reduced to a 4 s and
+        a 3 s remainder of that allowance, and the rest reported the allowance
+        already exhausted while waiting for a sibling invocation. The log
+        carries `[build-limits] ... waiting for a compile slot`, and
+        `build-limits-status` read `capacity 4, held 4, healthy` with 140-226
+        queued compiler groups from other agents' repositories, so the
+        allowance was spent queueing. The gate is re-run once admission is
+        available; it exercises `ortho_l10n`'s runtime boundary, which this
+        change does not touch.
+
 ## Surprises & discoveries
 
 The plan first incorporated merged PR #651 at
@@ -1219,6 +1287,20 @@ nested inside a function rather than at item level.
   re-versioning decision of 2026-11-15 stands unchanged: the clap entries stay
   under `## Unreleased`, the v0.11.0 guide stays as released, and the clap
   migration sections live in `docs/v0-12-0-migration-guide.md`.
+- 2026-11-19: refuse a nested macro invocation that does not resolve in the
+  declaring file, unless it is one of the standard macros that expand only to
+  an expression, statement, or literal. The earlier rule trusted an unresolved
+  nested name because a macro "only receives tokens the transcription
+  supplied", but a locally defined wrapper passes `include!("inventory.inc")`
+  through without spelling the inventory's name, so the tokens argument does
+  not hold. The inert list is closed for the same reason the item-level rule is
+  narrow: a macro whose body the gate cannot read must not be assumed harmless.
+- 2026-11-19: resolve a conditional module's file before skipping the hop. The
+  gate cannot evaluate a condition and `#[cfg(all())]` always holds, so a
+  conditional declaration can compile source the walk must read. A conditional
+  `mod` whose default file names resolve to nothing is now refused; one that
+  does resolve is still not certified, so the unconditional-reachability rule
+  is unchanged.
 
 ## Outcomes & retrospective
 
@@ -1231,13 +1313,14 @@ owns the gate's troubleshooting procedure and its variant-intake steps; the
 roadmap records 11.2.1 as done with its finding and validation notes; and
 ADR-0028 records the mechanism.
 
-The gate reached its final shape over five whole-plan assessment rounds, and
+The gate reached its final shape over six whole-plan assessment rounds, and
 each round removed a way for the count to describe a build the compiler does
 not make: a conditional `mod` hop or file-level `#![cfg]`, a condition applied
-through a nested `cfg_attr`, a `#[path]` redirect, an assumed `src/lib.rs`, and
-finally a declaration nested in an inline module — conditional or not, because a
-`cfg` condition can hold and the gate cannot evaluate it. A compiling or
-counted shape the gate cannot prove now fails closed.
+through a nested `cfg_attr`, a `#[path]` redirect, an assumed `src/lib.rs`, a
+declaration nested in an inline module — conditional or not, because a `cfg`
+condition can hold and the gate cannot evaluate it — and finally a nested macro
+invocation or a conditional declaration whose module file the walk reads. A
+compiling or counted shape the gate cannot prove now fails closed.
 
 The hosted `Lint` blocker is cleared. The `bumpy-road-function` finding that
 Whitaker's rolling suite introduced at `880939d1` fired only in files
