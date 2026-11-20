@@ -101,6 +101,38 @@ fn cache_key_hash_uses_the_leading_sha256_bytes() {
     );
 }
 
+/// Directory name a pre-9.1.2 release computed for [`cache_key`].
+///
+/// Releases before the disclosure salt hashed the same inputs without the
+/// `disclosure:` segment. This is that digest, recomputed independently as
+/// SHA-256 over the concatenation `fingerprint`, `package`, `0.8.0`, `1`,
+/// `lockfile:`, `lockfile` and truncated to the leading bytes.
+const PRE_CHANGE_CACHE_HASH: &str = "v1-151fb1ee840f9a46d9843813b6877cda";
+
+/// Pins the unsalted sequence so the salt cannot be simulated loosely.
+///
+/// `pre_change_cache_entry_is_never_selected` in the bridge regressions seeds
+/// an entry under `hash_without_disclosure_policy`. If that helper drifted
+/// from the pre-change algorithm, the seeded name would no longer be the one an
+/// older release wrote and the regression would lose its subject.
+#[rstest]
+fn pre_change_cache_key_reproduces_the_unsalted_digest() {
+    assert_eq!(
+        cache_key().hash_without_disclosure_policy(),
+        PRE_CHANGE_CACHE_HASH,
+        "the unsalted helper must reproduce the pre-change directory name"
+    );
+}
+
+#[rstest]
+fn disclosure_salt_moves_the_cache_key() {
+    assert_ne!(
+        cache_key().hash(),
+        cache_key().hash_without_disclosure_policy(),
+        "folding the disclosure policy into the key must change its directory name"
+    );
+}
+
 #[rstest]
 fn cache_key_hash_names_a_directory_no_longer_than_the_digest_budget() {
     // The hash is a path component, and from cargo 1.100 every artefact

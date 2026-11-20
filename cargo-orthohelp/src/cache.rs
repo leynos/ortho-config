@@ -71,13 +71,36 @@ impl CacheKey {
     /// entry. The example is stated in prose rather than as a doctest because
     /// the inputs are crate-private.
     pub fn hash(&self) -> String {
+        self.hash_with_disclosure_policy(Some(DISCLOSURE_POLICY_VERSION))
+    }
+
+    /// Returns the directory name a release without the disclosure policy used.
+    ///
+    /// Before 9.1.2 the hash covered the same inputs without the
+    /// `disclosure:` segment, so an entry those releases wrote sits under this
+    /// name. The cache regression seeds an unredacted IR body there and proves
+    /// the current selection never reads it. Seeding an arbitrary directory
+    /// name could not show that, because any name other than the selected one
+    /// is ignored for reasons unrelated to the salt.
+    #[cfg(test)]
+    pub(crate) fn hash_without_disclosure_policy(&self) -> String {
+        self.hash_with_disclosure_policy(None)
+    }
+
+    /// Hashes the inputs, folding in a disclosure-policy salt when supplied.
+    ///
+    /// `None` reproduces the pre-9.1.2 input sequence exactly, so the
+    /// regression can distinguish a dropped salt from a merely different name.
+    fn hash_with_disclosure_policy(&self, disclosure_policy: Option<&str>) -> String {
         let mut hasher = Sha256::new();
         hasher.update(self.fingerprint.as_bytes());
         hasher.update(self.root_type.as_bytes());
         hasher.update(self.tool_version.as_bytes());
         hasher.update(self.ir_version.as_bytes());
-        hasher.update(b"disclosure:");
-        hasher.update(DISCLOSURE_POLICY_VERSION.as_bytes());
+        if let Some(policy) = disclosure_policy {
+            hasher.update(b"disclosure:");
+            hasher.update(policy.as_bytes());
+        }
         hasher.update(b"lockfile:");
         match &self.lockfile_hash {
             Some(hash) => hasher.update(hash.as_bytes()),
