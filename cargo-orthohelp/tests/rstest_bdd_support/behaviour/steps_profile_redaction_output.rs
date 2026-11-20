@@ -16,10 +16,10 @@ use super::profile_redaction_assertions::{
     require_records, section_examples,
 };
 use super::profile_redaction_support::{
-    ARTEFACT_LOCALES, PRE_CHANGE_CACHE_SENTINEL, UNSUPPORTED_SENTINELS, all_protected_sentinels,
+    ARTEFACT_LOCALES, UNRELATED_CACHE_SENTINEL, UNSUPPORTED_SENTINELS, all_protected_sentinels,
     assert_artefact_inventory, assert_sentinels_absent, command_nodes, context_command,
     context_input, ir_field, last_streams, paired_named_contexts, read_artefacts, read_irs,
-    read_out_json, read_pre_change_cache, read_stdout_json, require, serialized,
+    read_out_json, read_stdout_json, read_unrelated_cache_entry, require, serialized,
 };
 use super::steps::{OrthoHelpContext, StepResult};
 
@@ -347,17 +347,17 @@ fn cached_ir_is_sanitised(orthohelp_context: &mut OrthoHelpContext) -> StepResul
     Ok(())
 }
 
-#[then("the pre-change cache entry was not rewritten")]
-fn pre_change_entry_not_rewritten(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
-    let content = read_pre_change_cache(orthohelp_context)?;
+#[then("the unrelated cache entry was not rewritten")]
+fn unrelated_entry_not_rewritten(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
+    let content = read_unrelated_cache_entry(orthohelp_context)?;
     require(
-        content.contains(PRE_CHANGE_CACHE_SENTINEL),
-        "the pre-change entry should keep the literal it was written with",
+        content.contains(UNRELATED_CACHE_SENTINEL),
+        "the unrelated entry should keep the literal it was written with",
     )?;
     let (stdout, stderr) = last_streams(orthohelp_context)?;
     for (label, stream) in [("stdout", stdout), ("stderr", stderr)] {
         require(
-            !stream.contains(PRE_CHANGE_CACHE_SENTINEL),
+            !stream.contains(UNRELATED_CACHE_SENTINEL),
             format!("stale cached content leaked into {label}"),
         )?;
     }

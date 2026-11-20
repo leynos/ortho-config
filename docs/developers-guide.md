@@ -128,10 +128,12 @@ One production entry is registered:
   protected slots, preserves public descriptors and command topology, and is
   idempotent), and `profile_redaction_noninterference` (V1: two documents that
   agree on public metadata project to equal results however their protected
-  slots differ). Inputs are symbolic over a flat preorder encoding of the
-  command tree, with unbounded length and depth and an `is_tree_like` invariant
-  requiring one root and strictly earlier parents. `make verus` reports the
-  check count; the M2 gate recorded `27 verified, 0 errors`.
+  slots differ). Inputs are symbolic over a flat parent-before-child encoding
+  of the command tree, with unbounded length and depth and an `is_tree_like`
+  invariant requiring one root and strictly earlier parents; any topological
+  order satisfies it, and production's preorder linearization is one instance.
+  `make verus` reports the check count; the M2 gate recorded
+  `27 verified, 0 errors`.
 - Adding a module means attaching its proof to the registered entry point,
   because the verifier only reaches the files that entry point includes.
 - Negative controls: retaining a protected default, retaining a nested enum
@@ -1895,14 +1897,20 @@ argument at entry and recurses through a private function, because the
 command-example rule is decided from the entire tree and a nested call would
 clone and re-scan every subtree. A caller that already owns the document uses
 `into_redacted_for_output`, which projects in place without the copy; the
-derive and the binary's pipeline entry do this. The projection is idempotent,
-so a boundary may still apply it to input it did not project itself. Derived
-metadata composes boundaries: each generated `OrthoConfigDocs` and
-`OrthoConfigSubcommandDocs` method projects its own subtree, and a parent
-embeds the projected children. That costs one decision-and-projection pass per
-boundary rather than per node, which
+derive and the binary's pipeline entry do this. A boundary that returns several
+documents at once uses `redacted_group_for_output`, which decides the
+command-example rule over the group; the generated `OrthoConfigSubcommandDocs`
+methods do this, because a variant is composed through the child's public
+`OrthoConfigDocs` method and a handwritten child may answer with unprojected
+metadata. The projection is idempotent, so a boundary may still apply it to
+input it did not project itself. Derived metadata composes boundaries: each
+generated `OrthoConfigDocs` and `OrthoConfigSubcommandDocs` method projects its
+own subtree or group, and a parent embeds the projected children. That costs
+one decision-and-projection pass per boundary rather than per node, which
 `derived_deep_chain_projects_once_per_boundary` in
-`ortho_config/src/docs/profile_redaction/derive_tests.rs` pins.
+`ortho_config/src/docs/profile_redaction/derive_tests.rs` pins; the selector's
+group pass over an already-projected child is real work, but it decides only
+the group rule and never re-projects a child's values.
 
 ### Agent context
 

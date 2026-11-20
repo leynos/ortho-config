@@ -550,7 +550,12 @@ Cover JSON, roff, and PowerShell MAML across at least two available locales,
 with nested commands. Use `insta` for output shape and explicit semantic
 assertions for redaction; inspect snapshot diffs rather than accepting them
 blindly. Repeat generation with cache hits and a pre-change cache fixture to
-show that stale unredacted data is not reused.
+show that stale unredacted data is not reused. [Amended 2026-11-21: the real
+pre-change directory name cannot be constructed outside the binary crate,
+because the key folds in a package fingerprint that the binary derives
+privately and that varies with the checkout path. The claim is therefore
+carried by the in-crate pair named in the decision log, with the behavioural
+scenario renamed to the narrower property it can prove.]
 
 Acceptance is all V1–V5 evidence, successful `make verus` with zero failed
 obligations, the mutation controls, all BDD scenarios, and ordinary gates.
@@ -926,6 +931,25 @@ exclusion as it stood at that milestone; it no longer applies.
   oracle's bounds implicit; `ValueType::Scalar` gained an opaque tag so two
   scalar kinds cannot collapse to one constant. 27 obligations still verify.
 
+- [x] (2026-11-21) Close the subcommand-selector boundary and settle the
+  remaining assessment findings. The derived `OrthoConfigSubcommandDocs`
+  methods composed each variant through the child's public `OrthoConfigDocs`
+  method and returned the result untouched, so a handwritten child could hand a
+  direct caller a protected default; both methods now pass the group through
+  `DocMetadata::redacted_group_for_output`, which decides the command-example
+  rule over the group and projects each member once. Three integration
+  regressions in `ortho_config/tests/subcommand_docs.rs` cover both public
+  methods and a protected sibling's effect on an ordinary sibling's examples;
+  removing the group projection fails all three. The traversal-count regression
+  now pins 18 visits (12 for the three struct boundaries, 6 for the two
+  selector-group passes). The direct-entry localization fixture gained a
+  non-empty protected field example, so its assertion can detect a retained
+  one, with an explicit precondition that the raw fixture carries it. The
+  "preorder" wording in ADR-0024 and the developers' guide now describes the
+  parent-before-child encoding the invariant actually admits. The M2 pre-change
+  cache evidence is settled by the 2026-11-21 decision entry, and the
+  behavioural scenario is renamed to the property it proves.
+
 ## Surprises & discoveries
 
 The current context contains selector metadata, not profile bodies or names.
@@ -1127,6 +1151,31 @@ that this plan's own principle ("do not register these fixtures as production
 proofs") already treated as optional. M2 therefore recreates a
 production-proofs-only lane; no fixture acceptance/rejection lane exists in
 this repository, and the plan does not ask for one.
+
+2026-11-21, amended for M1: every derived `OrthoConfigSubcommandDocs` method
+projects the group of child documents it returns, through
+`DocMetadata::redacted_group_for_output`. The variants are composed through the
+child's public `OrthoConfigDocs` method, and both traits document handwritten
+implementations as supported, so a handwritten child can answer with marked but
+unprojected metadata; the selector boundary was the last place that could still
+hand a direct caller a protected value. The group form exists rather than a
+per-document call because the command-example rule is decided over the whole
+group: a protected variant suppresses the examples of every sibling.
+
+2026-11-21, amended for M2: the pre-change cache evidence is the in-crate pair
+`pre_change_cache_key_reproduces_the_unsalted_digest` and
+`pre_change_cache_entry_is_never_selected`, and the behavioural scenario is
+renamed to the narrower property it actually proves. The real pre-change
+directory name combines the same inputs as the current key minus the
+`disclosure:` segment, including a package fingerprint that the binary derives
+privately and that varies with the checkout path, so an integration test cannot
+construct it; seeding a name it invents would prove only that unrelated names
+are ignored. The in-crate tests reproduce the real pre-9.1.2 name through the
+same rendering path, pin the result to an independently recomputed digest
+vector, and require the live lookup to miss an entry seeded under that name
+while leaving it untouched. The behavioural scenario keeps its own, separately
+useful claim — an entry the current key does not name is neither read nor
+rewritten — under a title that states it.
 
 ## Outcomes & retrospective
 

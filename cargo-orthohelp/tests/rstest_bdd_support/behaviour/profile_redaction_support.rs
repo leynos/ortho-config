@@ -228,11 +228,11 @@ pub(super) fn sentinel_categories(sentinels: &[&str]) -> BTreeSet<&'static str> 
         })
         .collect()
 }
-/// Directory the pre-change cache scenario fabricates beneath the cache root.
-const PRE_CHANGE_CACHE_DIR: &str = "pre-change-entry";
+/// Directory the unrelated-key scenario fabricates beneath the cache root.
+const UNRELATED_CACHE_DIR: &str = "unrelated-entry";
 
 /// Literal no current generator can produce, so finding it proves reuse.
-pub(super) const PRE_CHANGE_CACHE_SENTINEL: &str = "STALE-CACHE-SENTINEL";
+pub(super) const UNRELATED_CACHE_SENTINEL: &str = "STALE-CACHE-SENTINEL";
 
 /// Writes a cache entry beneath the live cache root under an unrelated name.
 ///
@@ -242,25 +242,25 @@ pub(super) const PRE_CHANGE_CACHE_SENTINEL: &str = "STALE-CACHE-SENTINEL";
 /// derives privately; the other half of the claim lives in
 /// `pre_change_cache_entry_is_never_selected`, which constructs the real key
 /// in-crate and proves the exact pre-change name is not the selected one.
-pub(super) fn seed_pre_change_cache(ctx: &OrthoHelpContext) -> StepResult<()> {
+pub(super) fn seed_unrelated_cache_entry(ctx: &OrthoHelpContext) -> StepResult<()> {
     let cache_root = scenario_target_dir(ctx)?.join("orthohelp");
     Dir::create_ambient_dir_all(&cache_root, ambient_authority())?;
     let dir = Dir::open_ambient_dir(cache_root.as_path(), ambient_authority())?;
-    dir.create_dir(PRE_CHANGE_CACHE_DIR)?;
+    dir.create_dir(UNRELATED_CACHE_DIR)?;
     let body = serde_json::json!({
         "ir_version": ortho_config::docs::ORTHO_DOCS_IR_VERSION,
         "app_name": "redaction_fixture",
-        "about_id": PRE_CHANGE_CACHE_SENTINEL,
+        "about_id": UNRELATED_CACHE_SENTINEL,
     });
-    dir.write(format!("{PRE_CHANGE_CACHE_DIR}/ir.json"), body.to_string())?;
+    dir.write(format!("{UNRELATED_CACHE_DIR}/ir.json"), body.to_string())?;
     Ok(())
 }
 
-/// Reads the fabricated pre-change entry back.
-pub(super) fn read_pre_change_cache(ctx: &OrthoHelpContext) -> StepResult<String> {
+/// Reads the fabricated unrelated entry back.
+pub(super) fn read_unrelated_cache_entry(ctx: &OrthoHelpContext) -> StepResult<String> {
     let cache_root = scenario_target_dir(ctx)?.join("orthohelp");
     let dir = Dir::open_ambient_dir(cache_root.as_path(), ambient_authority())?;
-    Ok(dir.read_to_string(format!("{PRE_CHANGE_CACHE_DIR}/ir.json"))?)
+    Ok(dir.read_to_string(format!("{UNRELATED_CACHE_DIR}/ir.json"))?)
 }
 
 /// Returns the last run's stdout and stderr as text.

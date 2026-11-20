@@ -1269,11 +1269,12 @@ rejection so that a runner that verifies nothing cannot pass. See
 
 The first registered production proof is `verus/profile_redaction.rs`, which
 verifies the profile-field disclosure model: noninterference and projection
-integrity over an unbounded preorder encoding of the command tree. It reasons
-about a mirror of the projection rather than the runtime types, so the
-differential property tests and the generator's golden and contract suites
-remain the evidence that production implements the model. See
-[ADR-0026](adrs/adr-0026-profile-field-redaction.md).
+integrity over an unbounded parent-before-child encoding of the command tree.
+Any topological order satisfies that invariant; production's preorder
+linearization is one instance. It reasons about a mirror of the projection
+rather than the runtime types, so the differential property tests and the
+generator's golden and contract suites remain the evidence that production
+implements the model. See [ADR-0026](adrs/adr-0026-profile-field-redaction.md).
 
 ## 5. Dependency Strategy
 
@@ -1597,14 +1598,15 @@ generated documentation, generated agent context, and enforceable CLI policy.
   clears the default, field examples, CLI `possible_values`, and nested enum
   members, and suppresses command-level examples once any field in the tree is
   protected. The derive, the `cargo-orthohelp` pipeline, the generated bridge,
-  and the agent-context boundary all apply it, and the cache key carries the
-  `profile-redaction-v1` salt so an entry produced under another policy is
-  never reused. Public descriptors survive, including help identifiers, flag
-  and file spellings, and the label, so consumers can still name the setting
-  they must not echo. ADR-0023 records the contract, the wire additions, and
-  the residual testing boundary; `verus/profile_redaction.rs` is the first
-  registered production proof and establishes noninterference and projection
-  integrity over the model.
+  and the agent-context boundary all apply it, and a selector returning several
+  documents applies it to the whole group so the example rule is decided once
+  for every sibling; the cache key carries the `profile-redaction-v1` salt so
+  an entry produced under another policy is never reused. Public descriptors
+  survive, including help identifiers, flag and file spellings, and the label,
+  so consumers can still name the setting they must not echo. ADR-0026 records
+  the contract, the wire additions, and the residual testing boundary;
+  `verus/profile_redaction.rs` is the first registered production proof and
+  establishes noninterference and projection integrity over the model.
 
 [^hello-world-feedback]: `docs/feedback-from-hello-world-example.md`.
 [^behavioural-testing]: `docs/behavioural-testing-in-rust-with-cucumber.md`.

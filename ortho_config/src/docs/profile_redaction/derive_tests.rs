@@ -130,10 +130,15 @@ fn derived_deep_chain_projects_once_per_boundary() {
     let metadata = RootArgs::get_doc_metadata();
     let visits = traversal_probe::visits();
 
-    // Three boundaries, each projecting its own subtree of 3, 2 and 1 nodes,
-    // with one decision pass and one projection pass per node: 2 * (3 + 2 + 1).
+    // Three struct boundaries, each projecting its own subtree of 3, 2 and 1
+    // nodes, with one decision pass and one projection pass per node:
+    // 2 * (3 + 2 + 1). Each subcommand selector then projects the group it
+    // returns with those same two passes over its members' nodes: 2 * (2 + 1)
+    // for the middle selector and 2 * 1 for the leaf selector. The group pass
+    // is not a second projection of a child's own boundary — the child already
+    // returned a projected document — but it is real work, so it is counted.
     assert_eq!(
-        visits, 12,
+        visits, 18,
         "each derived boundary projects its own subtree exactly once"
     );
     assert!(

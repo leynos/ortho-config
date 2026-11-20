@@ -2291,7 +2291,10 @@ fields and simply publishes no selection metadata. `cargo-orthohelp` applies
 the projection to every artefact it generates, including the cached IR, so call
 `redacted_for_output` yourself only when you consume the metadata directly. If
 you already own the `DocMetadata` value, `into_redacted_for_output` projects it
-in place and avoids the copy; both forms return the same result.
+in place and avoids the copy; both forms return the same result. A handwritten
+`OrthoConfigSubcommandDocs` implementation, or any other boundary that returns
+several documents at once, uses `redacted_group_for_output`, which applies the
+command-example rule across the whole group rather than document by document.
 
 The policy is structural, so it cannot recognize a secret written into prose.
 Do not put sensitive material in help text, custom type names, links, or notes:
