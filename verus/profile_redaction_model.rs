@@ -1,10 +1,11 @@
 //! Model types, the disclosure projection, and its value-level lemmas.
 //!
 //! The crate root `profile_redaction.rs` documents the model-to-production
-//! mapping and why the command tree is encoded as a preorder sequence. This
-//! module holds that encoding verbatim: the `Doc`/`Command`/`Field`/`ValueType`
-//! shapes, the two projection traversals, the `is_tree_like` invariant, and the
-//! per-field and per-value lemmas the semantic obligations rest on.
+//! mapping and why the command tree is encoded as a parent-before-child
+//! sequence. This module holds that encoding verbatim: the
+//! `Doc`/`Command`/`Field`/`ValueType` shapes, the two projection traversals,
+//! the `is_tree_like` invariant, and the per-field and per-value lemmas the
+//! semantic obligations rest on.
 
 use vstd::prelude::*;
 
@@ -20,10 +21,19 @@ pub enum Exposure {
     ReferenceOnly,
 }
 
-/// A structural value type. Only `Enum(..)` carries literals.
+/// A structural value type. Only `Enum(..)` carries a list of literals.
 pub enum ValueType {
-    /// A scalar with no literals.
-    Scalar,
+    /// A scalar, tagged by which scalar kind it is.
+    ///
+    /// Production has ten distinct scalar variants (`String`, `Integer {
+    /// bits, signed }`, `Float { bits }`, `Bool`, `Duration`, `Path`, `IpAddr`,
+    /// `Hostname`, `Url`, `Custom`). The model collapses them into one opaque
+    /// tag: no obligation inspects which scalar it is, only that the projection
+    /// returns the same one, so the tag carries "same scalar kind" without
+    /// enumerating ten cases. Modelled as a carried field rather than as the
+    /// unit `Scalar` so that `clear_members` demonstrably preserves it instead
+    /// of reconstructing a constant.
+    Scalar(int),
     /// An enumeration and its members.
     Enum(Seq<int>),
     /// A list of the inner type.
@@ -78,7 +88,10 @@ pub struct Command {
     pub fields: Seq<Field>,
 }
 
-/// A documentation document: its commands in preorder.
+/// A documentation document: its commands in any parent-before-child order.
+///
+/// Production's nested encoding linearizes to preorder, which is one such
+/// order; [`is_tree_like`] states only what the proofs use.
 pub struct Doc {
     /// Every command of the tree.
     pub commands: Seq<Command>,
@@ -89,7 +102,7 @@ pub open spec fn clear_members(value: ValueType) -> ValueType
     decreases value
 {
     match value {
-        ValueType::Scalar => ValueType::Scalar,
+        ValueType::Scalar(tag) => ValueType::Scalar(tag),
         ValueType::Enum(_members) => ValueType::Enum(Seq::empty()),
         ValueType::List(inner) => ValueType::List(Box::new(clear_members(*inner))),
         ValueType::Map(inner) => ValueType::Map(Box::new(clear_members(*inner))),
@@ -197,7 +210,7 @@ pub proof fn clear_members_idempotent(value: ValueType)
     decreases value,
 {
     match value {
-        ValueType::Scalar => {},
+        ValueType::Scalar(_tag) => {},
         ValueType::Enum(_members) => {},
         ValueType::List(inner) => clear_members_idempotent(*inner),
         ValueType::Map(inner) => clear_members_idempotent(*inner),
@@ -251,7 +264,7 @@ pub open spec fn value_literals_cleared(value: ValueType) -> bool
     decreases value
 {
     match value {
-        ValueType::Scalar => true,
+        ValueType::Scalar(_tag) => true,
         ValueType::Enum(members) => members.len() == 0,
         ValueType::List(inner) | ValueType::Map(inner) => value_literals_cleared(*inner),
     }
@@ -273,7 +286,7 @@ pub proof fn clear_members_clears_members(value: ValueType)
     decreases value,
 {
     match value {
-        ValueType::Scalar => {},
+        ValueType::Scalar(_tag) => {},
         ValueType::Enum(_members) => {},
         ValueType::List(inner) => clear_members_clears_members(*inner),
         ValueType::Map(inner) => clear_members_clears_members(*inner),
