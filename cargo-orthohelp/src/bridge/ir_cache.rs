@@ -90,7 +90,7 @@ pub(super) fn read_cached_ir(paths: &BridgeCache) -> Result<Option<String>, Orth
 /// between the open and the check cannot substitute a special file for a
 /// regular one.
 #[cfg(unix)]
-fn open_cache_entry(dir: &cap_std::fs_utf8::Dir) -> std::io::Result<cap_std::fs_utf8::File> {
+fn open_cache_entry(dir: &cap_std::fs_utf8::Dir) -> std::io::Result<CacheEntry> {
     use cap_std::fs_utf8::OpenOptionsExt;
 
     let nonblock = i32::try_from(rustix::fs::OFlags::NONBLOCK.bits())
@@ -99,6 +99,7 @@ fn open_cache_entry(dir: &cap_std::fs_utf8::Dir) -> std::io::Result<cap_std::fs_
     options.read(true).custom_flags(nonblock);
 
     dir.open_with("ir.json", &options)
+        .map(|file| CacheEntry { file })
 }
 
 /// Opens the cached IR without blocking on a special file.
@@ -107,17 +108,45 @@ fn open_cache_entry(dir: &cap_std::fs_utf8::Dir) -> std::io::Result<cap_std::fs_
 /// directory-relative open cannot reach, so the hazard that motivates the
 /// non-blocking Unix open has no equivalent here.
 #[cfg(not(unix))]
-fn open_cache_entry(dir: &cap_std::fs_utf8::Dir) -> std::io::Result<cap_std::fs_utf8::File> {
-    dir.open("ir.json")
+fn open_cache_entry(dir: &cap_std::fs_utf8::Dir) -> std::io::Result<CacheEntry> {
+    dir.open("ir.json").map(|file| CacheEntry { file })
+}
+
+/// The opened cache entry, wrapped so every body read is observable.
+///
+/// The inner handle is private, so code between the open and the comparison
+/// can only reach cached content through the [`Read`] implementation here.
+/// The publish-path test counts those reads; without the wrapper, a body read
+/// added to [`cached_ir_matches`] outside the comparison would be invisible to
+/// every test.
+struct CacheEntry {
+    /// The opened handle, reachable for metadata and counted reads only.
+    file: cap_std::fs_utf8::File,
+}
+
+impl CacheEntry {
+    /// Returns the metadata of the opened entry.
+    fn metadata(&self) -> std::io::Result<cap_std::fs_utf8::Metadata> {
+        self.file.metadata()
+    }
+}
+
+impl Read for CacheEntry {
+    fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+        let read = self.file.read(buffer)?;
+        #[cfg(test)]
+        read_observation::record(read);
+        Ok(read)
+    }
 }
 
 /// Reports whether the cached IR is byte-for-byte identical to `json`.
 ///
 /// The entry is opened, its metadata is read, and the whole comparison is
 /// delegated to [`compare_cache_entry`]. This function never touches the body
-/// itself, so that comparison is the only place a publish can read cached
-/// content, and the read bound proved against it is the bound the publish path
-/// obeys.
+/// itself, and the handle it passes on is a [`CacheEntry`], so a body read
+/// added here would still be counted by the publish-path test instead of
+/// escaping it.
 ///
 /// Read failures are propagated rather than treated as misses, so unreadable
 /// cache state cannot be overwritten without inspection.
@@ -257,3 +286,13 @@ mod bounded_tests;
 #[cfg(test)]
 #[path = "ir_cache_bounded_proptests.rs"]
 mod bounded_proptests;
+
+// Counts body reads on the publish path and publishes through
+// `write_ir_cache`, so a read added outside the comparison is still observed.
+#[cfg(test)]
+#[path = "ir_cache_read_observation.rs"]
+mod read_observation;
+
+#[cfg(test)]
+#[path = "ir_cache_publish_tests.rs"]
+mod publish_tests;

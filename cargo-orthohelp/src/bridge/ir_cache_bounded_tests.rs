@@ -23,14 +23,15 @@ type TestResult = Result<(), Box<dyn std::error::Error>>;
 ///
 /// The `TempDir` guard is retained so the directory outlives the fixture, and
 /// the capability directory is the only handle tests use to touch it.
-struct CacheFixture {
+pub(super) struct CacheFixture {
     _temporary: tempfile::TempDir,
-    dir: Dir,
-    paths: BridgeCache,
+    pub(super) dir: Dir,
+    pub(super) paths: BridgeCache,
 }
 
+/// The shared cache fixture; the publish-path tests import it too.
 #[fixture]
-fn cache_fixture() -> Result<CacheFixture, Box<dyn std::error::Error>> {
+pub(super) fn cache_fixture() -> Result<CacheFixture, Box<dyn std::error::Error>> {
     let temporary = tempdir()?;
     let cache_dir = Utf8PathBuf::from_path_buf(temporary.path().to_path_buf())
         .map_err(|path| format!("temporary path is not UTF-8: {}", path.display()))?;
