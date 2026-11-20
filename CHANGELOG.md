@@ -124,9 +124,11 @@ All notable changes to this project will be documented in this file.
   or an enum payload still fails through Serde's own error. Child types take
   part in nested composition through two complementary steps: derive
   `RequiredConfigSchema` on the child, and mark the parent field
-  `#[ortho_config(nested)]`, adding `skip_cli` when the parent should not
-  expose the child's flags. A selected subcommand is covered as well, and its
-  report names that command's `PREFIX_CMDS_<NAME>_<FIELD>` variables and
+  `#[ortho_config(nested, skip_cli)]`. The marker describes the parent field,
+  and `skip_cli` is required because the CLI builder emits an argument for
+  every field it does not skip, and an object type normally has no value parser
+  for that argument. A selected subcommand is covered as well, and its report
+  names that command's `PREFIX_CMDS_<NAME>_<FIELD>` variables and
   `[cmds.<name>]` file paths, so the advertised spellings are the ones the
   loader really reads; only the selected variant contributes requirements.
   These loaders never run the declaring type's generated defaults struct, so a
@@ -163,6 +165,15 @@ All notable changes to this project will be documented in this file.
   JSON compatibility break; see the
   [v0.11.0 migration guide](docs/v0-11-0-migration-guide.md) for the exact
   edits and roadmap 13.1 for the constructor-based remedy.
+- **Breaking for generic callers:** the four `load_and_merge_subcommand_for*`
+  helpers, and the matching `SubcmdConfigMerge` methods, now also bound their
+  type parameter by `RequiredConfigSchema`. A type that derives `OrthoConfig`
+  already satisfies the bound, because that derive emits the schema
+  implementation; a handwritten `OrthoConfig` implementation, or a generic
+  wrapper that forwards these helpers, must add the bound, deriving
+  `RequiredConfigSchema` on the type where needed. See
+  [the migration guide](docs/v0-11-0-migration-guide.md#13-adopt-nested-requirement-schemas-or-widen-your-own-helpers)
+  for the exact edits.
 
 ### Removed (test helpers)
 

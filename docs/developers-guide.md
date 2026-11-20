@@ -478,11 +478,13 @@ the attribute grammar decides, and CLI hints for leaves the generated parser
 can actually populate. It never reads a configuration value, the environment,
 or the process arguments at macro time.
 
-Nested child types opt in with `#[ortho_config(nested)]` and must also carry
-`skip_cli`, because the CLI builder cannot parse an object type. The generated
-schema strips one `Option` and any `Box` wrappers before composing the child,
-so an optional parent deactivates its subtree while a required parent still
-activates its required descendants.
+Mark the parent field of a nested child type with `#[ortho_config(nested)]` and
+`skip_cli`. The CLI builder emits an argument for every field it does not skip,
+and clap needs a value parser for that argument's type, which an object type
+normally does not provide, so the build can fail without `skip_cli`. The
+generated schema strips one `Option` and any `Box` wrappers before composing
+the child, so an optional parent deactivates its subtree while a required
+parent still activates its required descendants.
 
 `requiredness::activation` decides one field's activation, and the choice
 depends on which loader reads the type. A declared or inferred default is
@@ -521,8 +523,8 @@ the model, `collect.rs` is the pure collector, and `mod.rs` exposes
 collector walks the merged JSON value, not the deserialized configuration, so
 it can report every requirement in schema declaration order before Serde stops
 at the first missing field. Display lives in
-`ortho_config/src/error/missing/mod.rs` and must not discover requirements or
-consult process state.
+`ortho_config/src/error/missing/display.rs` and must not discover requirements
+or consult process state.
 
 New supply routes belong in `SupplyRoute` only when a generated loader accepts
 them for the requirement in question. A route advertised for a key the parser

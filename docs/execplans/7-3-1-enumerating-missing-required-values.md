@@ -742,6 +742,26 @@ with a compatibility probe rather than an assumption.
   `e8279562` its nextest legs ran 3196 and 3241 tests with no failures, both
   including the two new cases, and all eight jobs passed.
 
+- [x] (2026-11-20) Dispositioned the four outside-diff findings of review
+  `5992650298`, all documentation. Every one was verified valid against the
+  source before repair. The developer's guide named `error/missing/mod.rs` as
+  the home of display, but the `Display` impls and key spelling live in the
+  sibling `display.rs`, so the path is corrected and the no-discovery rule
+  kept. Its nested-type paragraph implied the `#[ortho_config(nested)]` marker
+  belongs to the child type; the marker is a field attribute, and a non-skipped
+  object-typed field reaches `process_cli_field`, which emits a clap argument
+  whose type has no value parser, so the paragraph now names the parent field
+  and states that `skip_cli` is required. The changelog carried the same wrong
+  framing, describing `skip_cli` as conditional on hiding the child's flags.
+  The user's guide's selected-subcommand paragraph omitted the matches-aware
+  seed, so it now separates the plain reading from
+  `Serialized::defaults(T::default())` and states that a value that seed
+  serializes counts as supplied. The source-compatibility section gained the
+  widened `RequiredConfigSchema` bound on the four
+  `load_and_merge_subcommand_for*` helpers and the `SubcmdConfigMerge` methods;
+  the requested migration step already exists as section 13 of
+  `docs/v0-11-0-migration-guide.md`, so only the changelog pointer was missing.
+
 ## Surprises & discoveries
 
 The full local suite aborted once at round c7 on

@@ -1195,11 +1195,15 @@ selected variant contributes requirements; the other variants are never
 consulted. A field's `#[ortho_config(default = ...)]` does not excuse its
 absence here: these loaders never run the declaring type's defaults struct, so
 the value must arrive through a file, the environment, or a clap default the
-flag materializes. The raw `DeserializeOwned` subcommand helpers, and their
-`_with_sources` forms, keep the earlier behaviour and produce no report,
-because they never learn which type's schema to walk. The single-environment
-methods `load_and_merge_with_env` and `load_and_merge_with_matches_with_env` do
-report, since the type they load carries a derived schema.
+flag materializes. That is the plain reading. The matches-aware entry points
+add one layer ahead of file and environment: they seed the merged document with
+the type's own `Default`, so a value that `T::default()`'s serialization
+carries counts as supplied and is not reported. The raw `DeserializeOwned`
+subcommand helpers, and their `_with_sources` forms, keep the earlier behaviour
+and produce no report, because they never learn which type's schema to walk.
+The single-environment methods `load_and_merge_with_env` and
+`load_and_merge_with_matches_with_env` do report, since the type they load
+carries a derived schema.
 
 The payload carries key paths and routes, never configuration values, so
 rendering the error cannot leak a secret. Match the variant when an application
