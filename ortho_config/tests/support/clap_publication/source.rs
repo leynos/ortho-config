@@ -17,33 +17,30 @@
 //! skips — hides the same way. A macro invocation is a third: Rust parses the
 //! call as one item and substitutes what it declares afterwards, so a
 //! declaration a macro generates never appears in this parse.
-//! The walk therefore follows `mod` declarations from the crate root, certifies
-//! the declaring file only when every hop is unconditional, and refuses a
-//! declaration whose compiled file it cannot establish. A declaration nested
-//! inside an inline module is refused as well: a file-level scan cannot bind it
-//! to the inventory the crate exports, and counting the file-level decoy beside
-//! it would report a number that describes the wrong enum.
+//!
+//! The count is certified by [`super::reachability`], which follows `mod`
+//! declarations from the crate root and certifies the declaring file only when
+//! every hop to it is unconditional. A declaration nested inside an inline
+//! module is refused before the scan: a file-level count cannot bind it to the
+//! inventory the crate exports, and counting the file-level decoy beside it
+//! would report a number that describes the wrong enum.
 //!
 //! The crate root is the one Cargo reports for the resolved package's library
 //! target, not `src/lib.rs` by convention: [`library_crate_root`] settles that
 //! first, because a package may keep an unused `src/lib.rs` beside the file it
 //! really compiles.
 
-use std::collections::BTreeSet;
-
 use anyhow::{Context, Result, bail, ensure};
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::ambient_authority;
 use cap_std::fs_utf8::Dir;
 use cargo_metadata::Package;
-use syn::{Item, ItemMod};
+use syn::Item;
 
-use super::audit::{
-    audit_definition, declares_module_path, has_presence_conditional_attribute,
-    refuse_nested_error_kinds, reject_cfg_attributes,
-};
+use super::audit::{audit_definition, refuse_nested_error_kinds, reject_cfg_attributes};
 use super::library::library_crate_root;
 use super::macros::refuse_item_macros;
+use super::reachability::unconditionally_compiled;
 
 /// The crate root a library package compiles first when it declares no path.
 const CRATE_ROOT: &str = "lib.rs";
@@ -194,189 +191,4 @@ fn ensure_unconditional(
          unprovable, so the gate fails closed",
     );
     Ok(())
-}
-
-/// Every file the compiler compiles whenever it compiles `crate_root`.
-///
-/// Only unconditional module declarations are followed, and a file whose own
-/// inner attributes can remove it from the build certifies nothing. A
-/// declaration reachable only through a conditional hop is therefore not
-/// certified, which is the fail-closed direction.
-fn unconditionally_compiled(
-    directory: &Dir,
-    sources: &[Utf8PathBuf],
-    crate_root: &Utf8Path,
-) -> Result<BTreeSet<Utf8PathBuf>> {
-    ensure!(
-        sources.contains(&crate_root.to_path_buf()),
-        "expected a crate root {crate_root} to locate ErrorKind from",
-    );
-    let mut walker = Reachability {
-        directory,
-        sources,
-        crate_root,
-        reachable: BTreeSet::new(),
-    };
-    walker.visit_file(crate_root, 0)?;
-    Ok(walker.reachable)
-}
-
-/// Walks unconditional module declarations from the crate root.
-struct Reachability<'a> {
-    /// Handle on the source tree being walked.
-    directory: &'a Dir,
-    /// Every `.rs` file in the tree, so a hop is only followed when it resolves.
-    sources: &'a [Utf8PathBuf],
-    /// The root Cargo reports, which keeps its modules beside itself.
-    crate_root: &'a Utf8Path,
-    /// Files certified as compiled unconditionally.
-    reachable: BTreeSet<Utf8PathBuf>,
-}
-
-impl Reachability<'_> {
-    /// Certifies `file` and everything it declares unconditionally.
-    fn visit_file(&mut self, file: &Utf8Path, depth: usize) -> Result<()> {
-        ensure!(
-            depth <= MAX_MODULE_DEPTH,
-            "{file} nests modules more than {MAX_MODULE_DEPTH} deep; the gate will not certify it",
-        );
-        if !self.reachable.insert(file.to_path_buf()) {
-            return Ok(());
-        }
-        let source = self
-            .directory
-            .read_to_string(file)
-            .with_context(|| format!("read {file} while locating ErrorKind"))?;
-        let parsed =
-            syn::parse_file(&source).with_context(|| format!("{file} should be valid Rust"))?;
-        if has_presence_conditional_attribute(&parsed.attrs) {
-            self.reachable.remove(file);
-            return Ok(());
-        }
-        let prefix = module_directory(file, self.crate_root);
-        self.visit_items(&parsed.items, &prefix, depth)
-    }
-
-    /// Follows the unconditional modules among `items`, declared below `prefix`.
-    fn visit_items(&mut self, items: &[Item], prefix: &Utf8Path, depth: usize) -> Result<()> {
-        for item in items {
-            if let Item::Mod(module) = item {
-                self.visit_module(module, prefix, depth)?;
-            }
-        }
-        Ok(())
-    }
-
-    /// Follows one `mod` declaration according to its condition and shape.
-    fn visit_module(&mut self, module: &ItemMod, prefix: &Utf8Path, depth: usize) -> Result<()> {
-        if declares_module_path(&module.attrs) {
-            bail!(
-                "`mod {name}` below {prefix} carries a `#[path]` attribute; the compiler may \
-                 load a file this walk does not follow, so the inventory is unprovable",
-                name = module.ident,
-            );
-        }
-        if has_presence_conditional_attribute(&module.attrs) {
-            return self.skip_conditional_module(module, prefix);
-        }
-        match &module.content {
-            Some((_, nested)) => {
-                let inline = prefix.join(module.ident.to_string());
-                self.visit_items(nested, &inline, depth + 1)
-            }
-            None => self.visit_declared_files(module, prefix, depth),
-        }
-    }
-
-    /// Leaves a conditional module unvisited, still refusing an unreadable hop.
-    ///
-    /// An inline module keeps its own body in this file, so skipping it reads
-    /// nothing the walk would otherwise have missed. A file declaration is
-    /// different: [`ensure_conditional_source_is_readable`] checks the file the
-    /// compiler could still load.
-    fn skip_conditional_module(&self, module: &ItemMod, prefix: &Utf8Path) -> Result<()> {
-        match module.content {
-            Some(_) => Ok(()),
-            None => self.ensure_conditional_source_is_readable(module, prefix),
-        }
-    }
-
-    /// Follows the files one `mod name;` declaration below `prefix` resolves to.
-    fn visit_declared_files(
-        &mut self,
-        module: &ItemMod,
-        prefix: &Utf8Path,
-        depth: usize,
-    ) -> Result<()> {
-        let candidates = module_files(prefix, module, self.sources);
-        ensure!(
-            !candidates.is_empty(),
-            "`mod {name}` below {prefix} resolves to no file this walk reads; the compiler may \
-             load a symlinked or otherwise unreachable module file, so the inventory is \
-             unprovable and the gate fails closed",
-            name = module.ident,
-        );
-        for candidate in candidates {
-            self.visit_file(&candidate, depth + 1)?;
-        }
-        Ok(())
-    }
-
-    /// Refuses a conditional module whose compiled source this walk cannot read.
-    ///
-    /// A condition is not evidence that the compiler skips the declaration:
-    /// `#[cfg(all())]` always holds, and the gate cannot evaluate any condition.
-    /// When such a declaration resolves to no file the walk reads — a symlinked
-    /// module file, for instance — the compiler can still load an inventory the
-    /// count never parses, so the hop fails closed instead of being skipped.
-    fn ensure_conditional_source_is_readable(
-        &self,
-        module: &ItemMod,
-        prefix: &Utf8Path,
-    ) -> Result<()> {
-        ensure!(
-            !module_files(prefix, module, self.sources).is_empty(),
-            "`mod {name}` below {prefix} is conditional and resolves to no file this walk reads; \
-             the condition may hold, so the compiler can load source the gate has not inspected \
-             and the inventory is unprovable",
-            name = module.ident,
-        );
-        Ok(())
-    }
-}
-
-/// How deep a module tree may nest before the gate refuses to certify it.
-const MAX_MODULE_DEPTH: usize = 32;
-
-/// The files a `mod name;` declared below `prefix` may resolve to, when present.
-///
-/// Rust resolves a file module relative to the module's own directory: beside
-/// `lib.rs`, below `foo/` for both `foo.rs` and `foo/mod.rs`, and below the
-/// inline module's name for a nested declaration. A `#[path]` overrides all of
-/// that, which is why [`declares_module_path`] refuses it instead of guessing.
-fn module_files(prefix: &Utf8Path, module: &ItemMod, sources: &[Utf8PathBuf]) -> Vec<Utf8PathBuf> {
-    let name = module.ident.to_string();
-    [
-        prefix.join(format!("{name}.rs")),
-        prefix.join(name).join("mod.rs"),
-    ]
-    .into_iter()
-    .filter(|candidate| sources.contains(candidate))
-    .collect()
-}
-
-/// The directory a `mod name;` declared in `file` resolves within.
-///
-/// The crate root Cargo reports and a `mod.rs` keep their modules beside
-/// themselves; any other `foo.rs` keeps them below `foo/`. The root is
-/// compared by path, not by file name: a package may compile `lib/entry.rs`,
-/// and a nested `lib.rs` of its own is then an ordinary module file.
-fn module_directory(file: &Utf8Path, crate_root: &Utf8Path) -> Utf8PathBuf {
-    let parent = file.parent().unwrap_or_else(|| Utf8Path::new(""));
-    let is_crate_root = file == crate_root || file.file_name() == Some("mod.rs");
-    if is_crate_root {
-        return parent.to_path_buf();
-    }
-    file.file_stem()
-        .map_or_else(|| parent.to_path_buf(), |stem| parent.join(stem))
 }

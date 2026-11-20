@@ -512,15 +512,23 @@ item level: a locally defined wrapper can call `include!` while its own
 transcription spells no `ErrorKind`, so trusting an unresolved nested name
 would hide the same splice one level down. A nested name must resolve to a
 transcription in the file or be a standard macro that expands only to an
-expression, statement, or literal. `compile_error!` is allowed because it
-produces no item. Separately, a `mod` declaration whose file the walk cannot
-read is refused: the walk reads regular `.rs` files only, so that a symlink
-alias is not counted as a second declaration, which also means a declared
-module file that is a symlink leaves the compiler loading source the walk never
-parses. A condition does not exempt that check either, for the same reason it
-does not exempt the declaration itself: the gate resolves the file before it
-skips a conditional module, so a true condition cannot hide a symlinked
-inventory.
+expression, statement, or literal. Those standard names are consulted only
+where the file defines nothing of that name: Rust lets a `macro_rules!`
+definition shadow a prelude or `std` macro, so a local `assert_eq!` or
+`compile_error!` is a splice of its own rather than the macro its name suggests.
+`compile_error!` is allowed because it produces no item. Separately, a `mod`
+declaration whose file the walk cannot read is refused: the walk reads regular
+`.rs` files only, so that a symlink alias is not counted as a second
+declaration, which also means a declared module file that is a symlink leaves
+the compiler loading source the walk never parses. A condition does not exempt
+that check either, for the same reason it does not exempt the declaration
+itself: the gate resolves the file before it sets a conditional module aside. A
+conditional module is inspected rather than skipped for the same reason. It
+cannot supply the count, but its body and its file are still walked, because a
+condition that holds would compile them, and a declaration inside it could name
+a module file the walk never reads. So neither a conditional `mod error;` whose
+file is a symlink, nor a `mod` declaration nested inside a conditional inline
+module, can hide an inventory behind a condition that is true.
 
 The count is the total declared variant count for that builder package, not
 only the raisable variants; classification as translated or `DisplayOnly`

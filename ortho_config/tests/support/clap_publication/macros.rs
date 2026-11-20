@@ -23,7 +23,10 @@ use syn::{Item, ItemMacro};
 /// `compile_error!` expands to a diagnostic and no item, so a crate that
 /// compiles with one in place declares exactly what the parse shows. Every
 /// other invocation is refused below, including `include!`, whose contents are
-/// a file this walk never reads.
+/// a file this walk never reads. The list decides only names the declaring file
+/// does not define itself: a local `macro_rules!` shadows a prelude macro of the
+/// same name, so a local `compile_error!` is audited through its transcription
+/// instead of being trusted here.
 const INERT_ITEM_MACROS: [&str; 1] = ["compile_error"];
 
 /// Macros a transcription may invoke without this file defining them.
@@ -32,7 +35,9 @@ const INERT_ITEM_MACROS: [&str; 1] = ["compile_error"];
 /// can contribute the item that declares the inventory. The list is closed on
 /// purpose: an unresolved name that is not here is refused, because an imported
 /// macro's transcription is not in this file at all and `include!` above all
-/// can splice source the walk never reads.
+/// can splice source the walk never reads. It is consulted only after the
+/// declaring file's own definitions, because a local `macro_rules!` shadows the
+/// standard macro the name would otherwise resolve to.
 const INERT_NESTED_MACROS: [&str; 35] = [
     "assert",
     "assert_eq",
@@ -137,20 +142,31 @@ fn macro_rules_definition(item: &Item) -> Option<(String, String)> {
 }
 
 /// Refuse one invocation unless its expansion provably cannot name the enum.
+///
+/// A name this file defines is audited through its own transcription even when
+/// it also names a standard macro: Rust lets a `macro_rules!` definition shadow
+/// a prelude or `std` macro of the same name, so `assert_eq!` here may be a
+/// local wrapper around `include!` rather than the assertion macro. Resolution
+/// therefore comes first and the inert list only decides names this file leaves
+/// to the prelude.
 fn audit_invocation(invocation: &ItemMacro, scope: &MacroBodies, origin: &Utf8Path) -> Result<()> {
     let path = &invocation.mac.path;
-    let is_inert = INERT_ITEM_MACROS.iter().any(|name| path.is_ident(name));
-    if path.is_ident("macro_rules") || is_inert {
+    if path.is_ident("macro_rules") {
         return Ok(());
     }
     let provable = path.get_ident().is_some_and(|name| {
-        let mut proven = BTreeSet::new();
-        expands_without_inventory(
-            &name.to_string(),
-            &invocation.mac.tokens.to_string(),
-            scope,
-            &mut proven,
-        )
+        let invoked = name.to_string();
+        if scope.contains_key(&invoked) {
+            let mut proven = BTreeSet::new();
+            expands_without_inventory(
+                &invoked,
+                &invocation.mac.tokens.to_string(),
+                scope,
+                &mut proven,
+            )
+        } else {
+            INERT_ITEM_MACROS.contains(&invoked.as_str())
+        }
     });
     ensure!(
         provable,
@@ -182,13 +198,14 @@ fn expands_without_inventory(
 
 /// Whether a transcription and everything it invokes stay clear of the name.
 ///
-/// A nested invocation must resolve to a transcription in `scope` or be one of
-/// [`INERT_NESTED_MACROS`]. Accepting an unresolved name because it "only
-/// receives tokens the transcription supplied" is not sound: a wrapper whose
-/// transcription calls `include!` hands that macro one string literal, and the
-/// file it names supplies the items. The wrapper's own transcription never
-/// spells `ErrorKind`, so only the refusal of the unresolved nested name stops
-/// the decoy beside it from being counted.
+/// A nested invocation is resolved against `scope` first and only then against
+/// [`INERT_NESTED_MACROS`]. The order matters because a local `macro_rules!`
+/// shadows a prelude macro of the same name: treating `assert_eq!` as inert
+/// whenever it appears would let a local definition of that name hide an
+/// `include!` behind the name of an assertion. Accepting an unresolved name
+/// because it "only receives tokens the transcription supplied" is not sound
+/// either: a wrapper whose transcription calls `include!` hands that macro one
+/// string literal, and the file it names supplies the items.
 fn transcription_is_clean(
     name: &str,
     body: &str,
@@ -201,12 +218,20 @@ fn transcription_is_clean(
     if !proven.insert(name.to_owned()) {
         return true;
     }
-    invoked_macro_names(body).iter().all(|nested| {
-        is_inert_nested(nested)
-            || scope.get(nested).is_some_and(|nested_body| {
-                transcription_is_clean(nested, nested_body, scope, proven)
-            })
-    })
+    invoked_macro_names(body)
+        .iter()
+        .all(|nested| nested_is_clean(nested, scope, proven))
+}
+
+/// Whether a nested invocation provably contributes no item.
+///
+/// A local definition wins over the inert list, because it shadows the standard
+/// macro the name would otherwise resolve to.
+fn nested_is_clean(nested: &str, scope: &MacroBodies, proven: &mut BTreeSet<String>) -> bool {
+    scope.get(nested).map_or_else(
+        || is_inert_nested(nested),
+        |body| transcription_is_clean(nested, body, scope, proven),
+    )
 }
 
 /// Whether a nested invocation provably contributes no item.
