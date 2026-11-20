@@ -234,11 +234,14 @@ const PRE_CHANGE_CACHE_DIR: &str = "pre-change-entry";
 /// Literal no current generator can produce, so finding it proves reuse.
 pub(super) const PRE_CHANGE_CACHE_SENTINEL: &str = "STALE-CACHE-SENTINEL";
 
-/// Writes a cache entry shaped like the pre-redaction generator's output.
+/// Writes a cache entry beneath the live cache root under an unrelated name.
 ///
-/// The directory name is deliberately unrelated to the real cache key. The
-/// scenario proves that an entry written before the disclosure salt existed is
-/// not selected, even though it sits under the live cache root.
+/// This proves that an entry the current key generator does not name is
+/// ignored and left untouched. An integration test cannot compute the real
+/// pre-change name, because the key folds in a package fingerprint the binary
+/// derives privately; the other half of the claim lives in
+/// `pre_change_cache_entry_is_never_selected`, which constructs the real key
+/// in-crate and proves the exact pre-change name is not the selected one.
 pub(super) fn seed_pre_change_cache(ctx: &OrthoHelpContext) -> StepResult<()> {
     let cache_root = scenario_target_dir(ctx)?.join("orthohelp");
     Dir::create_ambient_dir_all(&cache_root, ambient_authority())?;
