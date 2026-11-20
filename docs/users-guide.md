@@ -2101,7 +2101,9 @@ The annotation is purely about publication. Marking a field does not require
 profile support: a command that never opts into `profiles` still redacts marked
 fields and simply publishes no selection metadata. `cargo-orthohelp` applies
 the projection to every artefact it generates, including the cached IR, so call
-`redacted_for_output` yourself only when you consume the metadata directly.
+`redacted_for_output` yourself only when you consume the metadata directly. If
+you already own the `DocMetadata` value, `into_redacted_for_output` projects it
+in place and avoids the copy; both forms return the same result.
 
 The policy is structural, so it cannot recognize a secret written into prose.
 Do not put sensitive material in help text, custom type names, links, or notes:
