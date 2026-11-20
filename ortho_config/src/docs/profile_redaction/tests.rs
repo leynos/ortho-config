@@ -92,6 +92,7 @@ fn doc(app: &str, fields: Vec<FieldMetadata>, subcommands: Vec<DocMetadata>) -> 
         windows: None,
         behaviour: None,
         renderer: None,
+        output: None,
         profiles: None,
     }
 }

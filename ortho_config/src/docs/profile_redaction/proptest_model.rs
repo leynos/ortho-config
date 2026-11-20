@@ -8,7 +8,9 @@
 //! Correspondence review, one line per modelled slot:
 //!
 //! - Document: `ir_version`, `app_name`, `bin_name`, `about_id`, `synopsis_id`,
-//!   `windows`, `behaviour`, `renderer`, and `profiles` are copied unchanged.
+//!   `windows`, `behaviour`, `renderer`, `output`, and `profiles` are copied
+//!   unchanged. `output` declares capabilities and exit classes rather than
+//!   field values, so the projection never touches it.
 //! - Sections: `headings_ids`, `discovery`, `precedence`, `links`, and `notes`
 //!   are copied unchanged; `examples` are cleared for every node when any field
 //!   anywhere in the tree is protected, and copied unchanged otherwise.

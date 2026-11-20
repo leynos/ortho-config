@@ -80,6 +80,7 @@ fn doc_with_budget(depth: usize, nodes: usize, fields: usize) -> BoxedStrategy<D
                     windows: None,
                     behaviour: None,
                     renderer: None,
+                    output: None,
                     profiles: profiles.clone(),
                 })
             },

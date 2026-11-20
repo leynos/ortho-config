@@ -27,7 +27,7 @@ proptest! {
     #[test]
     fn declared_output_survives_the_bridge(tree in output_tree()) {
         let expected = expected_outputs(&tree);
-        let context = bridge_ir_to_agent_context(&tree, "demo_pkg", None);
+        let context = bridge_ir_to_agent_context(&tree, "demo_pkg", None).expect("bridge succeeds");
         // Walk every generated path, not only the ones that came back: a bridge
         // that dropped a command would otherwise never be asked about it.
         let mut generated = expected.keys().cloned().collect::<Vec<_>>();
@@ -94,7 +94,7 @@ proptest! {
     /// A projection never writes `null`: an undeclared member is omitted.
     #[test]
     fn projected_output_omits_undeclared_members(tree in output_tree()) {
-        let context = bridge_ir_to_agent_context(&tree, "demo_pkg", None);
+        let context = bridge_ir_to_agent_context(&tree, "demo_pkg", None).expect("bridge succeeds");
 
         for command in context.commands {
             let Some(output) = command.output.as_ref() else {
@@ -113,7 +113,7 @@ proptest! {
     /// Re-encoding a projected block preserves it, so the wire is stable.
     #[test]
     fn projected_output_round_trips_through_json(tree in output_tree()) {
-        let context = bridge_ir_to_agent_context(&tree, "demo_pkg", None);
+        let context = bridge_ir_to_agent_context(&tree, "demo_pkg", None).expect("bridge succeeds");
 
         for command in context.commands {
             let Some(output) = command.output.as_ref() else {

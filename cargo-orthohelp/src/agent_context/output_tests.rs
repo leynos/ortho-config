@@ -23,7 +23,7 @@ use crate::schema::{
 fn bridge_single(output: Option<IrOutput>) -> Option<OutputContract> {
     let mut metadata = doc(DocSpec::root_without_fields());
     metadata.output = output;
-    let context = bridge_ir_to_agent_context(&metadata, "demo_pkg", None);
+    let context = bridge_ir_to_agent_context(&metadata, "demo_pkg", None).expect("bridge succeeds");
     context
         .commands
         .into_iter()
@@ -202,7 +202,8 @@ fn localizer_does_not_alter_output_metadata() {
     });
     let localizer = StaticLocalizer::new([("root.about", "Root command.")]);
 
-    let context = bridge_ir_to_agent_context(&metadata, "demo_pkg", Some(&localizer));
+    let context = bridge_ir_to_agent_context(&metadata, "demo_pkg", Some(&localizer))
+        .expect("bridge succeeds");
     let output = context
         .commands
         .first()
@@ -235,7 +236,7 @@ fn declarations_are_per_command_not_inherited() {
     let mut root = metadata_with_subcommands(vec![child]);
     root.output = None;
 
-    let context = bridge_ir_to_agent_context(&root, "demo_pkg", None);
+    let context = bridge_ir_to_agent_context(&root, "demo_pkg", None).expect("bridge succeeds");
     let mut commands = context.commands.into_iter();
 
     assert_eq!(
