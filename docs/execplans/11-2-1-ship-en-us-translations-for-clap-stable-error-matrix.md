@@ -31,6 +31,9 @@ commit repairs both — macro names resolve against the definitions textually in
 scope at each call, the macro names a call's arguments invoke are resolved too,
 and each symlink control's target resolves to the inventory it hides — with a
 control for each and with non-vacuity probes (2026-11-20), as Progress records.
+The code head `09a82c4e` carries the full certificate, including the standalone
+`make boundary` that admission saturation had blocked, and is green on every
+hosted job including CodeScene and Gecko (2026-11-20).
 
 This ExecPlan is a living document. Keep Constraints, Tolerances, Risks,
 Progress, Surprises & discoveries, Decision log, Outcomes & retrospective,
@@ -1120,6 +1123,20 @@ stopping and reporting.
       dropping the argument audit fails `macro_argument_include` alone, and the
       earlier symlink target shape fails the resolution assertion.
 
+- [x] (2026-11-20) The repair candidate carries the Round-16 certificate and a
+      green hosted run. On the frozen tree, check-fmt (113 files unchanged),
+      typecheck, lint (rustdoc, Clippy, Whitaker and docstring coverage at
+      1044/1044), markdownlint with the spelling gate, nixie, the workflow
+      contracts (729 passed, 1 skipped), and the focused coverage test (61
+      passed) all pass. `make test` ran 122 targets with 3204 tests passed and
+      none failed, its boundary target at 44 passed, 0 failed and 10 ignored in
+      381.88 s, and the Python suite at 128 passed and 5 skipped. A standalone
+      `make boundary` on the same tree passed with 44 passed, 0 failed and 10
+      ignored in 87.68 s, which clears the load-blocked acceptance item.
+      Hosted run `44801285905` then passed all eight jobs on `09a82c4e`, and
+      its `CodeScene Code Health Review (main)` and `Gecko Security Review`
+      checks complete `success`.
+
 ## Surprises & discoveries
 
 The plan first incorporated merged PR #651 at
@@ -1528,19 +1545,19 @@ symlink controls, is repaired by extracting the staging they shared; the file
 now reviews at 10.0 and the delta against `origin/main` reports no issues in
 the checked changes. No CodeScene issue is outstanding.
 
-Two acceptance items remain open on this branch. The standalone `make boundary`
-target has no green local run on the repaired tree: two attempts were
-load-blocked under compile-admission saturation (35 passed, 9 failed, 10
-ignored in 905.20 s, then 34 passed, 10 failed, 10 ignored in 907.83 s), every
-failure an allowance kill with no assertion or rustc diagnostic, while the same
-target passed inside `make test` on the same tree and twice on the hosted Linux
-job. The dispatch-only `Publish dry run` is red on the code head, and that red
-is release ordering inherited from main rather than a defect in this change.
-The code head carrying the 2026-11-20 repairs, `2522013d`, carries a full local
-gate certificate, and the record head `b7db4156` is green on every job of the
-pull-request lane. On `6d421d5f`, run `43796595772` completed with step 38
-green on Linux and step 37 on Windows, because that head predates main's #661;
-`ef46b48d` then made `cargo-orthohelp` import
+One acceptance item remains open on this branch. The standalone `make boundary`
+target now has a green local run on the repaired tree: 44 passed, 0 failed and
+10 ignored in 87.68 s, after two earlier attempts were load-blocked under
+compile-admission saturation (35 passed, 9 failed, 10 ignored in 905.20 s, then
+34 passed, 10 failed, 10 ignored in 907.83 s), every one of those failures an
+allowance kill with no assertion or rustc diagnostic. The dispatch-only
+`Publish dry run` is red on the code head, and that red is release ordering
+inherited from main rather than a defect in this change. The code head carrying
+the 2026-11-20 repairs, `09a82c4e`, carries the full local gate certificate and
+is green on every job of the pull-request lane, including CodeScene and Gecko.
+On `6d421d5f`, run `43796595772` completed with step 38 green on Linux and step
+37 on Windows, because that head predates main's #661; `ef46b48d` then made
+`cargo-orthohelp` import
 `ortho_config::agent_context::{ExitClass, OutputContract, StdoutPurpose}`,
 which the published `ortho_config` 0.11.0 does not have. Every
 `cargo-orthohelp` file naming those types is byte-identical to `origin/main`,
