@@ -2,11 +2,11 @@
 //!
 //! The payload owns canonical key paths and the real supply routes for each
 //! absent requirement. It never contains a configuration value, so rendering a
-//! report cannot leak a secret. Presentation lives here rather than in the
-//! collector because display must not discover requirements, read process
-//! arguments, or consult the environment.
-
-use std::fmt::{self, Write as _};
+//! report cannot leak a secret. The types here carry data only: key spelling
+//! and the report layout live in the private `display` module, which is the
+//! only module that decides how a path or a route is written, and neither
+//! module discovers requirements, reads process arguments, or consults the
+//! environment.
 
 /// The configuration key path of a missing requirement.
 ///
@@ -62,72 +62,6 @@ impl ConfigPath {
     pub const fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
-
-    /// Render the path using dots, quoting segments that need it.
-    ///
-    /// A segment is quoted whenever TOML would not read it as a bare key. The
-    /// quoted form keeps a literal dotted key visibly distinct from a nested
-    /// path with the same spelling, and it is the only spelling that names a
-    /// key outside TOML's bare-key alphabet — such as one containing `=`.
-    #[must_use]
-    pub fn render(&self) -> String {
-        self.0
-            .iter()
-            .map(|segment| render_segment(segment))
-            .collect::<Vec<_>>()
-            .join(".")
-    }
-}
-
-impl fmt::Display for ConfigPath {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(&self.render())
-    }
-}
-
-/// Render one path segment the way a TOML document accepts it.
-///
-/// A bare key may contain only ASCII letters, digits, `-` and `_`. Anything
-/// else has to be a quoted key, and a quoted key is a TOML basic string, so the
-/// quote, the backslash, and every control character are written as escapes
-/// rather than emitted raw. Both the rendered report and the suggested file
-/// section spell keys through this one routine, so a character that needs an
-/// escape cannot be spelled two different ways in one message.
-fn render_segment(segment: &str) -> String {
-    if is_bare_key(segment) {
-        return segment.to_owned();
-    }
-    let mut quoted = String::with_capacity(segment.len() + 2);
-    quoted.push('"');
-    for character in segment.chars() {
-        match character {
-            '"' => quoted.push_str("\\\""),
-            '\\' => quoted.push_str("\\\\"),
-            '\u{8}' => quoted.push_str("\\b"),
-            '\t' => quoted.push_str("\\t"),
-            '\n' => quoted.push_str("\\n"),
-            '\u{c}' => quoted.push_str("\\f"),
-            '\r' => quoted.push_str("\\r"),
-            // Writing into a `String` cannot fail; `fmt::Write` reports a
-            // result only so the same call can target a fallible sink.
-            other if other.is_control() => _ = write!(quoted, "\\u{:04X}", u32::from(other)),
-            other => quoted.push(other),
-        }
-    }
-    quoted.push('"');
-    quoted
-}
-
-/// Report whether TOML reads `segment` as a key without quotes.
-///
-/// An empty segment, a dot, whitespace, and any character outside
-/// `A-Za-z0-9_-` all require the quoted form, so this one predicate replaces
-/// the case-by-case list of characters that happened to be considered.
-fn is_bare_key(segment: &str) -> bool {
-    !segment.is_empty()
-        && segment
-            .chars()
-            .all(|character| character.is_ascii_alphanumeric() || matches!(character, '_' | '-'))
 }
 
 /// A real way a missing value can be supplied.
