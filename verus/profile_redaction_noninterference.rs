@@ -1,9 +1,10 @@
 //! V1, noninterference: low-equivalent documents project equally.
 //!
 //! Low-equivalence is the observation the output is allowed to make. It fixes
-//! every public descriptor, permits protected value slots to differ, and
-//! permits command examples to differ only where no field is protected — the
-//! condition under which examples are published at all.
+//! every public descriptor and permits protected value slots to differ. When no
+//! field anywhere is protected, command examples are published, so it requires
+//! them to agree as well; when any field is protected, every example is
+//! suppressed, so it leaves them free.
 
 use vstd::prelude::*;
 
@@ -40,8 +41,10 @@ pub open spec fn command_low_equiv(left: Command, right: Command) -> bool {
 
 /// Low-equivalence: the observation the output is allowed to make.
 ///
-/// Command examples may differ only where the whole document has no protected
-/// field, because a protected field anywhere suppresses every example.
+/// When the whole document has no protected field, every example is published,
+/// so command examples must agree. A protected field anywhere suppresses every
+/// example, which is why the consequent is an implication rather than a
+/// biconditional: the suppressed case constrains nothing.
 pub open spec fn low_equiv(left: Doc, right: Doc) -> bool {
     &&& left.commands.len() == right.commands.len()
     &&& (forall|i: int| 0 <= i < left.commands.len()
