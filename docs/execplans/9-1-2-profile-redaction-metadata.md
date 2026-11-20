@@ -736,7 +736,7 @@ exclusion as it stood at that milestone; it no longer applies.
   - [x] (2026-11-15) Record non-vacuity evidence by seeding three faults
     (retained default, retained nested enum member, skipped child), observing
     failures, restoring the module byte-for-byte, and rerunning green.
-  - [x] (2026-11-15) Record the contract in ADR-0023 and reference it from the
+  - [x] (2026-11-15) Record the contract in ADR-0024 and reference it from the
     agent-native and cargo-orthohelp design documents.
   - [x] (2026-11-16) Ordinary gates and gated M1 commit: formatting, Clippy,
     docstring coverage, Markdown, Mermaid, spelling, and the workspace test
@@ -801,7 +801,7 @@ exclusion as it stood at that milestone; it no longer applies.
     2.2.1 of the cargo-orthohelp design records the wire additions, the
     structural boundary, and the model-to-production relationship; section 6.7
     of the agent-native design carries the `profiles.redaction` shape and the
-    public-text limitation; ADR-0023 gains a Formal evidence subsection
+    public-text limitation; ADR-0024 gains a Formal evidence subsection
     covering the flat preorder encoding and the residual boundary; the design
     decision log records the decision; the developers' guide replaces the empty
     production inventory with the registered Verus entry, its obligations,
@@ -827,8 +827,9 @@ exclusion as it stood at that milestone; it no longer applies.
   list, routes `profile_field` through the same helper shape, and keeps main's
   extracted `cache_tests.rs`, whose pinned cache-key vector was recomputed for
   the disclosure salt (`v1-9a0f5582851e611582e4dd0ddf4ea78e`). The redaction
-  record is renumbered ADR-0023 and every reference follows it. No delivered
-  behaviour changed.
+  record moves off ADR-0018 and, after the second collision recorded below, now
+  stands at ADR-0024; every reference follows it. No delivered behaviour
+  changed.
 - [x] (2026-11-16) Full gates on the rebased candidate `ee34e606`. All eight
   targets passed: `check-fmt` (106 files unchanged), `markdownlint` (0 issues;
   the spelling gate reported `typos.toml` current), `nixie` (107 Markdown
@@ -870,6 +871,23 @@ exclusion as it stood at that milestone; it no longer applies.
   `verus` (27 verified, 0 errors), `test` (114 Cargo test targets then 128
   pytest tests), and `test-workflow-contracts` (748 passed, 2 skipped). Logs are
   `/tmp/pr593-*-9-1-2-gate7.out`.
+
+- [x] (2026-11-20) Rebase onto `main` at `0dbd7bd7`. Main had landed the
+  structured-output declarations (its ADR-0023), a nextest setup script, and
+  dependency bumps while this branch waited. Five files conflicted:
+  `cargo-orthohelp/src/schema/mod.rs`, because main still mirrored the IR types
+  this branch re-exports; `docs/contents.md`, because both sides appended ADR
+  entries; the agent-context bridge, because main added `output` to the doctest
+  while this branch split the profile and sort steps out of it; the derive's
+  parse re-exports, against main's `output_attrs` additions; and the simple-run
+  and scenario registries, because both sides added entries. The resolution
+  keeps this branch's re-export design and adds main's `ExitClass`,
+  `OutputMetadata`, and `StdoutPurpose` names, restores the branch's
+  `serde_field_is_flattened` re-export, gives the property fixtures
+  `output: None`, and makes main's output tests handle the fallible bridge.
+  Main had taken ADR-0023 for its own record, so the redaction record moved
+  again, to ADR-0024, and every reference follows it. No delivered behaviour
+  changed.
 
 ## Surprises & discoveries
 
@@ -1037,7 +1055,7 @@ the enum.
 2026-11-15, implemented: keep one projection in `ortho_config::docs` and make
 `cargo-orthohelp::schema` re-export it. This supersedes the hand-maintained
 mirror noted as a residual risk in ADR-0016 and gives the bridge and renderers
-one type identity. Recorded in ADR-0023.
+one type identity. Recorded in ADR-0024.
 
 2026-11-15, implemented: decide command-example suppression once per document
 before projecting, then run a single projection pass. This keeps the global
@@ -1058,7 +1076,7 @@ all, and the plan allowed the lemma boundaries to be revised while verification
 conditions were discovered. The encoding is total for topology and for slot
 reachability, so V1 and V2 keep their full strength; only the traversal shape
 is modelled differently, and the correspondence to the production recursion
-stays with the differential tests recorded in ADR-0023.
+stays with the differential tests recorded in ADR-0024.
 
 ## Outcomes & retrospective
 
@@ -1104,12 +1122,12 @@ After M3, publication required a rebase onto `main` at `d11a0797`, seventeen
 commits ahead of the branch base. The rebase exposed two collisions that no
 gate could have caught before it: main had claimed ADR-0018 for the development
 build standard, and main had restructured the field-attribute parser and
-extracted the cache unit tests. The ADR moved to 0023, the `profile_field` case
-adopts main's extracted-setter shape, and the cache-key vector was recomputed
-with the disclosure salt still folded in. These are integration repairs, not
-scope changes: the disclosure boundary, its proofs, and its documented
-behaviour are untouched, and the full gate set was re-run on the rebased
-candidate.
+extracted the cache unit tests. The ADR moved to 0023 and then, when main
+claimed that number too, to 0024; the `profile_field` case adopts main's
+extracted-setter shape, and the cache-key vector was recomputed with the
+disclosure salt still folded in. These are integration repairs, not scope
+changes: the disclosure boundary, its proofs, and its documented behaviour are
+untouched, and the full gate set was re-run on the rebased candidate.
 
 ## Research and review evidence
 

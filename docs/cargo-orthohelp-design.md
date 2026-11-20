@@ -347,7 +347,7 @@ IR JSON, and its agent-context adapter projects at its public boundary and
 derives protected-field records from the projected tree. The cache identity
 adds the `profile-redaction-v1` salt so artefacts produced under a different
 policy are never reused. The contract and its rationale are recorded in
-[ADR-0023](adrs/adr-0023-profile-field-redaction.md).
+[ADR-0024](adrs/adr-0024-profile-field-redaction.md).
 
 The wire additions are additive. `FieldMetadata::profile_field` is an optional
 label, omitted when absent, and an unknown label fails deserialization rather
