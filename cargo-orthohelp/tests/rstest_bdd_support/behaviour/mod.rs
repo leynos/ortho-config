@@ -25,8 +25,10 @@
 //!   per-locale IR artefacts.
 //! - [`steps_policy_report`] — `when`/`then` steps for policy-report JSON
 //!   generation.
-//! - [`profile_redaction_support`] — the sentinel catalogue and artefact
-//!   inspection helpers shared by the profile-redaction steps.
+//! - [`profile_redaction_support`] — the sentinel catalogue and context
+//!   fixtures shared by the profile-redaction steps.
+//! - [`profile_redaction_artefacts`] — the recursive scan of every generated
+//!   file and the inventory and sentinel assertions over it.
 //! - [`profile_redaction_assertions`] — value-level projection assertions the
 //!   profile-redaction output steps share.
 //! - [`steps_profile_redaction`] — `given`/`when` steps that run the generator
@@ -37,6 +39,7 @@
 //!   `scenarios!`.
 
 mod powershell_steps;
+mod profile_redaction_artefacts;
 mod profile_redaction_assertions;
 mod profile_redaction_support;
 mod roff_steps;

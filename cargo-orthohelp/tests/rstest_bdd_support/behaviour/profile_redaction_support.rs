@@ -33,26 +33,9 @@ const CATALOGUE_B_BODIES: [(&str, &str); 2] = [
     ("prod", "PROFILE-BODY-ZETA-SENTINEL"),
 ];
 
-/// One generated file, or one captured process stream.
-#[derive(Debug)]
-pub(super) struct Artefact {
-    pub path: String,
-    pub content: String,
-}
-
-impl Artefact {
-    pub(super) fn is_roff(&self) -> bool {
-        self.path.ends_with(".1")
-    }
-
-    pub(super) fn is_maml(&self) -> bool {
-        self.path.ends_with("-help.xml")
-    }
-
-    fn locale_contains(&self, locale: &str) -> bool {
-        self.path.contains(locale)
-    }
-}
+pub(super) use super::profile_redaction_artefacts::{
+    assert_artefact_inventory, assert_sentinels_absent, read_artefacts,
+};
 
 /// Fails the scenario when `condition` is false.
 pub(super) fn require(condition: bool, message: impl Into<String>) -> StepResult<()> {
@@ -108,111 +91,6 @@ pub(super) fn run_checked(
         .into());
     }
     orthohelp_context.last_output.set(output);
-    Ok(())
-}
-
-/// Reads every file beneath the scenario output directory plus both streams.
-pub(super) fn read_artefacts(orthohelp_context: &OrthoHelpContext) -> StepResult<Vec<Artefact>> {
-    let out_dir = get_out_dir(orthohelp_context)?;
-    let dir = Dir::open_ambient_dir(&out_dir, ambient_authority())?;
-    let mut artefacts = Vec::new();
-    collect_entries(&dir, "", &mut artefacts)?;
-    let (stdout, stderr) = orthohelp_context
-        .last_output
-        .with_ref(|output| (output.stdout.clone(), output.stderr.clone()))
-        .ok_or("last_output should be set")?;
-    artefacts.push(stream_artefact("<stdout>", &stdout));
-    artefacts.push(stream_artefact("<stderr>", &stderr));
-    Ok(artefacts)
-}
-
-fn stream_artefact(label: &str, bytes: &[u8]) -> Artefact {
-    Artefact {
-        path: label.to_owned(),
-        content: String::from_utf8_lossy(bytes).into_owned(),
-    }
-}
-
-fn collect_entries(dir: &Dir, prefix: &str, artefacts: &mut Vec<Artefact>) -> StepResult<()> {
-    let mut entries = Vec::new();
-    for entry in dir.read_dir(".")? {
-        let resolved = entry?;
-        entries.push((resolved.file_name()?, resolved.file_type()?.is_dir()));
-    }
-    entries.sort_by(|left, right| left.0.cmp(&right.0));
-    for (name, is_dir) in entries {
-        let path = join(prefix, &name);
-        if is_dir {
-            let subdir = dir.open_dir(name.as_str())?;
-            collect_entries(&subdir, &path, artefacts)?;
-        } else {
-            let bytes = dir.read(name.as_str())?;
-            artefacts.push(Artefact {
-                path,
-                content: String::from_utf8_lossy(&bytes).into_owned(),
-            });
-        }
-    }
-    Ok(())
-}
-
-fn join(prefix: &str, name: &str) -> String {
-    if prefix.is_empty() {
-        name.to_owned()
-    } else {
-        format!("{prefix}/{name}")
-    }
-}
-
-/// Fails unless the run produced every artefact family the scan claims to cover.
-pub(super) fn assert_artefact_inventory(artefacts: &[Artefact]) -> StepResult<()> {
-    require(
-        has_suffix(artefacts, "agent-context.json"),
-        "agent-context.json missing",
-    )?;
-    for locale in ARTEFACT_LOCALES {
-        require(
-            has_suffix(artefacts, &format!("ir/{locale}.json")),
-            format!("IR for {locale} missing"),
-        )?;
-        require(
-            artefacts
-                .iter()
-                .any(|artefact| artefact.is_roff() && artefact.locale_contains(locale)),
-            format!("roff page for {locale} missing"),
-        )?;
-        require(
-            artefacts
-                .iter()
-                .any(|artefact| artefact.is_maml() && artefact.locale_contains(locale)),
-            format!("MAML help for {locale} missing"),
-        )?;
-    }
-    Ok(())
-}
-
-fn has_suffix(artefacts: &[Artefact], suffix: &str) -> bool {
-    artefacts
-        .iter()
-        .any(|artefact| artefact.path.ends_with(suffix))
-}
-
-/// Fails naming the first artefact that repeats a protected literal.
-pub(super) fn assert_sentinels_absent(
-    artefacts: &[Artefact],
-    sentinels: &[&str],
-) -> StepResult<()> {
-    for sentinel in sentinels {
-        for artefact in artefacts {
-            require(
-                !artefact.content.contains(sentinel),
-                format!(
-                    "protected sentinel {sentinel} appeared in {}",
-                    artefact.path
-                ),
-            )?;
-        }
-    }
     Ok(())
 }
 
