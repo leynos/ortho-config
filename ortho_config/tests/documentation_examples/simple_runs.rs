@@ -196,4 +196,3 @@ fn run_stdout(workspace: &mut ExampleWorkspace, id: &'static str, args: &[&str])
     );
     String::from_utf8(output.stdout).with_context(|| format!("{id} stdout is UTF-8"))
 }
-// weave: run 'weave explain ortho_config/tests/documentation_examples/simple_runs.rs' for per-hunk detail, 'weave check' to verify your resolution

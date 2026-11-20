@@ -345,4 +345,3 @@ pub struct PaginationContract {
 
 #[cfg(test)]
 mod tests;
-// weave: run 'weave explain ortho_config/src/agent_context/mod.rs' for per-hunk detail, 'weave check' to verify your resolution

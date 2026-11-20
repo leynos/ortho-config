@@ -287,4 +287,3 @@ mod lock_tests {
         Ok(())
     }
 }
-// weave: run 'weave explain ortho_config_macros/src/derive/generate/localization/artefact/artefact_lock.rs' for per-hunk detail, 'weave check' to verify your resolution

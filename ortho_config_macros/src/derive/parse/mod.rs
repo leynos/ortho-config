@@ -59,8 +59,8 @@ pub(crate) use literals::lit_crate_path;
 pub(crate) use output_attrs::parse_output_meta;
 pub(crate) use renderer_attrs::parse_renderer_meta;
 pub(crate) use serde_attrs::{
-    SerdeRenameAll, serde_field_rename, serde_has_default, serde_rename_all,
-    serde_serialized_field_key,
+    SerdeRenameAll, serde_field_is_flattened, serde_field_rename, serde_has_default,
+    serde_rename_all, serde_serialized_field_key,
 };
 pub(crate) use struct_attrs::{discard_unknown, parse_ortho_config, parse_struct_attrs};
 pub(crate) use type_utils::{
@@ -139,4 +139,3 @@ pub(crate) struct FieldAttrs {
     /// Disclosure classification declared by `profile_field = "..."`.
     pub profile_field: Option<ProfileFieldAnnotation>,
 }
-// weave: run 'weave explain ortho_config_macros/src/derive/parse/mod.rs' for per-hunk detail, 'weave check' to verify your resolution
