@@ -344,10 +344,17 @@ tree is protected. `cargo-orthohelp` does not implement or vary that policy.
 Its schema module re-exports the `ortho_config::docs` types, its pipeline
 projects deserialized IR before rendering, its bridge projects before writing
 IR JSON, and its agent-context adapter projects at its public boundary and
-derives protected-field records from the projected tree. The cache identity
-adds the `profile-redaction-v1` salt so artefacts produced under a different
-policy are never reused. The contract and its rationale are recorded in
-[ADR-0026](adrs/adr-0026-profile-field-redaction.md).
+derives protected-field records from the projected tree.
+
+`ir::localize_doc` is a public boundary in its own right, because a library
+caller may hand it unprojected metadata. It projects its argument once, before
+localizing, and recurses through a private function so that no nested call
+re-projects a subtree: the command-example rule is decided from the whole
+document, and a subtree-local decision would differ from it. The pipeline's own
+earlier projection is idempotent, so the two applications agree. The cache
+identity adds the `profile-redaction-v1` salt so artefacts produced under a
+different policy are never reused. The contract and its rationale are recorded
+in [ADR-0026](adrs/adr-0026-profile-field-redaction.md).
 
 The wire additions are additive. `FieldMetadata::profile_field` is an optional
 label, omitted when absent, and an unknown label fails deserialization rather

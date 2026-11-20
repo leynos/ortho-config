@@ -104,6 +104,18 @@ and ordinary field slots are preserved unchanged. The projection is idempotent
 and performs exactly two linear traversals: one to decide whether any protected
 field exists, then one projection pass over the whole tree.
 
+The policy has two method forms over that one implementation.
+`redacted_for_output` borrows and returns a projected copy;
+`into_redacted_for_output` consumes the document and projects it in place, so a
+caller that already owns the tree pays no clone. Every public conversion
+boundary applies one of them exactly once over the whole document it returns,
+and private recursion never re-projects a subtree: the command-example decision
+is global, so a nested application would repeat work and risk a subtree-local
+decision. Derived metadata composes boundaries, because each generated
+`OrthoConfigDocs` and `OrthoConfigSubcommandDocs` method is itself public and
+both traits document handwritten implementations as supported; no public method
+may return unprojected metadata.
+
 ### Boundaries
 
 - The derive emits metadata that has already been projected.

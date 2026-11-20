@@ -1889,6 +1889,21 @@ before deriving records. A new renderer therefore needs no redaction code, and
 adding a value-bearing slot to `FieldMetadata` means extending the projection,
 the model, and the sentinel catalogue together.
 
+Apply the projection once per public boundary, over the whole document that
+boundary returns. `ir::localize_doc` is the pattern to follow: it projects its
+argument at entry and recurses through a private function, because the
+command-example rule is decided from the entire tree and a nested call would
+clone and re-scan every subtree. A caller that already owns the document uses
+`into_redacted_for_output`, which projects in place without the copy; the
+derive and the binary's pipeline entry do this. The projection is idempotent,
+so a boundary may still apply it to input it did not project itself. Derived
+metadata composes boundaries: each generated `OrthoConfigDocs` and
+`OrthoConfigSubcommandDocs` method projects its own subtree, and a parent
+embeds the projected children. That costs one decision-and-projection pass per
+boundary rather than per node, which
+`derived_deep_chain_projects_once_per_boundary` in
+`ortho_config/src/docs/profile_redaction/derive_tests.rs` pins.
+
 ### Agent context
 
 The declaration carries the protected-field view in two private metadata
