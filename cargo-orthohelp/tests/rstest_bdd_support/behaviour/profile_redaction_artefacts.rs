@@ -6,6 +6,7 @@
 //! module to read as the Gherkin text does and holds each module under the
 //! repository's line budget.
 
+use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
 
 use super::profile_redaction_support::require;
@@ -38,7 +39,7 @@ pub(super) fn read_artefacts(orthohelp_context: &OrthoHelpContext) -> StepResult
     let out_dir = get_out_dir(orthohelp_context)?;
     let dir = Dir::open_ambient_dir(&out_dir, ambient_authority())?;
     let mut artefacts = Vec::new();
-    collect_entries(&dir, "", &mut artefacts)?;
+    collect_entries(&dir, Utf8Path::new(""), &mut artefacts)?;
     let (stdout, stderr) = orthohelp_context
         .last_output
         .with_ref(|output| (output.stdout.clone(), output.stderr.clone()))
@@ -55,9 +56,9 @@ fn stream_artefact(label: &str, bytes: &[u8]) -> Artefact {
     }
 }
 
-fn collect_entries(dir: &Dir, prefix: &str, artefacts: &mut Vec<Artefact>) -> StepResult<()> {
+fn collect_entries(dir: &Dir, prefix: &Utf8Path, artefacts: &mut Vec<Artefact>) -> StepResult<()> {
     for (name, is_dir) in sorted_entries(dir)? {
-        let path = join(prefix, &name);
+        let path = prefix.join(&name);
         if is_dir {
             collect_entries(&dir.open_dir(name.as_str())?, &path, artefacts)?;
         } else {
@@ -85,20 +86,12 @@ fn sorted_entries(dir: &Dir) -> StepResult<Vec<(String, bool)>> {
 }
 
 /// Reads one file entry into an [`Artefact`] under its relative path.
-fn read_file_artefact(dir: &Dir, name: &str, path: String) -> StepResult<Artefact> {
+fn read_file_artefact(dir: &Dir, name: &str, path: Utf8PathBuf) -> StepResult<Artefact> {
     let bytes = dir.read(name)?;
     Ok(Artefact {
-        path,
+        path: path.into_string(),
         content: String::from_utf8_lossy(&bytes).into_owned(),
     })
-}
-
-fn join(prefix: &str, name: &str) -> String {
-    if prefix.is_empty() {
-        name.to_owned()
-    } else {
-        format!("{prefix}/{name}")
-    }
 }
 
 /// Fails unless the run produced every artefact family the scan claims to cover.
