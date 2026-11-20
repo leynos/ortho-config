@@ -718,6 +718,30 @@ with a compatibility probe rather than an assumption.
   collector's tests already run on the input type it accepts, so stripping
   `serde_json` from them would exercise an input the collector cannot receive.
 
+- [x] (2026-11-20) Closed the review's test-coverage correction and re-ran
+  every gate on the repaired head. The review accepted the documentation
+  repairs but corrected one claim: `MergeWideDefault` has only the `wide`
+  field, and its case asserts the successful load, so the missing-field half of
+  the fallback's documented outcome was untested. `e8279562` adds
+  `ortho_config/tests/subcommand/wide_default_fallback.rs`: a type whose
+  `Default` holds `u128::MAX` and which also declares a required `reference` no
+  layer supplies. One case asserts the load fails on `missing field reference`
+  rather than reporting a `MissingRequiredValues` payload the collector could
+  not compute; the other supplies `reference` through its file route and
+  asserts the load succeeds with `u128::MAX` intact. Replacing the fallback
+  with a propagated projection error failed all three wide-default tests,
+  including the pre-existing one, so the pair rejects the wrong implementation
+  rather than restating the right one. `write_scoped_section` and the
+  `wide_u128` deserializer became `pub(super)` so the new module reuses them.
+
+  All seven gates then passed on `e8279562`, run sequentially: `check-fmt`,
+  `lint`, `typecheck`, `make test` (121 harnesses, 3244 passed and 0 failed;
+  pytest 128 passed with 5 skipped), `markdownlint`, `nixie`, and the doctest
+  run (155 passed, 0 failed, 47 ignored). The boundary deadlines that failed
+  twice on `e14dff64` did not recur, and hosted CI settled that attribution: on
+  `e8279562` its nextest legs ran 3196 and 3241 tests with no failures, both
+  including the two new cases, and all eight jobs passed.
+
 ## Surprises & discoveries
 
 The full local suite aborted once at round c7 on
