@@ -687,6 +687,37 @@ with a compatibility probe rather than an assumption.
   `tests/support/strict_required.rs`, leaving the current-directory scenarios
   and 331 lines behind.
 
+- [x] (2026-11-20) Answered the review of `c7fa90a7` and settled its
+  architecture row. The two inline findings are documentation. The developer's
+  guide collapsed the plain and matches-aware selected-subcommand loaders into
+  one layer list, although `injected_matches_figment` seeds
+  `Serialized::defaults(T::default())` before the file and environment layers;
+  the paragraph now separates the two readings and states that presence, not
+  the demotion, decides which key is reported. The user's guide stated the
+  enumeration guarantee without the merged-document qualification its figment
+  projection needs, so it now records the fallback to raw extraction, and the
+  changelog entry carries the same qualification plus the corrected claim about
+  declared defaults. The failed Developer Documentation row named two
+  interfaces this branch adds and no guide section covered: the program-label
+  flow and `FieldAttrs.cli: CliFieldMode`. Both now have short sections beside
+  "Required-value schema ownership", citing the files that own each step.
+
+  The Domain Architecture row asks for five changes. One is actioned: key
+  spelling (`ConfigPath::render`, `render_segment`, `is_bare_key`, and the
+  `Display` impl) moved from the payload module into
+  `ortho_config/src/error/missing/display.rs`, so the error module carries
+  typed data only while the public method keeps its name and behaviour. The
+  remaining four are rebutted with source evidence and recorded in ADR-0024's
+  2026-11-20 amendment. `required_values/env_route.rs` imports only
+  `ConfigPath`; it is a pure function of a path and a prefix, so there is no
+  adapter dependency to relocate. `serde_json::Value` is the crate's canonical
+  merge representation rather than a serialization detail: the derive emits
+  `ortho_config::serde_json::Value`, the declarative finish passes that value to
+  `from_value_merge`, and the collector consumes the same type, so a second
+  domain tree would duplicate the representation instead of separating it. The
+  collector's tests already run on the input type it accepts, so stripping
+  `serde_json` from them would exercise an input the collector cannot receive.
+
 ## Surprises & discoveries
 
 The full local suite aborted once at round c7 on
@@ -1021,6 +1052,23 @@ therefore classifies presence before visiting a node and skips a conflicting
 one. Rejecting only the nested case was considered and rejected: a duplicated
 leaf is equally the deserializer's error, and a rule that depends on the node's
 shape would be harder to reason about than one that depends on the merged value.
+
+D12 (2026-11-20, accepted): keep the merged document and the adapter boundary
+where they already are, and move only key spelling. A pre-merge review asked for
+`serde_json::Value` to leave the collector's input, for environment-route
+derivation to move into the figment adapter, and for TOML spelling to leave the
+error module. The first two invert the crate's layering. `serde_json::Value` is
+the value the derive's generated finish builds and
+`declarative::from_value_merge` consumes, so it is the crate's merge
+representation and the collector's natural input; a domain-shaped substitute
+would copy that tree to re-read it. `env_route` is pure route vocabulary with
+no adapter type in its imports, and moving it into the figment loader would put
+provider-spelling policy in the adapter that the ADR-0025 sharing rule exists
+to prevent. The spelling request is granted: `ConfigPath::render`,
+`render_segment`, `is_bare_key`, and the `Display` impl moved to
+`error/missing/display.rs`, which is the only module that now decides how a key
+is written. ADR-0024's dated amendment records the boundary so a later reader
+does not reopen the same question.
 
 ## Outcomes & retrospective
 

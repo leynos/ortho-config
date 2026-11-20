@@ -494,13 +494,26 @@ child is unaffected: it has no loader, so the generator already reports its
 declared defaults as required.
 
 The selected-subcommand loaders are the other reading that never runs the
-declaring type's defaults struct: they build their figment from file,
-environment, and command-line layers only.
+declaring type's generated defaults struct, but they do not share one layer
+list. The plain loaders build their figment from file, environment, and the
+serialized CLI value only. The matches-aware loaders add one further layer
+ahead of the file and environment layers: `injected_matches_figment` in
+`ortho_config/src/subcommand/sources.rs` starts from
+`Serialized::defaults(T::default())`, so the type's `Default` is merged as
+ordinary data before anything is read, and the user-supplied CLI values are
+overlaid last. That seed is not the generated defaults struct, but it is a real
+layer in the document.
+
 `ensure_no_missing_required_values_scoped` therefore applies the same demotion
-to the root's fields, so a declared default that no active layer supplies is
-enumerated with its real routes rather than left to the deserializer's first
-missing field. A default clap materializes still reaches the merged value
-through the command-line layer, so only a genuinely absent field is reported.
+to the root's fields on both readings, so a declared default is not treated as
+a supply merely because it is declared. Presence, not the demotion, decides the
+report: a key that any layer put in the merged document is supplied and is
+never reported, and only a key the document omits is enumerated with its real
+routes. On the plain path that means a key is reported unless file,
+environment, or the caller's CLI value carried it. On the matches-aware path it
+is also reported only when `T::default()`'s serialization omitted it, which is
+why a default the serializer skips, and a default clap materializes, are
+reported differently from one the seed carries.
 
 `ortho_config/src/required_values/` owns the runtime side: `schema.rs` defines
 the model, `collect.rs` is the pure collector, and `mod.rs` exposes
@@ -525,6 +538,43 @@ the single source of that environment prefix, shared by the provider and the
 diagnostic, so the advertised spelling and the read spelling cannot drift. The
 raw `DeserializeOwned` subcommand helpers keep the plain Figment finish and
 collect nothing, because they never know which type's schema to compose.
+
+### Program-label flow
+
+A report names the program the user invoked, and the label reaches the error
+without the loader reading process state. `program_label_from_args` in
+`ortho_config/src/required_values/mod.rs` derives it from the first argument:
+the file name of `argv[0]` when it has one, the bare name otherwise, and `None`
+for an empty or unrepresentable argument. Generated loads call it with the
+argument list they were given —
+`ortho_config_macros/src/derive/load_impl/cli.rs` for the CLI-bearing path and
+`ortho_config_macros/src/derive/load_impl_profiles.rs` for the profile-aware
+one — and attach the result with `LayerComposition::with_program_label` in
+`ortho_config/src/declarative/composer.rs`.
+
+The composition owns the label, not the layers: no file, environment, or
+command-line layer can set it. The generated entry point in
+`ortho_config_macros/src/derive/load_impl_entry.rs` reads it back with
+`LayerComposition::program_label` and passes it to
+`merge_from_layers_with_program`, which is emitted by
+`ortho_config_macros/src/derive/generate/declarative/mod.rs` and stores the
+label in the merge state. The finish step in that directory's `merge_tokens.rs`
+is the code that reads it when it builds `MissingRequiredValues`; a caller that
+merges layers directly supplies no label, so the report falls back to the
+configuration type name.
+
+### CLI field classification
+
+`FieldAttrs.cli` in `ortho_config_macros/src/derive/parse/mod.rs` is a
+`CliFieldMode`, and the derive reads CLI handling from it alone. The variants
+are `Option` for an ordinary flag that clap may render, `Skipped` for a field
+excluded from parsing but still merged from other layers, and
+`SubcommandSelector` for a clap subcommand picker that is never a configuration
+value. `CliFieldMode::is_option`, `is_skipped`, and `is_subcommand` are the
+only classified answers, so a new generator cannot reintroduce the two booleans
+the enum replaced. The parser's attribute documentation still accepts the
+`skip_cli` and `is_subcommand` spellings, which it maps to the corresponding
+variants.
 
 ## CLI long-flag validation ownership
 

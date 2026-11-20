@@ -128,10 +128,16 @@ All notable changes to this project will be documented in this file.
   expose the child's flags. A selected subcommand is covered as well, and its
   report names that command's `PREFIX_CMDS_<NAME>_<FIELD>` variables and
   `[cmds.<name>]` file paths, so the advertised spellings are the ones the
-  loader really reads; only the selected variant contributes requirements, and
-  a declared default does not excuse absence because these loaders never run
-  the declaring type's defaults struct. The library never exits; callers decide
-  how to present the report. See
+  loader really reads; only the selected variant contributes requirements.
+  These loaders never run the declaring type's generated defaults struct, so a
+  declared default does not excuse absence; the matches-aware entry points do
+  seed the figment with the type's own `Default`, and a value that seed
+  serializes counts as supplied. Enumeration needs a merged document JSON can
+  represent: when the selected-subcommand projection cannot express the
+  document, the loader falls back to the raw extraction, reports Serde's first
+  missing field, and still accepts every configuration that loads without the
+  enumeration. The library never exits; callers decide how to present the
+  report. See
   [ADR-0024](docs/adrs/adr-0024-enumerate-missing-required-values.md), [ADR-0025](docs/adrs/adr-0025-enumerate-missing-values-for-selected-subcommands.md),
   and
   [the user's guide](docs/users-guide.md#recover-from-missing-required-values).

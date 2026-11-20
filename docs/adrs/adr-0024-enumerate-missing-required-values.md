@@ -491,6 +491,31 @@ load still tolerates absence. Two loads of the same declaration, differing only
 in the active loader, thus disagree about the report, which is the truthful
 outcome.
 
+### 2026-11-20 — where the adapter boundary sits
+
+Enumeration crosses three boundaries, and each belongs to a different module.
+Figment owns layer order and extraction, and the only place a Figment type is
+named is the adapter that projects it: `finish_with_required_values` in
+`ortho_config/src/subcommand/sources.rs` builds the merged document and hands
+it to the collector. The collector owns presence and route truthfulness over
+that document and names no Figment type. Presentation owns spelling:
+`ortho_config/src/error/missing/display.rs` lays out the report, and
+`ConfigPath::render` is the one key-spelling routine that both the report and
+the suggested file section call, so a single message cannot spell one key two
+ways. `required_values::env_route` is route vocabulary rather than an adapter:
+it is a pure function of a `ConfigPath` and a prefix that replays the
+provider's transforms, performs no I/O, and consults no Figment type.
+
+The merged document is `serde_json::Value` because that type is the crate's
+canonical merge representation, not a serialization detail of this feature.
+`ortho_config` re-exports `serde_json` so generated code can name
+`ortho_config::serde_json::Value`, the declarative finish path already builds
+that value and passes it to `declarative::from_value_merge`, and the collector
+consults the same value. A second domain tree would duplicate the
+representation and add a translation that carries no additional information, so
+the collector keeps the crate's value type and the figment projection stays in
+the adapter.
+
 ## References
 
 - [Execplan: Enumerate missing required configuration values](../execplans/7-3-1-enumerating-missing-required-values.md).

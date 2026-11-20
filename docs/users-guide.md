@@ -1159,6 +1159,17 @@ Please provide them using one of the following methods, in order of precedence:
      host = "<value>"
 ```
 
+The complete report is guaranteed for a merged document that JSON can
+represent, which is every document a file, environment, or command-line layer
+can build. A selected subcommand merges through Figment, and its finish step
+projects the merged document into JSON so the collector can walk it. A document
+JSON cannot represent, such as one carrying a `u128` above `u64::MAX` that the
+type's own `Default` seeded, falls back to the raw extraction rather than
+failing a load that works: enumeration is skipped for that document alone, and
+a genuinely absent required value there surfaces through the earlier
+deserialization error, which names the first missing field. No loadable
+configuration is rejected because of the fallback.
+
 Each entry lists only the routes the real loader accepts. A field renamed with
 `#[serde(rename = ...)]`, a field marked `skip_cli`, and a leaf inside a nested
 object have no command-line route, so no flag is advertised for them. A nested
