@@ -507,11 +507,20 @@ payload is a file the source walk does not read. The gate establishes an
 expansion only for a macro the declaring file defines with `macro_rules!`,
 whose transcription and call arguments it scans for the inventory's name, and
 it refuses every other invocation, including imported macros and `include!`.
-`compile_error!` is allowed because it produces no item. Separately, a `mod`
-declaration whose file the walk cannot read is refused: the walk reads regular
-`.rs` files only, so that a symlink alias is not counted as a second
-declaration, which also means a declared module file that is a symlink leaves
-the compiler loading source the walk never parses.
+That refusal applies to a macro a transcription invokes as well as to one at
+item level: a locally defined wrapper can call `include!` while its own
+transcription spells no `ErrorKind`, so trusting an unresolved nested name
+would hide the same splice one level down. A nested name must resolve to a
+transcription in the file or be a standard macro that expands only to an
+expression, statement, or literal. `compile_error!` is allowed because it
+produces no item. Separately, a `mod` declaration whose file the walk cannot
+read is refused: the walk reads regular `.rs` files only, so that a symlink
+alias is not counted as a second declaration, which also means a declared
+module file that is a symlink leaves the compiler loading source the walk never
+parses. A condition does not exempt that check either, for the same reason it
+does not exempt the declaration itself: the gate resolves the file before it
+skips a conditional module, so a true condition cannot hide a symlinked
+inventory.
 
 The count is the total declared variant count for that builder package, not
 only the raisable variants; classification as translated or `DisplayOnly`

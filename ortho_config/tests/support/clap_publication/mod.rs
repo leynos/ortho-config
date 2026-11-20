@@ -5,10 +5,11 @@
 //! gate's decisions out of the test body: `lock` parses and selects from
 //! `Cargo.lock`, `identity` holds the reviewed identities and the metadata
 //! cross-checks, `source` locates and counts `ErrorKind`, `library` settles
-//! which file Cargo compiles as the crate root, `audit` holds the attribute,
-//! declaration-shape and item-macro refusals, `symlinks` stages the trees that
-//! prove which symlinks the walk may ignore and which it must refuse, and
-//! `files` confines the reads to capability handles.
+//! which file Cargo compiles as the crate root, `audit` holds the attribute and
+//! declaration-shape refusals, `macros` holds the item-macro refusals,
+//! `symlinks` stages the trees that prove which symlinks the walk may ignore
+//! and which it must refuse, and `files` confines the reads to capability
+//! handles.
 //! `tests/clap_error_coverage.rs` wires them together in the published order:
 //! metadata, lock, identity, edge, count.
 
@@ -17,6 +18,7 @@ mod files;
 mod identity;
 mod library;
 mod lock;
+mod macros;
 mod source;
 
 #[cfg(test)]

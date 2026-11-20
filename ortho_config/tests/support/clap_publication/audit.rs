@@ -1,24 +1,22 @@
 //! Attribute auditing for the `ErrorKind` source inventory.
 //!
 //! The inventory is trustworthy only when the declaration it counts is the
-//! declaration the compiler builds. Four questions decide that, and each is
-//! answered here rather than in the walk that follows modules across files:
-//! whether an item's compilation is conditional, whether a `mod` declaration
-//! redirects the compiler to a file a default-name walk would not open, whether
-//! the inventory type is declared somewhere a file-level scan cannot bind to
-//! the item the crate exports, and whether an item-level macro could declare it
-//! after this parse.
+//! declaration the compiler builds. Four questions decide that: whether an
+//! item's compilation is conditional, whether a `mod` declaration redirects the
+//! compiler to a file a default-name walk would not open, whether the inventory
+//! type is declared somewhere a file-level scan cannot bind to the item the
+//! crate exports, and whether an item-level macro could declare it after this
+//! parse. The first three are answered here; [`super::macros`] answers the
+//! fourth.
 //!
-//! Keeping these predicates together is deliberate. Each of them fails closed,
-//! and a control that reverts one of them must fail for the reason it names,
-//! so they are audited as one subject rather than scattered through the walk.
-
-use std::collections::{BTreeMap, BTreeSet};
+//! The predicates here stay together because each of them fails closed, and a
+//! control that reverts one must fail for the reason it names, so they are
+//! audited as one subject rather than scattered through the module walk.
 
 use anyhow::{Result, bail, ensure};
 use camino::Utf8Path;
 use syn::punctuated::Punctuated;
-use syn::{Attribute, Item, ItemEnum, ItemMacro, Meta, MetaList, Token};
+use syn::{Attribute, Item, ItemEnum, Meta, MetaList, Token};
 
 /// Refuse an enum whose own or whose variants' compilation is conditional.
 pub(super) fn audit_definition(definition: &ItemEnum, origin: &Utf8Path) -> Result<()> {
@@ -133,197 +131,6 @@ pub(super) fn refuse_nested_error_kinds(items: &[Item], origin: &Utf8Path) -> Re
         ),
         None => Ok(()),
     }
-}
-
-/// Item-level macros that cannot declare anything the gate would count.
-///
-/// `compile_error!` expands to a diagnostic and no item, so a crate that
-/// compiles with one in place declares exactly what the parse shows. Every
-/// other invocation is refused below, including `include!`, whose contents are
-/// a file this walk never reads.
-const INERT_ITEM_MACROS: [&str; 1] = ["compile_error"];
-
-/// The identifier a generated inventory would have to spell.
-const INVENTORY: &str = "ErrorKind";
-
-/// Refuse an item-level macro invocation the walk cannot expand.
-///
-/// Rust parses a macro invocation as one item and only later substitutes the
-/// items it produces. A crate can therefore compile a seventeen-variant decoy
-/// beside `pub mod error { include!("inventory.inc"); }`, where the included
-/// file declares the exported eighteen-variant inventory: the file-level count
-/// sees the decoy, the gate accepts it, and the number describes the wrong
-/// enum.
-///
-/// The gate establishes an expansion only for a macro this file defines with
-/// `macro_rules!` in an enclosing item list. Those tokens are visible, so the
-/// gate walks the transcription and the call's arguments and refuses when
-/// either can name the inventory. Any other invocation is refused without
-/// further analysis: `include!` splices a file the source walk does not map,
-/// and an imported macro's body is not in this file at all.
-///
-/// A `macro_rules!` definition is not an invocation — it declares nothing until
-/// a call site is audited in turn — and `compile_error!` produces a diagnostic
-/// and no item, so both are allowed.
-pub(super) fn refuse_item_macros(items: &[Item], origin: &Utf8Path) -> Result<()> {
-    audit_item_macros(items, &MacroBodies::new(), origin)
-}
-
-/// The `macro_rules!` transcriptions a set of item lists has in scope.
-type MacroBodies = BTreeMap<String, String>;
-
-/// Audit one item list, which inherits the macros its enclosing lists define.
-fn audit_item_macros(items: &[Item], inherited: &MacroBodies, origin: &Utf8Path) -> Result<()> {
-    let scope = local_macro_bodies(items, inherited);
-    for item in items {
-        match item {
-            Item::Mod(module) => {
-                if let Some((_, nested)) = &module.content {
-                    audit_item_macros(nested, &scope, origin)?;
-                }
-            }
-            Item::Macro(invocation) => audit_invocation(invocation, &scope, origin)?,
-            _ => {}
-        }
-    }
-    Ok(())
-}
-
-/// The inherited macros, overridden by the ones this item list defines.
-fn local_macro_bodies(items: &[Item], inherited: &MacroBodies) -> MacroBodies {
-    let mut scope = inherited.clone();
-    scope.extend(items.iter().filter_map(macro_rules_definition));
-    scope
-}
-
-/// The name and transcription of an item's `macro_rules!` definition.
-fn macro_rules_definition(item: &Item) -> Option<(String, String)> {
-    let Item::Macro(definition) = item else {
-        return None;
-    };
-    if !definition.mac.path.is_ident("macro_rules") {
-        return None;
-    }
-    let name = definition.ident.as_ref()?;
-    Some((name.to_string(), definition.mac.tokens.to_string()))
-}
-
-/// Refuse one invocation unless its expansion provably cannot name the enum.
-fn audit_invocation(invocation: &ItemMacro, scope: &MacroBodies, origin: &Utf8Path) -> Result<()> {
-    let path = &invocation.mac.path;
-    let is_inert = INERT_ITEM_MACROS.iter().any(|name| path.is_ident(name));
-    if path.is_ident("macro_rules") || is_inert {
-        return Ok(());
-    }
-    let provable = path.get_ident().is_some_and(|name| {
-        let mut proven = BTreeSet::new();
-        expands_without_inventory(
-            &name.to_string(),
-            &invocation.mac.tokens.to_string(),
-            scope,
-            &mut proven,
-        )
-    });
-    ensure!(
-        provable,
-        "{origin} invokes `{}!` at item level; its expansion can declare items this walk cannot \
-         read, so the inventory is unprovable and the gate fails closed",
-        quote_path(path),
-    );
-    Ok(())
-}
-
-/// Whether `name` expands from tokens that can never spell the inventory's name.
-///
-/// A generated `enum ErrorKind` has to carry the identifier `ErrorKind` in the
-/// transcription that produces it, and a macro can only receive tokens from its
-/// own transcription or the call's arguments. A name this file does not define
-/// has no transcription to read, which is why the answer is `false` here and
-/// [`audit_invocation`] refuses it.
-fn expands_without_inventory(
-    name: &str,
-    arguments: &str,
-    scope: &MacroBodies,
-    proven: &mut BTreeSet<String>,
-) -> bool {
-    let Some(body) = scope.get(name) else {
-        return false;
-    };
-    !mentions_inventory(arguments) && transcription_is_clean(name, body, scope, proven)
-}
-
-/// Whether a transcription and everything it invokes stay clear of the name.
-///
-/// An invocation inside the transcription may name a macro this file does not
-/// define. That macro can only receive tokens the transcription already
-/// supplied, and those were scanned with it, so an unresolved nested name is
-/// accepted rather than refused.
-fn transcription_is_clean(
-    name: &str,
-    body: &str,
-    scope: &MacroBodies,
-    proven: &mut BTreeSet<String>,
-) -> bool {
-    if mentions_inventory(body) {
-        return false;
-    }
-    if !proven.insert(name.to_owned()) {
-        return true;
-    }
-    invoked_macro_names(body).iter().all(|nested| {
-        scope
-            .get(nested)
-            .is_none_or(|nested_body| transcription_is_clean(nested, nested_body, scope, proven))
-    })
-}
-
-/// Whether the tokens can spell the inventory's identifier.
-fn mentions_inventory(tokens: &str) -> bool {
-    tokens
-        .split(|character: char| !(character.is_alphanumeric() || character == '_'))
-        .any(|token| token == INVENTORY)
-}
-
-/// The macros a rendered transcription invokes.
-///
-/// Rendering separates tokens with spaces, so the identifier immediately before
-/// a `!` is an invocation. A name this scope cannot resolve is returned as well
-/// and fails the audit by resolving to no transcription.
-fn invoked_macro_names(tokens: &str) -> Vec<String> {
-    let mut names = Vec::new();
-    let mut rest = tokens;
-    while let Some((before, after)) = rest.split_once('!') {
-        if let Some(name) = before
-            .split_whitespace()
-            .next_back()
-            .filter(|word| is_identifier(word))
-        {
-            names.push(name.to_owned());
-        }
-        rest = after;
-    }
-    names
-}
-
-/// Whether a rendered token is a bare identifier.
-fn is_identifier(word: &str) -> bool {
-    let Some(first) = word.chars().next() else {
-        return false;
-    };
-    let starts_ident = first.is_alphabetic() || first == '_';
-    starts_ident
-        && word
-            .chars()
-            .all(|character| character.is_alphanumeric() || character == '_')
-}
-
-/// Render a macro path the way the source spells it.
-fn quote_path(path: &syn::Path) -> String {
-    path.segments
-        .iter()
-        .map(|segment| segment.ident.to_string())
-        .collect::<Vec<_>>()
-        .join("::")
 }
 
 /// The module path of the first nested `ErrorKind`, if any.
