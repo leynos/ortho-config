@@ -20,8 +20,8 @@ certificate and a hosted run. A whole-plan assessment of `b3b9d21f` then
 returned "not yet complete" with two more: a local `macro_rules!` that shadows
 the standard macro an inert list trusts, and a conditional inline module whose
 declared file the walk skipped. Both are repaired in code head `2522013d`,
-which carries a full local certificate and awaits its hosted checks
-(2026-11-20).
+which carries a full local certificate, and the record head `b7db4156` is green
+on every hosted job (2026-11-20).
 
 This ExecPlan is a living document. Keep Constraints, Tolerances, Risks,
 Progress, Surprises & discoveries, Decision log, Outcomes & retrospective,
@@ -1045,8 +1045,29 @@ stopping and reporting.
         attributes the red to saturation rather than to this change; the log
         is kept at
         `/tmp/boundary-saturation-2522013d-ortho-config-11-2-1.out`.
-      - Hosted checks on `2522013d` are pending; the record commit that carries
-        this bullet changes documentation only.
+      - Hosted checks on `2522013d` began in run `44688245553` and were
+        cancelled when the next push superseded them; the hosted result is
+        recorded below against the record head `b7db4156`.
+
+- [x] (2026-11-20) Hosted checks are green on the published head `b7db4156`.
+      Run `44688740305` passed every job on the pull-request lane: both
+      `build-test` legs, both advisory Clippy legs, the MSRV build, and the
+      three packaging dry runs.
+      - The dispatch-only `Publish dry run` is red on the code head. Both
+        `build-test` legs failed at that step, and on Linux `cargo package`
+        refused to verify `cargo-orthohelp`'s tarball: the registry's
+        `ortho_config` has no
+        `agent_context::{ExitClass, OutputContract, StdoutPurpose}`.
+      - The cause is release ordering inherited from main, not this change.
+        Main's `ef46b48d` (#661, 7.2.3, 2026-11-16 19:07 UTC) introduced
+        those imports in `cargo-orthohelp`; every file that names them is
+        byte-identical to `origin/main`, and the published `ortho_config`
+        0.11.0 source carries none of the three types. The last green dry run,
+        on `6d421d5f` at 03:41 UTC the same day, predates that commit.
+      - The step is `workflow_dispatch`-gated, so the pull-request lane skips
+        it and this PR's green does not depend on it. It clears when an
+        `ortho_config` carrying 7.2.3 is published before `cargo-orthohelp`;
+        issue #414 tracks an earlier instance of the same class.
 
 ## Surprises & discoveries
 
@@ -1444,17 +1465,20 @@ took main's version by merging rather than duplicating the refactor, so no
 branch-owned source carries the finding.
 
 No acceptance blocker is open against a published head, and the last recorded
-one has cleared. The code head carrying the 2026-11-20 repairs, `2522013d`, now
-carries a full local gate certificate; only its hosted run is pending, and
-Progress records that observation as outstanding rather than as passed. The
-dispatch-only `Publish dry run` passes on both platforms: on `6d421d5f`, run
-`43796595772` completed `build-test (linux)` with step 38 green and
-`build-test (windows)` with step 37 green, alongside the fully green
-pull-request run `43792388534` on the same commit. The release-ordering failure
-recorded in earlier rounds — `cargo-orthohelp` verifying against the registry's
-then-published `ortho_config`, which predated the agent-context policy types —
-was red on `f891f86b` in run `43740038649` and is not reproducible on this
-head. The earlier record is superseded rather than deleted.
+one has cleared. The code head carrying the 2026-11-20 repairs, `2522013d`,
+carries a full local gate certificate, and the record head `b7db4156` is green
+on every job of the pull-request lane. The dispatch-only `Publish dry run` is
+red again on the code head, and that red is release ordering inherited from
+main rather than a defect in this change. On `6d421d5f`, run `43796595772`
+completed with step 38 green on Linux and step 37 on Windows, because that head
+predates main's #661; `ef46b48d` then made `cargo-orthohelp` import
+`ortho_config::agent_context::{ExitClass, OutputContract, StdoutPurpose}`,
+which the published `ortho_config` 0.11.0 does not have. Every
+`cargo-orthohelp` file naming those types is byte-identical to `origin/main`,
+so any head including #661 fails the step until a matching `ortho_config` is
+published first. The pre-#661 red on `f891f86b` (run `43740038649`) was the
+same class; the earlier "not reproducible" record is superseded rather than
+deleted.
 
 The local wall-clock reds recorded in earlier rounds are superseded. Every one
 was a deadline or allowance kill with no assertion, output or exit-status
