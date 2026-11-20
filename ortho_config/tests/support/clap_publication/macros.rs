@@ -17,12 +17,21 @@
 //! grows as each definition is met. Reading every definition in the list first
 //! would let a later redefinition describe an earlier call that the compiler
 //! expands with the earlier transcription.
+//!
+//! A name is not resolved by its definitions alone. A `use` item can bind an
+//! imported macro to any name, including `compile_error`, so the inert lists
+//! decide only names the enclosing module provably leaves to the prelude.
+//! [`super::imports`] records those bindings, and the crate-wide name set
+//! collected here keeps an internal glob from being treated as a wildcard.
 
 use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::{Result, ensure};
 use camino::Utf8Path;
 use syn::{Item, ItemMacro, ItemMod};
+
+use super::imports::{CrateScope, Imports};
+use super::tokens::{invoked_macro_names, mentions_inventory, quote_path};
 
 /// Item-level macros that cannot declare anything the gate would count.
 ///
@@ -82,9 +91,6 @@ const INERT_NESTED_MACROS: [&str; 35] = [
     "writeln",
 ];
 
-/// The identifier a generated inventory would have to spell.
-const INVENTORY: &str = "ErrorKind";
-
 /// Refuse an item-level macro invocation the walk cannot expand.
 ///
 /// Rust parses a macro invocation as one item and only later substitutes the
@@ -104,13 +110,58 @@ const INVENTORY: &str = "ErrorKind";
 ///
 /// A `macro_rules!` definition is not an invocation — it declares nothing until
 /// a call site is audited in turn — and `compile_error!` produces a diagnostic
-/// and no item, so both are allowed.
-pub(super) fn refuse_item_macros(items: &[Item], origin: &Utf8Path) -> Result<()> {
-    audit_item_macros(items, &MacroBodies::new(), origin)
+/// and no item, so both are allowed, the latter only where nothing else binds
+/// the name. `crate_scope` carries every name the crate declares as a macro or
+/// an import binding, which is what makes an internal glob and a `#[macro_use]`
+/// module precise enough to leave an honest crate accepted.
+pub(super) fn refuse_item_macros(
+    items: &[Item],
+    origin: &Utf8Path,
+    crate_scope: &CrateScope,
+) -> Result<()> {
+    audit_item_macros(items, &MacroBodies::new(), crate_scope, origin)
+}
+
+/// Every macro or import name the item trees of a crate declare.
+///
+/// A glob that re-exports part of this crate can only bind a name the crate
+/// already declares, so the audit collects `macro_rules!` names and explicit
+/// `use` bindings from every file and every inline module. A name outside this
+/// set cannot arrive through an internal glob.
+pub(super) fn collect_crate_names(items: &[Item], names: &mut BTreeSet<String>) {
+    for item in items {
+        match item {
+            Item::Macro(invocation) => {
+                if let Some((name, _)) = macro_rules_definition(invocation) {
+                    names.insert(name);
+                }
+            }
+            Item::Use(_) => {
+                let imports = Imports::of(std::slice::from_ref(item));
+                names.extend(imports.explicit_names().iter().cloned());
+            }
+            Item::Mod(module) => {
+                if let Some((_, nested)) = &module.content {
+                    collect_crate_names(nested, names);
+                }
+            }
+            _ => {}
+        }
+    }
 }
 
 /// The `macro_rules!` transcriptions in scope at one point in an item list.
 type MacroBodies = BTreeMap<String, String>;
+
+/// Everything that decides what a name at one call site resolves to.
+struct CallSite<'a> {
+    /// The `macro_rules!` transcriptions textually in scope.
+    scope: &'a MacroBodies,
+    /// What the enclosing module's `use` items can bind.
+    imports: &'a Imports,
+    /// The crate-wide facts that decide what an unresolved name could be.
+    crate_scope: &'a CrateScope,
+}
 
 /// Audit one item list, which inherits the macros its enclosing lists define.
 ///
@@ -119,12 +170,35 @@ type MacroBodies = BTreeMap<String, String>;
 /// redefinition does not reach backwards to an earlier call. A nested inline
 /// module is audited against the scope in force where it is declared, and the
 /// definitions it adds stay inside it.
-fn audit_item_macros(items: &[Item], inherited: &MacroBodies, origin: &Utf8Path) -> Result<()> {
+fn audit_item_macros(
+    items: &[Item],
+    inherited: &MacroBodies,
+    crate_scope: &CrateScope,
+    origin: &Utf8Path,
+) -> Result<()> {
     let mut scope = inherited.clone();
+    let imports = Imports::of(items);
     for item in items {
         match item {
-            Item::Mod(module) => audit_inline_module(module, &scope, origin)?,
-            Item::Macro(invocation) => audit_item_macro(invocation, &mut scope, origin)?,
+            Item::Mod(module) => audit_inline_module(module, &scope, crate_scope, origin)?,
+            Item::Macro(invocation) => {
+                match macro_rules_definition(invocation) {
+                    // A definition declares nothing until a call site is audited
+                    // in turn, and it becomes visible only to the items after it.
+                    Some((name, body)) => {
+                        scope.insert(name, body);
+                    }
+                    None => audit_invocation(
+                        invocation,
+                        &CallSite {
+                            scope: &scope,
+                            imports: &imports,
+                            crate_scope,
+                        },
+                        origin,
+                    )?,
+                }
+            }
             _ => {}
         }
     }
@@ -132,29 +206,16 @@ fn audit_item_macros(items: &[Item], inherited: &MacroBodies, origin: &Utf8Path)
 }
 
 /// Audit a module declared inline; a file module is left to the source walk.
-fn audit_inline_module(module: &ItemMod, scope: &MacroBodies, origin: &Utf8Path) -> Result<()> {
-    if let Some((_, nested)) = &module.content {
-        audit_item_macros(nested, scope, origin)?;
-    }
-    Ok(())
-}
-
-/// Record a definition for the items after it, or audit an invocation now.
-///
-/// A definition declares nothing until a call site is audited in turn, and it
-/// becomes visible only to the items that follow it.
-fn audit_item_macro(
-    invocation: &ItemMacro,
-    scope: &mut MacroBodies,
+fn audit_inline_module(
+    module: &ItemMod,
+    scope: &MacroBodies,
+    crate_scope: &CrateScope,
     origin: &Utf8Path,
 ) -> Result<()> {
-    match macro_rules_definition(invocation) {
-        Some((name, body)) => {
-            scope.insert(name, body);
-            Ok(())
-        }
-        None => audit_invocation(invocation, scope, origin),
+    if let Some((_, nested)) = &module.content {
+        audit_item_macros(nested, scope, crate_scope, origin)?;
     }
+    Ok(())
 }
 
 /// The name and transcription of an item macro's `macro_rules!` definition.
@@ -172,25 +233,28 @@ fn macro_rules_definition(invocation: &ItemMacro) -> Option<(String, String)> {
 /// it also names a standard macro: Rust lets a `macro_rules!` definition shadow
 /// a prelude or `std` macro of the same name, so `assert_eq!` here may be a
 /// local wrapper around `include!` rather than the assertion macro. Resolution
-/// therefore comes first and the inert list only decides names this file leaves
-/// to the prelude.
-fn audit_invocation(invocation: &ItemMacro, scope: &MacroBodies, origin: &Utf8Path) -> Result<()> {
+/// therefore comes first and the inert list only decides names this module
+/// leaves to the prelude: `use crate::error_inject as compile_error;` binds an
+/// imported body to the name, so an inert entry is trusted only when no `use`
+/// item in the module could have supplied it.
+fn audit_invocation(invocation: &ItemMacro, site: &CallSite, origin: &Utf8Path) -> Result<()> {
     let path = &invocation.mac.path;
     if path.is_ident("macro_rules") {
         return Ok(());
     }
     let provable = path.get_ident().is_some_and(|name| {
         let invoked = name.to_string();
-        if scope.contains_key(&invoked) {
+        if site.scope.contains_key(&invoked) {
             let mut proven = BTreeSet::new();
             expands_without_inventory(
                 &invoked,
                 &invocation.mac.tokens.to_string(),
-                scope,
+                site,
                 &mut proven,
             )
         } else {
             INERT_ITEM_MACROS.contains(&invoked.as_str())
+                && !site.imports.may_bind(&invoked, site.crate_scope)
         }
     });
     ensure!(
@@ -212,15 +276,15 @@ fn audit_invocation(invocation: &ItemMacro, scope: &MacroBodies, origin: &Utf8Pa
 fn expands_without_inventory(
     name: &str,
     arguments: &str,
-    scope: &MacroBodies,
+    site: &CallSite,
     proven: &mut BTreeSet<String>,
 ) -> bool {
-    let Some(body) = scope.get(name) else {
+    let Some(body) = site.scope.get(name) else {
         return false;
     };
     !mentions_inventory(arguments)
-        && arguments_are_clean(arguments, scope, proven)
-        && transcription_is_clean(name, body, scope, proven)
+        && arguments_are_clean(arguments, site, proven)
+        && transcription_is_clean(name, body, site, proven)
 }
 
 /// Whether every macro the call's arguments invoke provably contributes no item.
@@ -232,14 +296,10 @@ fn expands_without_inventory(
 /// spells `ErrorKind`. Resolving the argument's names is the only way to see
 /// that splice, and an unresolvable one fails the audit as it does inside a
 /// transcription.
-fn arguments_are_clean(
-    arguments: &str,
-    scope: &MacroBodies,
-    proven: &mut BTreeSet<String>,
-) -> bool {
+fn arguments_are_clean(arguments: &str, site: &CallSite, proven: &mut BTreeSet<String>) -> bool {
     invoked_macro_names(arguments)
         .iter()
-        .all(|nested| nested_is_clean(nested, scope, proven))
+        .all(|nested| nested_is_clean(nested, site, proven))
 }
 
 /// Whether a transcription and everything it invokes stay clear of the name.
@@ -255,7 +315,7 @@ fn arguments_are_clean(
 fn transcription_is_clean(
     name: &str,
     body: &str,
-    scope: &MacroBodies,
+    site: &CallSite,
     proven: &mut BTreeSet<String>,
 ) -> bool {
     if mentions_inventory(body) {
@@ -266,70 +326,25 @@ fn transcription_is_clean(
     }
     invoked_macro_names(body)
         .iter()
-        .all(|nested| nested_is_clean(nested, scope, proven))
+        .all(|nested| nested_is_clean(nested, site, proven))
 }
 
 /// Whether a nested invocation provably contributes no item.
 ///
 /// A local definition wins over the inert list, because it shadows the standard
-/// macro the name would otherwise resolve to.
-fn nested_is_clean(nested: &str, scope: &MacroBodies, proven: &mut BTreeSet<String>) -> bool {
-    scope.get(nested).map_or_else(
-        || is_inert_nested(nested),
-        |body| transcription_is_clean(nested, body, scope, proven),
+/// macro the name would otherwise resolve to. A name with neither a local
+/// definition nor a provably inert prelude meaning fails closed, and an inert
+/// name is still refused where a `use` item in the module could have rebound
+/// it: `use crate::paste as assert_eq;` is as reachable inside a transcription
+/// as it is at item level.
+fn nested_is_clean(nested: &str, site: &CallSite, proven: &mut BTreeSet<String>) -> bool {
+    site.scope.get(nested).map_or_else(
+        || is_inert_nested(nested) && !site.imports.may_bind(nested, site.crate_scope),
+        |body| transcription_is_clean(nested, body, site, proven),
     )
 }
 
 /// Whether a nested invocation provably contributes no item.
 fn is_inert_nested(name: &str) -> bool {
     INERT_NESTED_MACROS.contains(&name)
-}
-
-/// Whether the tokens can spell the inventory's identifier.
-fn mentions_inventory(tokens: &str) -> bool {
-    tokens
-        .split(|character: char| !(character.is_alphanumeric() || character == '_'))
-        .any(|token| token == INVENTORY)
-}
-
-/// The macros a rendered transcription invokes.
-///
-/// Rendering separates tokens with spaces, so the identifier immediately before
-/// a `!` is an invocation. A name this scope cannot resolve is returned as well
-/// and fails the audit by resolving to no transcription.
-fn invoked_macro_names(tokens: &str) -> Vec<String> {
-    let mut names = Vec::new();
-    let mut rest = tokens;
-    while let Some((before, after)) = rest.split_once('!') {
-        if let Some(name) = before
-            .split_whitespace()
-            .next_back()
-            .filter(|word| is_identifier(word))
-        {
-            names.push(name.to_owned());
-        }
-        rest = after;
-    }
-    names
-}
-
-/// Whether a rendered token is a bare identifier.
-fn is_identifier(word: &str) -> bool {
-    let Some(first) = word.chars().next() else {
-        return false;
-    };
-    let starts_ident = first.is_alphabetic() || first == '_';
-    starts_ident
-        && word
-            .chars()
-            .all(|character| character.is_alphanumeric() || character == '_')
-}
-
-/// Render a macro path the way the source spells it.
-fn quote_path(path: &syn::Path) -> String {
-    path.segments
-        .iter()
-        .map(|segment| segment.ident.to_string())
-        .collect::<Vec<_>>()
-        .join("::")
 }

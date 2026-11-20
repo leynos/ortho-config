@@ -1,0 +1,145 @@
+//! `use` bindings for the item-macro audit.
+//!
+//! A `macro_rules!` definition is not the only thing that decides what a name
+//! means at a call site: a `use` item can bind an imported macro to that name,
+//! and the imported macro's transcription is not in this file at all.
+//! `use crate::error_inject as compile_error;` is the sharpest example, because
+//! it hides a splice behind a name the audit would otherwise trust as a
+//! diagnostic-only prelude macro.
+//!
+//! A glob cannot be enumerated from the source alone, so it is judged by reach.
+//! `use crate::…::*` and its `self`/`super` forms can only bind a name this
+//! crate already declares, so the audit consults the crate-wide name set. Any
+//! other glob may name an external crate, whose macro of any name it can bring
+//! in, so no unresolved name is trusted in a module carrying one.
+//!
+//! A `#[macro_use]` module is the third route. It imports every `macro_rules!`
+//! name its target declares into the enclosing scope and the modules below it,
+//! so an inert name is trusted only where the crate declares no macro of that
+//! name or `#[macro_use]` appears nowhere. `#[macro_use] extern crate` imports
+//! names from another crate entirely, which no local set can bound.
+
+use std::collections::BTreeSet;
+
+use syn::{Attribute, Ident, Item, ItemMod, UseTree};
+
+/// What the `use` items of one item list can bind.
+#[derive(Debug, Default)]
+pub(super) struct Imports {
+    /// Names bound by an explicit `use` path, including `as` renames.
+    explicit: BTreeSet<String>,
+    /// `use crate::…::*`, `use self::…::*` and `use super::…::*`.
+    has_internal_glob: bool,
+    /// A glob whose path may name an external crate.
+    has_external_glob: bool,
+}
+
+impl Imports {
+    /// Record every binding the item list's `use` items declare.
+    pub(super) fn of(items: &[Item]) -> Self {
+        let mut imports = Self::default();
+        for item in items {
+            if let Item::Use(declaration) = item {
+                imports.add_tree(&declaration.tree, None);
+            }
+        }
+        imports
+    }
+
+    /// Whether the module may bind `name` to an import rather than the prelude.
+    ///
+    /// An explicit binding is exact. A glob and a `#[macro_use]` module are
+    /// judged against the crate-wide name set, because neither can introduce a
+    /// name the crate does not declare. An external glob or a `#[macro_use]`
+    /// of another crate can supply a macro of any name, so either refuses every
+    /// unresolved name in the crate.
+    pub(super) fn may_bind(&self, name: &str, crate_scope: &CrateScope) -> bool {
+        self.explicit.contains(name)
+            || self.has_external_glob
+            || crate_scope.has_external_macro_use
+            || ((crate_scope.has_macro_use || self.has_internal_glob)
+                && crate_scope.names.contains(name))
+    }
+
+    /// The names this module binds explicitly.
+    pub(super) const fn explicit_names(&self) -> &BTreeSet<String> {
+        &self.explicit
+    }
+
+    /// Record one declaration, tracking the path a nested glob reaches through.
+    fn add_tree(&mut self, tree: &UseTree, root: Option<&Ident>) {
+        match tree {
+            UseTree::Path(path) => self.add_tree(&path.tree, root.or(Some(&path.ident))),
+            UseTree::Name(name) => {
+                self.explicit.insert(name.ident.to_string());
+            }
+            UseTree::Rename(rename) => {
+                self.explicit.insert(rename.rename.to_string());
+            }
+            UseTree::Glob(_) => match root.map(ToString::to_string).as_deref() {
+                Some("crate" | "self" | "super") => self.has_internal_glob = true,
+                _ => self.has_external_glob = true,
+            },
+            UseTree::Group(group) => {
+                for item in &group.items {
+                    self.add_tree(item, root);
+                }
+            }
+        }
+    }
+}
+
+/// The crate-wide facts that decide what an unresolved name could be.
+#[derive(Debug)]
+pub(super) struct CrateScope {
+    /// Every name the crate declares as a macro or an import binding.
+    names: BTreeSet<String>,
+    /// Whether any module is annotated `#[macro_use]`.
+    has_macro_use: bool,
+    /// Whether any `extern crate` is annotated `#[macro_use]`.
+    has_external_macro_use: bool,
+}
+
+impl CrateScope {
+    /// Build the scope from the crate-wide name set.
+    pub(super) const fn new(names: BTreeSet<String>) -> Self {
+        Self {
+            names,
+            has_macro_use: false,
+            has_external_macro_use: false,
+        }
+    }
+
+    /// Record the `#[macro_use]` attributes one item list carries.
+    ///
+    /// Only a `mod` or an `extern crate` can meaningfully carry the attribute,
+    /// and inline modules are walked because the attribute can sit anywhere in
+    /// the tree. A file module's own attributes are in its declaring list, so
+    /// every file contributes by being observed in turn.
+    pub(super) fn observe(&mut self, items: &[Item]) {
+        for item in items {
+            match item {
+                Item::Mod(module) => self.observe_module(module),
+                Item::ExternCrate(declaration) => {
+                    self.has_external_macro_use |= has_macro_use(&declaration.attrs);
+                }
+                _ => {}
+            }
+        }
+    }
+
+    /// Record one module's attribute and, for an inline module, its contents.
+    fn observe_module(&mut self, module: &ItemMod) {
+        self.has_macro_use |= has_macro_use(&module.attrs);
+        if let Some((_, nested)) = &module.content {
+            self.observe(nested);
+        }
+    }
+}
+
+/// Whether the attributes carry `#[macro_use]`.
+fn has_macro_use(attributes: &[Attribute]) -> bool {
+    attributes
+        .iter()
+        .any(|attribute| attribute.path().is_ident("macro_use"))
+}

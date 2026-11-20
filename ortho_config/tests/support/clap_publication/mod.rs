@@ -7,21 +7,24 @@
 //! cross-checks, `source` locates and counts `ErrorKind`, `library` settles
 //! which file Cargo compiles as the crate root, `reachability` proves which
 //! module files the compiler compiles with the root, `audit` holds the
-//! attribute and declaration-shape refusals, `macros` holds the item-macro
-//! refusals, `symlinks` stages the trees that prove which symlinks the walk may
-//! ignore and which it must refuse, and `files` confines the reads to
-//! capability handles.
+//! attribute and declaration-shape refusals, `imports` records the `use`
+//! bindings the item-macro audit has to resolve, `macros` holds the item-macro
+//! refusals, `tokens` reads the rendered token streams they inspect, `symlinks`
+//! stages the trees that prove which symlinks the walk may ignore and which it
+//! must refuse, and `files` confines the reads to capability handles.
 //! `tests/clap_error_coverage.rs` wires them together in the published order:
 //! metadata, lock, identity, edge, count.
 
 mod audit;
 mod files;
 mod identity;
+mod imports;
 mod library;
 mod lock;
 mod macros;
 mod reachability;
 mod source;
+mod tokens;
 
 #[cfg(test)]
 mod classes;

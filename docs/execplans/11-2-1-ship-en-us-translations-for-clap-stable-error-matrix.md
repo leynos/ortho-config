@@ -1137,6 +1137,62 @@ stopping and reporting.
       its `CodeScene Code Health Review (main)` and `Gecko Security Review`
       checks complete `success`.
 
+- [x] (2026-11-20) The eighth whole-plan assessment's remaining gate finding
+      is repaired: an inert macro name is no longer trusted until every route
+      that could have bound it is resolved. A `use` item can give an imported
+      body the name of a diagnostic-only macro, so `imports.rs` records each
+      module's explicit bindings and `as` renames, classifies a glob by reach
+      (an internal glob is bounded by the crate-wide macro and import name set
+      gathered from every file, an external glob refuses every unresolved
+      name), and `CrateScope` extends the same treatment to `#[macro_use]`
+      modules and `#[macro_use] extern crate`. Two committed controls fail
+      without it: `module_tree/imported_inert_macro` rebinds `compile_error`
+      through a `use` item at item level, and
+      `module_tree/imported_nested_macro` does the same to `assert_eq` inside a
+      transcription. A third, `module_tree/macro_use_inert_macro`, imports a
+      plain `macro_rules! compile_error` through `#[macro_use] mod` with no
+      `use` item at the call; `rustc --edition=2024 --crate-type=lib` compiles
+      that tree, so the spliced eighteen-variant inventory is one the compiler
+      really exports. `module_tree/imports_beside_inert_macro` keeps the
+      refusal from becoming blanket: an unrelated `use std::fmt::Display` still
+      leaves `compile_error!` trusted and counts three variants.
+      Non-vacuity, each mutation restored byte-identically: dropping the
+      item-level import refusal fails `case_15_imported_inert_macro` alone,
+      dropping the nested one fails `case_16_imported_nested_macro` alone, and
+      dropping the `#[macro_use]` term fails `case_17_macro_use_inert_macro`
+      alone while the other seventeen table cases pass. The real
+      `clap_builder` 4.6.7 source carries one `#[macro_use] mod macros;` whose
+      names are `crate_version`, `crate_authors`, `crate_description`,
+      `crate_name`, `command`, `arg_impl`, `arg`, `debug`, `ok` and `some`,
+      none of them on either inert list, so its count stays accepted.
+- [x] (2026-11-20) The assessment's second requirement is recorded: mutation
+      probes for the three translated-context behaviours. Each probe edited
+      `ortho_config/src/localizer/clap_error.rs` in place and was restored
+      byte-identically from a copy. Making `insert_conflict_kind` answer
+      `conflict` for a repeated flag failed
+      `a_repeated_flag_is_reported_as_a_repeat` alone; inserting a fixed
+      `prior` argument failed
+      `distinct_arguments_report_what_they_conflict_with` alone; and
+      suppressing the value parser's source failed
+      `a_value_parser_rejection_keeps_its_reason` alone. The other tests in
+      that file stayed green in each run. The earlier claim that
+      `translated_context.rs` was absent is wrong: `clap_error_cli.rs`
+      registers it with
+      `#[path = "clap_error_cli/translated_context.rs"]` and it passed in
+      `44808729707`.
+
+- [x] (2026-11-20) The Round-17 candidate carries a full local certificate on
+      the frozen tree. Check-fmt left 113 files unchanged, typecheck completed
+      in 1m33s, and lint passed rustdoc, Clippy, Whitaker and docstring
+      coverage (1044/1044, minimum 100.0%). Markdownlint and the spelling gate
+      reported no issues, nixie validated every diagram, and the workflow
+      contracts ran 729 passed and 1 skipped in 45.22s. The focused coverage
+      suite passed 65 tests. `make test` ran 119 targets with 3208 tests passed
+      and none failed, its boundary target at 44 passed, 0 failed and 10
+      ignored in 73.78s, and the Python suite at 128 passed and 5 skipped. A
+      standalone `make boundary` on the same tree passed with 44 passed, 0
+      failed and 10 ignored in 21.73s.
+
 ## Surprises & discoveries
 
 The plan first incorporated merged PR #651 at

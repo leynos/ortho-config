@@ -275,6 +275,26 @@ fn unconditional_module_chain_is_counted() -> Result<()> {
     "macro_argument_include",
     "its expansion can declare items this walk cannot read"
 )]
+// A `use` item binds an imported macro to `compile_error`, so the inert name is
+// not the prelude macro: the import has to be resolved before it is trusted.
+#[case::imported_inert_macro(
+    "imported_inert_macro",
+    "its expansion can declare items this walk cannot read"
+)]
+// The same import route reaches a nested inert name, so a transcription that
+// invokes `assert_eq!` may be calling an imported splice rather than the
+// assertion the inert list trusts.
+#[case::imported_nested_macro(
+    "imported_nested_macro",
+    "its expansion can declare items this walk cannot read"
+)]
+// `#[macro_use]` imports a plain `macro_rules!` definition into the enclosing
+// module without any `use` item at the call, so the attribute itself has to be
+// resolved before an inert name is trusted in the modules below it.
+#[case::macro_use_inert_macro(
+    "macro_use_inert_macro",
+    "its expansion can declare items this walk cannot read"
+)]
 // A tree without a reported crate root is refused rather than guessed at.
 #[case::no_crate_root("no_crate_root", "expected a crate root lib.rs")]
 fn module_tree_is_refused(#[case] fixture: &str, #[case] expected: &str) -> Result<()> {
@@ -293,6 +313,24 @@ fn inline_module_hop_is_followed() -> Result<()> {
     ensure!(
         count == 2,
         "the inline-module fixture should count two variants, found {count}",
+    );
+    Ok(())
+}
+
+/// An unrelated import does not make an inert name ambiguous.
+///
+/// The import audit refuses an inert name any `use` item in the module could
+/// have bound. A blanket refusal of every module carrying imports would fail
+/// this fixture, which imports another name and still uses `compile_error!` as
+/// the diagnostic-only macro the inert list describes.
+#[test]
+fn unrelated_imports_leave_inert_names_trusted() -> Result<()> {
+    let root = fixture_root().join("module_tree/imports_beside_inert_macro");
+
+    let count = count_error_kinds_under(&root)?;
+    ensure!(
+        count == 3,
+        "the accepted-import fixture should count three variants, found {count}",
     );
     Ok(())
 }
