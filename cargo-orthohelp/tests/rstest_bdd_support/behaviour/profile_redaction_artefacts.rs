@@ -6,7 +6,7 @@
 //! module to read as the Gherkin text does and holds each module under the
 //! repository's line budget.
 
-use camino::{Utf8Path, Utf8PathBuf};
+use camino::Utf8Path;
 use cap_std::{ambient_authority, fs_utf8::Dir};
 
 use super::profile_redaction_support::require;
@@ -62,7 +62,7 @@ fn collect_entries(dir: &Dir, prefix: &Utf8Path, artefacts: &mut Vec<Artefact>) 
         if is_dir {
             collect_entries(&dir.open_dir(name.as_str())?, &path, artefacts)?;
         } else {
-            artefacts.push(read_file_artefact(dir, &name, path)?);
+            artefacts.push(read_file_artefact(dir, &name, &path)?);
         }
     }
     Ok(())
@@ -86,10 +86,10 @@ fn sorted_entries(dir: &Dir) -> StepResult<Vec<(String, bool)>> {
 }
 
 /// Reads one file entry into an [`Artefact`] under its relative path.
-fn read_file_artefact(dir: &Dir, name: &str, path: Utf8PathBuf) -> StepResult<Artefact> {
+fn read_file_artefact(dir: &Dir, name: &str, path: &Utf8Path) -> StepResult<Artefact> {
     let bytes = dir.read(name)?;
     Ok(Artefact {
-        path: inventory_path(&path),
+        path: inventory_path(path),
         content: String::from_utf8_lossy(&bytes).into_owned(),
     })
 }
