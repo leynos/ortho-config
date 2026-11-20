@@ -192,7 +192,40 @@ pub struct LocalizedNote {
 }
 
 /// Resolves Fluent IDs in `DocMetadata` into localized strings.
+///
+/// The input is projected through [`DocMetadata::redacted_for_output`] before
+/// any slot is copied. This function is a public conversion boundary in its
+/// own right: a caller that hands in derive-generated or deserialized
+/// metadata directly must not be able to publish a protected value merely by
+/// skipping the CLI's earlier projection. Projecting twice is harmless
+/// because the projection is idempotent.
+///
+/// # Examples
+///
+/// ```rust,no_run
+/// use cargo_orthohelp::ir::localize_doc;
+/// use ortho_config::{LanguageIdentifier, NoOpLocalizer};
+///
+/// # fn demo(metadata: &ortho_config::docs::DocMetadata) {
+/// let locale: LanguageIdentifier = "en-US".parse().expect("valid locale");
+/// let localized = localize_doc(metadata, &locale, &NoOpLocalizer::new());
+/// assert_eq!(localized.app_name, metadata.app_name);
+/// # }
+/// ```
 pub fn localize_doc(
+    metadata: &DocMetadata,
+    locale: &LanguageIdentifier,
+    localizer: &dyn Localizer,
+) -> LocalizedDocMetadata {
+    localize_projected_doc(&metadata.redacted_for_output(), locale, localizer)
+}
+
+/// Resolves one already-projected document and its descendants.
+///
+/// Recursion stays private so the public entry point projects the whole tree
+/// exactly once. The command-example rule is decided from the entire document,
+/// so a nested call to [`localize_doc`] would clone and re-scan every subtree.
+fn localize_projected_doc(
     metadata: &DocMetadata,
     locale: &LanguageIdentifier,
     localizer: &dyn Localizer,
@@ -213,7 +246,7 @@ pub fn localize_doc(
         subcommands: metadata
             .subcommands
             .iter()
-            .map(|command| localize_doc(command, locale, localizer))
+            .map(|command| localize_projected_doc(command, locale, localizer))
             .collect(),
         windows: metadata.windows.clone(),
         renderer: metadata.renderer.clone(),
@@ -397,3 +430,7 @@ fn standard_heading_fallback(id: &str) -> Option<&'static str> {
 fn resolve_optional(localizer: &dyn Localizer, id: Option<&str>) -> Option<String> {
     id.map(|value| resolve_message(localizer, value))
 }
+
+#[cfg(test)]
+#[path = "ir_tests.rs"]
+mod tests;
