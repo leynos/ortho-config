@@ -11,12 +11,18 @@
 //! and the call's arguments can both be read. Any other invocation is refused
 //! without further analysis: an imported macro's body is not in this file at
 //! all, and `include!` splices source the walk never reads.
+//!
+//! A `macro_rules!` name is resolved against the definitions textually in
+//! scope at the call, so an item list is walked in source order and its scope
+//! grows as each definition is met. Reading every definition in the list first
+//! would let a later redefinition describe an earlier call that the compiler
+//! expands with the earlier transcription.
 
 use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::{Result, ensure};
 use camino::Utf8Path;
-use syn::{Item, ItemMacro};
+use syn::{Item, ItemMacro, ItemMod};
 
 /// Item-level macros that cannot declare anything the gate would count.
 ///
@@ -89,11 +95,12 @@ const INVENTORY: &str = "ErrorKind";
 /// enum.
 ///
 /// The gate establishes an expansion only for a macro this file defines with
-/// `macro_rules!` in an enclosing item list. Those tokens are visible, so the
-/// gate walks the transcription and the call's arguments and refuses when
-/// either can name the inventory. Any other invocation is refused without
-/// further analysis: `include!` splices a file the source walk does not map,
-/// and an imported macro's body is not in this file at all.
+/// `macro_rules!` and that is in scope at the call. Those tokens are visible,
+/// so the gate walks the transcription and the call's arguments and refuses
+/// when either can name the inventory or invoke a macro it cannot resolve. Any
+/// other invocation is refused without further analysis: `include!` splices a
+/// file the source walk does not map, and an imported macro's body is not in
+/// this file at all.
 ///
 /// A `macro_rules!` definition is not an invocation — it declares nothing until
 /// a call site is audited in turn — and `compile_error!` produces a diagnostic
@@ -102,43 +109,61 @@ pub(super) fn refuse_item_macros(items: &[Item], origin: &Utf8Path) -> Result<()
     audit_item_macros(items, &MacroBodies::new(), origin)
 }
 
-/// The `macro_rules!` transcriptions a set of item lists has in scope.
+/// The `macro_rules!` transcriptions in scope at one point in an item list.
 type MacroBodies = BTreeMap<String, String>;
 
 /// Audit one item list, which inherits the macros its enclosing lists define.
+///
+/// The list is walked in source order because that is how a `macro_rules!`
+/// name resolves: a definition reaches the items that follow it, and a later
+/// redefinition does not reach backwards to an earlier call. A nested inline
+/// module is audited against the scope in force where it is declared, and the
+/// definitions it adds stay inside it.
 fn audit_item_macros(items: &[Item], inherited: &MacroBodies, origin: &Utf8Path) -> Result<()> {
-    let scope = local_macro_bodies(items, inherited);
+    let mut scope = inherited.clone();
     for item in items {
         match item {
-            Item::Mod(module) => {
-                if let Some((_, nested)) = &module.content {
-                    audit_item_macros(nested, &scope, origin)?;
-                }
-            }
-            Item::Macro(invocation) => audit_invocation(invocation, &scope, origin)?,
+            Item::Mod(module) => audit_inline_module(module, &scope, origin)?,
+            Item::Macro(invocation) => audit_item_macro(invocation, &mut scope, origin)?,
             _ => {}
         }
     }
     Ok(())
 }
 
-/// The inherited macros, overridden by the ones this item list defines.
-fn local_macro_bodies(items: &[Item], inherited: &MacroBodies) -> MacroBodies {
-    let mut scope = inherited.clone();
-    scope.extend(items.iter().filter_map(macro_rules_definition));
-    scope
+/// Audit a module declared inline; a file module is left to the source walk.
+fn audit_inline_module(module: &ItemMod, scope: &MacroBodies, origin: &Utf8Path) -> Result<()> {
+    if let Some((_, nested)) = &module.content {
+        audit_item_macros(nested, scope, origin)?;
+    }
+    Ok(())
 }
 
-/// The name and transcription of an item's `macro_rules!` definition.
-fn macro_rules_definition(item: &Item) -> Option<(String, String)> {
-    let Item::Macro(definition) = item else {
-        return None;
-    };
-    if !definition.mac.path.is_ident("macro_rules") {
+/// Record a definition for the items after it, or audit an invocation now.
+///
+/// A definition declares nothing until a call site is audited in turn, and it
+/// becomes visible only to the items that follow it.
+fn audit_item_macro(
+    invocation: &ItemMacro,
+    scope: &mut MacroBodies,
+    origin: &Utf8Path,
+) -> Result<()> {
+    match macro_rules_definition(invocation) {
+        Some((name, body)) => {
+            scope.insert(name, body);
+            Ok(())
+        }
+        None => audit_invocation(invocation, scope, origin),
+    }
+}
+
+/// The name and transcription of an item macro's `macro_rules!` definition.
+fn macro_rules_definition(invocation: &ItemMacro) -> Option<(String, String)> {
+    if !invocation.mac.path.is_ident("macro_rules") {
         return None;
     }
-    let name = definition.ident.as_ref()?;
-    Some((name.to_string(), definition.mac.tokens.to_string()))
+    let name = invocation.ident.as_ref()?;
+    Some((name.to_string(), invocation.mac.tokens.to_string()))
 }
 
 /// Refuse one invocation unless its expansion provably cannot name the enum.
@@ -193,7 +218,28 @@ fn expands_without_inventory(
     let Some(body) = scope.get(name) else {
         return false;
     };
-    !mentions_inventory(arguments) && transcription_is_clean(name, body, scope, proven)
+    !mentions_inventory(arguments)
+        && arguments_are_clean(arguments, scope, proven)
+        && transcription_is_clean(name, body, scope, proven)
+}
+
+/// Whether every macro the call's arguments invoke provably contributes no item.
+///
+/// A transcription with an item-position parameter pastes its argument into the
+/// expansion, so the arguments are a second route into the item list:
+/// `paste! { include!("inventory.inc") }` hands `include!` to a body that is
+/// nothing but its parameter, and neither the argument nor the transcription
+/// spells `ErrorKind`. Resolving the argument's names is the only way to see
+/// that splice, and an unresolvable one fails the audit as it does inside a
+/// transcription.
+fn arguments_are_clean(
+    arguments: &str,
+    scope: &MacroBodies,
+    proven: &mut BTreeSet<String>,
+) -> bool {
+    invoked_macro_names(arguments)
+        .iter()
+        .all(|nested| nested_is_clean(nested, scope, proven))
 }
 
 /// Whether a transcription and everything it invokes stay clear of the name.
