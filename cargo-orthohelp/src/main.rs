@@ -168,7 +168,7 @@ fn run(cli: Cli, format_was_explicit: bool) -> Result<(), OrthohelpError> {
     // that second pass is idempotent and this early one is what the other
     // consumers rely on.
     let doc_metadata: DocMetadata =
-        serde_json::from_str::<DocMetadata>(&ir_json)?.redacted_for_output();
+        serde_json::from_str::<DocMetadata>(&ir_json)?.into_redacted_for_output();
 
     let should_generate_ir = matches!(args.format, OutputFormat::Ir | OutputFormat::All);
     let should_generate_man = matches!(args.format, OutputFormat::Man | OutputFormat::All);

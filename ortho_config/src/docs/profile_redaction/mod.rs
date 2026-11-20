@@ -23,10 +23,20 @@
 //! # Reuse policy
 //!
 //! These functions are crate-private except for [`ProfileFieldExposure`] and
-//! [`DocMetadata::redacted_for_output`]. Call the public entry point once per
-//! public conversion boundary; private recursion must not call it again for a
-//! subtree, because the global command-example rule is computed from the whole
-//! document.
+//! the two projection methods on [`DocMetadata`]. Every public conversion
+//! boundary applies one of them exactly once, over the whole document it
+//! returns; private recursion must not call it again for a subtree, because
+//! the global command-example rule is computed from the whole document.
+//!
+//! The derive's generated methods are separate boundaries that compose: a
+//! parent calls each child's `OrthoConfigDocs`/`OrthoConfigSubcommandDocs`
+//! method, which projects that child's subtree before returning it. The
+//! repetition that composition implies cannot be removed without either
+//! leaving a public method unprojected or breaking the handwritten
+//! implementations those traits document as supported. What *can* be avoided
+//! is cloning: generated code owns the tree it has just built, so it calls
+//! [`DocMetadata::into_redacted_for_output`] rather than
+//! [`DocMetadata::redacted_for_output`].
 
 use serde::{Deserialize, Serialize};
 
@@ -163,10 +173,33 @@ impl DocMetadata {
     /// ```
     #[must_use]
     pub fn redacted_for_output(&self) -> Self {
+        self.clone().into_redacted_for_output()
+    }
+
+    /// Returns the same value with every protected value-bearing slot removed.
+    ///
+    /// This is the form to call when the caller already owns the document, as
+    /// the derive's generated methods do with the tree they just built. It
+    /// projects in place instead of cloning, so composing a parent from
+    /// already-owned children costs a traversal per public boundary rather
+    /// than a full-tree clone as well.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use ortho_config::docs::DocMetadata;
+    ///
+    /// # fn demo(metadata: DocMetadata) {
+    /// let projected = metadata.into_redacted_for_output();
+    /// assert!(projected.subcommands.iter().all(|child| child.fields.iter()
+    ///     .all(|field| field.profile_field.is_none() || field.default.is_none())));
+    /// # }
+    /// ```
+    #[must_use]
+    pub fn into_redacted_for_output(mut self) -> Self {
         let has_protected = self.contains_protected_field();
-        let mut projected = self.clone();
-        projected.redact_node(has_protected);
-        projected
+        self.redact_node(has_protected);
+        self
     }
 
     /// Reports whether this subtree declares any protected field.
@@ -224,6 +257,8 @@ fn redact_value_type(value: &mut ValueType) {
     }
 }
 
+#[cfg(test)]
+mod derive_tests;
 #[cfg(test)]
 mod proptests;
 #[cfg(test)]
