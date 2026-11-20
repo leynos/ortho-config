@@ -480,11 +480,12 @@ than being provisioned by a proof run. Pin upgrades require separate evidence
 and are not part of this feature.
 
 PR #651's `tests/fixtures/prover_tools/` and opt-in
-`make test-prover-tools-integration` establish runner acceptance and rejection,
-not configuration correctness. That target needs both tools installed via
-`make install-kani` and `make install-verus`; it emits fixture evidence under
-`target/prover-tools-fixtures/`. Do not register these fixtures as production
-proofs, add a Kani harness solely because Kani is available, or add prover
+`make test-prover-tools-integration` established runner acceptance and
+rejection, not configuration correctness. [Superseded 2026-11-20: main deleted
+that lane and its opt-in target in `0af1e88e` (PR #678), so the fixtures and
+the target no longer exist and this paragraph's fixture obligation is
+withdrawn. See the decision log.] Do not register any fixture as a production
+proof, add a Kani harness solely because Kani is available, or add prover
 installation/execution to `make all`, `make test`, or `make lint`.
 
 Extend the existing `.github/workflows/prover-tools.yml` lane in M2 to run
@@ -492,10 +493,10 @@ registered production Verus proofs after installation and retain their separate
 transcript with the uploaded evidence. Add `verus/**` and the actual production
 kernel/model-mapping paths to its pull-request path filters. Update
 `tests/workflow_contracts/prover_tools_workflow_test.py` to check those paths,
-the production invocation, and upload coverage. Preserve the fixture checks,
-read-only permissions, pinned actions, 30-minute bound, and Linux x86_64 scope.
-Other platforms remain explicitly unvalidated. The existing hosted sccache
-opt-out for Kani is not permission to unset local compiler admission wrappers.
+the production invocation, and upload coverage. Preserve read-only permissions,
+pinned actions, 30-minute bound, and Linux x86_64 scope. Other platforms remain
+explicitly unvalidated. The existing hosted sccache opt-out for Kani is not
+permission to unset local compiler admission wrappers.
 
 Use the managed compiler admission path locally. If admission is unhealthy,
 report its full status and continue non-compiling work rather than bypassing
@@ -804,11 +805,11 @@ exclusion as it stood at that milestone; it no longer applies.
     structural boundary, and the model-to-production relationship; section 6.7
     of the agent-native design carries the `profiles.redaction` shape and the
     public-text limitation; ADR-0024 gains a Formal evidence subsection
-    covering the flat preorder encoding and the residual boundary; the design
-    decision log records the decision; the developers' guide replaces the empty
-    production inventory with the registered Verus entry, its obligations,
-    negative controls, and residual boundary, and adds cache-invalidation and
-    redaction-assertion sections.
+    covering the parent-before-child encoding and the residual boundary; the
+    design decision log records the decision; the developers' guide replaces
+    the empty production inventory with the registered Verus entry, its
+    obligations, negative controls, and residual boundary, and adds
+    cache-invalidation and redaction-assertion sections.
   - [x] (2026-11-16) Update `docs/contents.md`, `docs/repository-layout.md`
     (the `verus/` tree entry and row, and removal of the deleted
     `tests/fixtures/prover_tools/` claim), and tick roadmap 9.1.2 with its
@@ -905,6 +906,26 @@ exclusion as it stood at that milestone; it no longer applies.
   duplicate annotation, and a flattened container, each asserting the
   diagnostic's field span through a committed `.stderr` fixture. No delivered
   behaviour changed.
+
+- [x] (2026-11-20) Close the disclosure and stale-cache boundary gaps the
+  completeness assessment raised. `cargo-orthohelp`'s public `localize_doc`
+  projected only at its recursion's leaves, so a direct library caller could
+  receive sibling command examples from a tree whose protected field lived in a
+  child; it now projects the whole document once at the entry and recurses
+  privately over the projected tree, with three direct-entry regressions
+  (`cargo-orthohelp/src/ir/tests.rs`) that fail if the entry projects a subtree
+  only. `DocMetadata::into_redacted_for_output` lets a caller that already owns
+  the document project it without cloning, and the derive and both binary call
+  sites use it. The pre-change cache scenario seeded an entry under a directory
+  name the generator would ignore regardless of the salt;
+  `CacheKey::hash_without_disclosure_policy` now reproduces the pre-9.1.2
+  digest, a bridge regression seeds an unredacted body under that real name and
+  requires a lookup miss, and the BDD fixture's documented claim is narrowed to
+  what it proves. The M2 fixture-lane obligation is withdrawn under main's
+  `0af1e88e`. The Verus module prose was corrected where it reversed the
+  command-example rule, called the encoding preorder, and left the differential
+  oracle's bounds implicit; `ValueType::Scalar` gained an opaque tag so two
+  scalar kinds cannot collapse to one constant. 27 obligations still verify.
 
 ## Surprises & discoveries
 
@@ -1086,14 +1107,26 @@ cannot be mapped to them; authors mark the leaves instead.
 deleted `prover-tools.yml`. Reuse the pinned Verus invocation and command
 contracts from ADR-0017 rather than inventing new tooling.
 
-2026-11-16, decided for M2: encode the command tree as a preorder sequence with
-a parent index instead of nested children. Verus rejects structural recursion
-through a sequence of nodes, so the nested encoding cannot be proved there at
-all, and the plan allowed the lemma boundaries to be revised while verification
-conditions were discovered. The encoding is total for topology and for slot
-reachability, so V1 and V2 keep their full strength; only the traversal shape
-is modelled differently, and the correspondence to the production recursion
-stays with the differential tests recorded in ADR-0024.
+2026-11-16, decided for M2: encode the command tree as a parent-before-child
+sequence with a parent index instead of nested children. Verus rejects
+structural recursion through a sequence of nodes, so the nested encoding cannot
+be proved there at all, and the plan allowed the lemma boundaries to be revised
+while verification conditions were discovered. The invariant admits any
+topological order rather than production's preorder one; the encoding is total
+for topology and for slot reachability, so V1 and V2 keep their full strength.
+Only the traversal shape is modelled differently, and the correspondence to the
+production recursion stays with the differential tests recorded in ADR-0024.
+
+2026-11-20, withdrawn for M2: the obligation to "preserve the fixture checks"
+in the recreated production-proof lane. Main's `0af1e88e` (PR #678) deleted
+`.github/workflows/prover-tools.yml`, `make test-prover-tools-integration`,
+`tests/fixtures/prover_tools/`, and the workflow-contract test for the old
+lane, on the grounds that the real-tool fixtures duplicated the proof run
+itself. Recreating them would restore machinery main deliberately removed and
+that this plan's own principle ("do not register these fixtures as production
+proofs") already treated as optional. M2 therefore recreates a
+production-proofs-only lane; no fixture acceptance/rejection lane exists in
+this repository, and the plan does not ask for one.
 
 ## Outcomes & retrospective
 
