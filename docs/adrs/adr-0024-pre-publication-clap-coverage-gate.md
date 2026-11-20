@@ -141,13 +141,16 @@ whether or not the module is conditional, a compiled decoy whose inventory
 `include!` splices from a contained file — directly, behind a locally defined
 wrapper whose own transcription names no `ErrorKind`, through a local
 definition that shadows the standard macro an inert list would otherwise trust,
-at item level and nested, through a call that precedes a redefinition of the
-same name, or through an item argument the invoking macro re-emits — and a
-declared module file staged as a symlink whose target resolves within its own
-directory, whether its declaration is unconditional, carries a condition that
-can hold, or is nested below a conditional inline module. The symlink controls
-also show the direction they must not take: an alias of the declaring module
-stays uncounted rather than refused.
+at item level and nested, through a `use` item that binds an imported macro to
+such a name, again at item level and nested, through a `#[macro_use]` module
+that imports a plain `macro_rules!` definition of such a name without any `use`
+item at the call, through a call that precedes a redefinition of the same name,
+or through an item argument the invoking macro re-emits — and a declared module
+file staged as a symlink whose target resolves within its own directory,
+whether its declaration is unconditional, carries a condition that can hold, or
+is nested below a conditional inline module. The symlink controls also show the
+direction they must not take: an alias of the declaring module stays uncounted
+rather than refused.
 
 ## Alternatives rejected
 

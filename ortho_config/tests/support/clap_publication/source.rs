@@ -16,7 +16,10 @@
 //! a module file that is a symlink — or that exists only in a form the walk
 //! skips — hides the same way. A macro invocation is a third: Rust parses the
 //! call as one item and substitutes what it declares afterwards, so a
-//! declaration a macro generates never appears in this parse.
+//! declaration a macro generates never appears in this parse. A `use` item is
+//! the fourth: it can bind an imported macro to a name the audit would
+//! otherwise trust, so the walk mines every parsed file for the macro and
+//! import names the crate declares before it audits any invocation.
 //!
 //! The count is certified by [`super::reachability`], which follows `mod`
 //! declarations from the crate root and certifies the declaring file only when
@@ -30,6 +33,8 @@
 //! first, because a package may keep an unused `src/lib.rs` beside the file it
 //! really compiles.
 
+use std::collections::BTreeSet;
+
 use anyhow::{Context, Result, bail, ensure};
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::ambient_authority;
@@ -38,8 +43,9 @@ use cargo_metadata::Package;
 use syn::Item;
 
 use super::audit::{audit_definition, refuse_nested_error_kinds, reject_cfg_attributes};
+use super::imports::CrateScope;
 use super::library::library_crate_root;
-use super::macros::refuse_item_macros;
+use super::macros::{collect_crate_names, refuse_item_macros};
 use super::reachability::unconditionally_compiled;
 
 /// The crate root a library package compiles first when it declares no path.
@@ -76,12 +82,11 @@ pub(super) fn count_error_kinds_from(root: &Utf8Path, crate_root: &Utf8Path) -> 
 /// Count the one unconditional `ErrorKind` declared below `directory`.
 fn count_from(directory: &Dir, source_root: &Utf8Path, crate_root: &Utf8Path) -> Result<usize> {
     let sources = rust_sources(directory, Utf8Path::new(""))?;
+    let parsed = parse_sources(directory, source_root, &sources)?;
+    let crate_scope = crate_scope_of(parsed.iter().map(|(_, file)| file));
     let mut definitions = Vec::new();
-    for relative in &sources {
-        let source = directory
-            .read_to_string(relative)
-            .with_context(|| format!("read {source_root}/{relative}"))?;
-        if let Some(count) = analyze_error_kind(&source, relative)? {
+    for (relative, file) in &parsed {
+        if let Some(count) = analyze_error_kind(file, &crate_scope, relative)? {
             definitions.push((relative.clone(), count));
         }
     }
@@ -103,8 +108,48 @@ fn count_from(directory: &Dir, source_root: &Utf8Path, crate_root: &Utf8Path) ->
 /// The fixture controls use this directly, so a synthetic source can prove
 /// each refusal without touching the real registry cache.
 pub(super) fn count_error_kind_variants(source: &str, origin: &Utf8Path) -> Result<usize> {
-    analyze_error_kind(source, origin)?
+    let file = syn::parse_file(source).with_context(|| format!("{origin} should be valid Rust"))?;
+    let crate_scope = crate_scope_of(std::iter::once(&file));
+    analyze_error_kind(&file, &crate_scope, origin)?
         .with_context(|| format!("{origin} declares no top-level ErrorKind enum to inventory"))
+}
+
+/// Every Rust source below `directory`, parsed before anything is decided.
+///
+/// The crate-wide name set needs every file, not just the one being audited, so
+/// a glob that re-exports a macro declared elsewhere in the crate is not
+/// mistaken for one that could import an unknown name. Parsing once also keeps
+/// the later audit from reading the tree twice.
+fn parse_sources(
+    directory: &Dir,
+    source_root: &Utf8Path,
+    sources: &[Utf8PathBuf],
+) -> Result<Vec<(Utf8PathBuf, syn::File)>> {
+    sources
+        .iter()
+        .map(|relative| {
+            let source = directory
+                .read_to_string(relative)
+                .with_context(|| format!("read {source_root}/{relative}"))?;
+            let file = syn::parse_file(&source)
+                .with_context(|| format!("{relative} should be valid Rust"))?;
+            Ok((relative.clone(), file))
+        })
+        .collect()
+}
+
+/// The crate-wide names and `#[macro_use]` facts the macro audit resolves against.
+fn crate_scope_of<'a>(files: impl IntoIterator<Item = &'a syn::File>) -> CrateScope {
+    let parsed: Vec<&syn::File> = files.into_iter().collect();
+    let mut names = BTreeSet::new();
+    for file in &parsed {
+        collect_crate_names(&file.items, &mut names);
+    }
+    let mut scope = CrateScope::new(names);
+    for file in parsed {
+        scope.observe(&file.items);
+    }
+    scope
 }
 
 /// Every `.rs` file below `directory`, as paths relative to the root.
@@ -156,10 +201,13 @@ fn collect_sources(
 /// A declaration nested in an inline module is refused before the file-level
 /// scan, because that scan could otherwise count a compiled decoy while the
 /// exported inventory sat in a module it never looked inside.
-fn analyze_error_kind(source: &str, origin: &Utf8Path) -> Result<Option<usize>> {
-    let file = syn::parse_file(source).with_context(|| format!("{origin} should be valid Rust"))?;
+fn analyze_error_kind(
+    file: &syn::File,
+    crate_scope: &CrateScope,
+    origin: &Utf8Path,
+) -> Result<Option<usize>> {
     refuse_nested_error_kinds(&file.items, origin)?;
-    refuse_item_macros(&file.items, origin)?;
+    refuse_item_macros(&file.items, origin, crate_scope)?;
     let mut definitions = file.items.iter().filter_map(|item| match item {
         Item::Enum(definition) if definition.ident == "ErrorKind" => Some(definition),
         _ => None,

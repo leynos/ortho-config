@@ -519,10 +519,24 @@ while its own transcription spells no `ErrorKind`, so trusting an unresolved
 nested name would hide the same splice one level down. A nested name must
 resolve to a transcription in the file or be a standard macro that expands only
 to an expression, statement, or literal. Those standard names are consulted
-only where the file defines nothing of that name: Rust lets a `macro_rules!`
+only where nothing else in the module claims them: Rust lets a `macro_rules!`
 definition shadow a prelude or `std` macro, so a local `assert_eq!` or
-`compile_error!` is a splice of its own rather than the macro its name suggests.
-`compile_error!` is allowed because it produces no item. Separately, a `mod`
+`compile_error!` is a splice of its own rather than the macro its name
+suggests, and a `use` item binds the same way.
+`use crate::error_inject as compile_error;` gives an imported body the name of
+the diagnostic-only macro, so an inert name is trusted only where nothing that
+reaches the call could have bound it. An explicit import is matched exactly,
+including an `as` rename. A glob needs the crate's help: `use crate::…::*`,
+`self` and `super` forms can only re-export a name the crate already declares,
+so they are judged against the macro and import names collected from every
+file, while any other glob may name an external crate and refuses every
+unresolved name in its module. A `#[macro_use]` module is a third route that
+needs no `use` item at the call at all: the attribute imports every
+`macro_rules!` name its target declares into the enclosing scope and the
+modules below it, so a crate carrying one is trusted only for names it declares
+no macro of. `#[macro_use] extern crate` imports names from another crate
+entirely, so it refuses every unresolved name. `compile_error!` is allowed
+where those conditions hold, because it produces no item. Separately, a `mod`
 declaration whose file the walk cannot read is refused: the walk reads regular
 `.rs` files only, so that a symlink alias is not counted as a second
 declaration, which also means a declared module file that is a symlink leaves
