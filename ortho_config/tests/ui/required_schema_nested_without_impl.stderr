@@ -1,0 +1,26 @@
+error[E0277]: the trait bound `Child: RequiredConfigSchema` is not satisfied
+  --> tests/ui/required_schema_nested_without_impl.rs:20:12
+   |
+20 |     child: Child,
+   |            ^^^^^ unsatisfied trait bound
+   |
+help: the trait `RequiredConfigSchema` is not implemented for `Child`
+  --> tests/ui/required_schema_nested_without_impl.rs:10:1
+   |
+10 | struct Child {
+   | ^^^^^^^^^^^^
+help: the trait `RequiredConfigSchema` is implemented for `Root`
+  --> tests/ui/required_schema_nested_without_impl.rs:15:41
+   |
+15 | #[derive(Debug, Deserialize, Serialize, OrthoConfig)]
+   |                                         ^^^^^^^^^^^
+note: required by a bound in `SchemaChildren::compose`
+  --> src/required_values/schema.rs
+   |
+   | impl SchemaChildren {
+...
+   |     pub fn compose<T>(stack: &mut RequiredSchemaStack) -> Result<Self, RequiredSchemaError>
+   |     where
+   |         T: RequiredConfigSchema + ?Sized,
+   |            ^^^^^^^^^^^^^^^^^^^^ required by this bound in `SchemaChildren::compose`
+   = note: this error originates in the derive macro `OrthoConfig` (in Nightly builds, run with -Z macro-backtrace for more info)

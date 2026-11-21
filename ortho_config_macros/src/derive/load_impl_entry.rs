@@ -140,8 +140,13 @@ fn build_profile_injected_methods(
                     discovery_source,
                     merge_source,
                 );
+            let program = composition
+                .program_label()
+                .map(::std::string::String::from);
             let result = composition
-                .into_merge_result(|layers| #config_ident::merge_from_layers(layers))
+                .into_merge_result(|layers| {
+                    #config_ident::merge_from_layers_with_program(layers, program.as_deref())
+                })
                 .map(|config| #krate::profile::ProfileLoadOutcome::new(config, selection));
             #krate::__private::profile_load_injected_finished(&result);
             result
@@ -276,8 +281,13 @@ fn build_profile_cli_impl(
                 #krate::__private::profile_load_started();
                 let (composition, selection) =
                     Self::compose_layers_with_selection_from_iter(iter);
+                let program = composition
+                    .program_label()
+                    .map(::std::string::String::from);
                 let result = composition
-                    .into_merge_result(|layers| #config_ident::merge_from_layers(layers))
+                    .into_merge_result(|layers| {
+                        #config_ident::merge_from_layers_with_program(layers, program.as_deref())
+                    })
                     .map(|config| #krate::profile::ProfileLoadOutcome::new(config, selection));
                 #krate::__private::profile_load_finished(&result);
                 result

@@ -52,6 +52,27 @@ fn error_category_covers_every_variant() {
         "bad flag",
     )));
     assert_eq!(error_category(&other), CATEGORY_OTHER);
+
+    // Discovery settles the file chain before any value is merged, so a
+    // missing-values report cannot arise on this path. It is asserted rather
+    // than left implicit so the catch-all stays a deliberate choice: giving it
+    // a dedicated discovery category would imply discovery can produce one.
+    let missing = OrthoError::MissingRequiredValues(Box::new(
+        crate::MissingRequiredValues::try_new(
+            None,
+            vec![crate::MissingRequiredValue::new(
+                crate::ConfigPath::new(["url"]),
+                Vec::new(),
+                false,
+            )],
+        )
+        .expect("one entry forms a non-empty report"),
+    ));
+    assert_eq!(
+        error_category(&missing),
+        CATEGORY_OTHER,
+        "discovery must not claim a category for a report it cannot raise"
+    );
 }
 
 /// `Captured::field` returns an empty string for a missing field, so

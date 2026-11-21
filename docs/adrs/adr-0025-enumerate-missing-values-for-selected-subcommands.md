@@ -1,0 +1,165 @@
+# Architectural decision record (ADR) 0025: Enumerate missing required values for selected subcommands
+
+## Status
+
+Accepted.
+
+Date: 2026-11-15.
+
+This record amends [ADR-0024](adr-0024-enumerate-missing-required-values.md),
+which excluded selected-subcommand merges from enumeration.
+
+## Context and problem statement
+
+ADR-0024 reported every activated absent requirement in one typed error, but
+its coverage contract excluded "selected-subcommand values merged through the
+Figment extraction helpers". The exclusion was recorded against an
+implementation assumption: that such a merge finishes by extracting directly
+from `Figment` and therefore never has a schema to walk.
+
+An agent driving a tool with subcommands hits the same one-value-per-attempt
+problem there, and worse. A selected subcommand does not read its own
+`PREFIX_key` variables or root file keys. It reads `PREFIX_CMDS_<NAME>_key`
+variables and the `[cmds.<name>]` file section, which the loader builds inside
+the merge. A diagnostic that named the struct's own prefix would advertise
+routes the loader never consults, so the first correction attempt would fail
+for a second, spurious reason.
+
+## Decision drivers
+
+- One-diagnostic recovery is the value of ADR-0024; excluding a whole loader
+  family leaves the common case uncovered.
+- An advertised route must be one the loader really reads, or the diagnostic is
+  worse than silence.
+- The route namespace is derived twice — once by the provider, once by the
+  diagnostic — and duplicated derivations drift.
+
+## Requirements
+
+### Functional requirements
+
+- A selected-subcommand load reports every activated absent requirement of the
+  selected variant, and reports nothing for unselected variants.
+- Each reported item advertises the environment variable and the file path the
+  selected-subcommand loader actually reads.
+- The command-line hint set is unchanged.
+
+### Technical requirements
+
+- Route construction accepts a namespace rather than assuming the type's own
+  `RouteHints` prefix.
+- The environment prefix is produced by one function shared by the provider and
+  the diagnostic.
+- The raw `DeserializeOwned` subcommand helpers keep their existing boundary;
+  they never learn which type's schema to compose.
+
+## Options considered
+
+### Option A: Widen `RouteHints` on the generated implementation
+
+Emit the subcommand namespace from the derive, so `required_route_hints()` is
+already correct. Rejected: a variant's prefix depends on the runtime prefix and
+command name the selected merge observes, not on the type alone, and widening
+the public `RouteHints` struct breaks external struct literals.
+
+### Option B: Carry a loader scope through collection
+
+Keep `RouteHints` as the CLI and prefix source and pass a crate-private
+`RouteScope` (environment prefix plus file section) into the collector. The
+ordinary load derives its scope from the hints; the subcommand load builds one
+from the loader's namespace.
+
+| Topic                 | Option A          | Option B            |
+| --------------------- | ----------------- | ------------------- |
+| Public API impact     | Breaking          | None                |
+| Namespace correctness | Type-level only   | Loader-true         |
+| Files touched         | Derive and schema | Collector and merge |
+
+_Table 1: Comparison of the two approaches._
+
+## Decision outcome / proposed direction
+
+Option B. `collect::RouteScope` holds an optional environment prefix and a file
+section. `collect_missing` derives the default scope from `RouteHints`;
+`collect_missing_scoped` takes the hints and an explicit scope together as one
+`RouteContext`, because every reported path consults both. `routes_for`
+prepends the scope prefix to the environment variable and the scope section to
+the file path.
+
+`subcommand_env_prefix` in `ortho_config/src/subcommand/mod.rs` is the single
+source of the `PREFIX_CMDS_<NAME>_` namespace. The provider uses it to read, and
+`sources::finish_with_required_values` uses it to describe.
+
+The four `load_and_merge_subcommand_for*` helpers and the matching
+`SubcmdConfigMerge` methods gain a `RequiredConfigSchema` bound. Every type
+that derives `OrthoConfig` already satisfies it.
+
+## Goals and non-goals
+
+- Goals:
+  - Cover the selected-subcommand loaders with the ADR-0024 contract.
+  - Keep every advertised route reproducible with the loader that raised it.
+  - Leave the raw generic boundary untouched.
+- Non-goals:
+  - Enumeration across an unselected variant's configuration.
+  - Changing the command-line hint grammar.
+
+## Migration plan
+
+1. Thread `RouteScope` through the collector and add the scoped entry point.
+2. Extract `subcommand_env_prefix` and use it in both the provider and the
+   diagnostic.
+3. Lift the `RequiredConfigSchema` bound onto the `_for_*` helpers and record
+   the change in the v0.11.0 migration guide.
+
+## Known risks and limitations
+
+- A subcommand whose prefix or command name differs between the parser and the
+  loader would still advertise a wrong route; the shared helper is what keeps
+  them equal, so it must stay the only producer.
+- Enumeration still inherits every ADR-0024 limitation: custom `Deserialize`
+  implementations, unmarked `#[serde(flatten)]`, and enum payloads.
+- The CLI hint for a selected subcommand comes from the derived schema, so a
+  subcommand that renames its fields keeps the ADR-0024 rule of omitting a flag
+  the parser cannot populate.
+
+## Architectural rationale
+
+The runtime keeps one collector and one route vocabulary. The namespace a
+loader reads is data passed to that collector, not a second code path, so the
+truthfulness rule has a single place to be enforced and a single place to
+change.
+
+## Amendments
+
+### 2026-11-16 — a merged document JSON cannot represent
+
+The finish step projects the merged figment into a `serde_json::Value` for the
+collector. Every route is JSON-bounded, but the matches-aware loaders seed the
+figment with `T::default()` unsanitised, so a type whose `Default` holds a
+`u128` above `u64::MAX` presents a document JSON cannot represent while the raw
+helpers accept it through the field's own deserializer. A failed projection now
+falls back to the raw extraction rather than reject a configuration the raw
+helpers load, which skips enumeration for that document alone. The case
+`a_wide_default_survives_the_schema_aware_matches_merge` drives both loaders on
+that shape and pins the agreement.
+
+### 2026-11-17 — a declared default is not a scoped supply layer
+
+Composition already demoted a child's `Activation::DefaultBacked` nodes, but
+the scoped check reads the root schema directly and left the root's own
+declared defaults tolerated. These loaders never run the declaring type's
+generated defaults struct, so no active layer could supply such a field: an
+absent value fell through to the deserializer's single-field error instead of
+being enumerated. `ensure_no_missing_required_values_scoped` now applies the
+same demotion to the root's fields, so the report names the absent key and its
+real routes. A default clap materializes still arrives through the command-line
+layer and is never reported.
+`a_declared_default_is_not_a_scoped_subcommand_supply` drives both scoped entry
+points, and `the_absent_declared_default_recovers_from_its_file_route` drives
+the advertised file route.
+
+## References
+
+- [ADR-0024: Enumerate missing required configuration values](adr-0024-enumerate-missing-required-values.md).
+- [Execplan: Enumerate missing required configuration values](../execplans/7-3-1-enumerating-missing-required-values.md).

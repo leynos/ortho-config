@@ -1,0 +1,5 @@
+error: #[command(subcommand)] fields cannot be combined with #[ortho_config(nested)]; remove the conflicting attribute
+  --> tests/ui/required_schema_nested_on_subcommand.rs:12:20
+   |
+12 |     #[ortho_config(nested)]
+   |                    ^^^^^^

@@ -1,0 +1,22 @@
+---
+source: ortho_config/tests/missing_required_display.rs
+expression: rendered
+---
+Missing required configuration for `demo`
+
+The following value(s) are missing:
+  - `reference`
+  - `database`
+  - `database.host`
+
+Please provide them using one of the following methods, in order of precedence:
+  1. Command-Line Argument:
+     --reference <value>
+  2. Environment Variable:
+     MRQ_REFERENCE=<value>
+     MRN_DATABASE=<value>
+     MRN_DATABASE__HOST=<value>
+  3. Configuration File:
+     reference = "<value>"
+     [database]
+     host = "<value>"

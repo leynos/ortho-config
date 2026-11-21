@@ -58,7 +58,7 @@ impl ortho_config::DeclarativeMerge for __SampleDeclarativeMergeState {
     }
 
     fn finish(self) -> ortho_config::OrthoResult<Self::Output> {
-        let __SampleDeclarativeMergeState { mut value, } = self;
+        let __SampleDeclarativeMergeState { mut value, program_label, } = self;
         let mut overlay = ortho_config::serde_json::Map::new();
         if !overlay.is_empty() {
             ortho_config::declarative::merge_value(
@@ -69,6 +69,8 @@ impl ortho_config::DeclarativeMerge for __SampleDeclarativeMergeState {
         if value.is_null() {
             value = ortho_config::serde_json::Value::Object(ortho_config::serde_json::Map::new());
         }
+        let program = program_label.as_deref().unwrap_or(stringify!(Sample));
+        ortho_config :: ensure_no_missing_required_values :: < Sample > (& value , program ,) ? ;
         ortho_config::declarative::from_value_merge(value)
     }
 }

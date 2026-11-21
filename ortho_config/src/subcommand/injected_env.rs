@@ -10,14 +10,16 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use clap::{ArgMatches, CommandFactory};
-use serde::de::DeserializeOwned;
 
 use super::{
-    Prefix, SubcommandCliMatches, SubcommandFileContext,
-    load_and_merge_subcommand_with_matches_with_sources_at,
-    load_and_merge_subcommand_with_sources_at,
+    SubcommandCliMatches, SubcommandFileContext,
+    load_and_merge_subcommand_for_with_matches_with_sources_at,
+    load_and_merge_subcommand_for_with_sources_at,
 };
-use crate::{CliValueExtractor, EnvSource, OrthoConfig, OrthoError, OrthoResult, ScanEnvSource};
+use crate::{
+    CliValueExtractor, EnvSource, OrthoConfig, OrthoError, OrthoResult, RequiredConfigSchema,
+    ScanEnvSource,
+};
 
 /// Base directory for file candidates: the environment's working directory.
 ///
@@ -40,19 +42,23 @@ fn file_base(env: &dyn EnvSource) -> OrthoResult<PathBuf> {
 
 /// Merge subcommand defaults from one injected environment, then overlay CLI values.
 ///
+/// The schema-aware entry point is deliberate: `T` carries a derived
+/// [`RequiredConfigSchema`], so absent required values are enumerated rather
+/// than left to the deserializer.
+///
 /// # Errors
 ///
 /// Returns [`crate::OrthoError`] if the environment has no working directory,
-/// or if a selected file, the injected environment, or a CLI value cannot be
-/// merged into `T`.
+/// [`crate::OrthoError::MissingRequiredValues`] if a required value is absent,
+/// or another [`crate::OrthoError`] if a selected file, the injected
+/// environment, or a CLI value cannot be merged into `T`.
 pub(super) fn load_and_merge_for_with_env<T, E>(cli: &T, env: &Arc<E>) -> OrthoResult<T>
 where
-    T: OrthoConfig + serde::Serialize + DeserializeOwned + Default + CommandFactory,
+    T: OrthoConfig + serde::Serialize + Default + CommandFactory + RequiredConfigSchema,
     E: EnvSource + ScanEnvSource + 'static,
 {
     let base = file_base(env.as_ref())?;
-    load_and_merge_subcommand_with_sources_at(
-        &Prefix::new(T::prefix()),
+    load_and_merge_subcommand_for_with_sources_at(
         cli,
         SubcommandFileContext::new(&base, env.as_ref()),
         env.clone(),
@@ -64,8 +70,9 @@ where
 /// # Errors
 ///
 /// Returns [`crate::OrthoError`] if the environment has no working directory,
-/// or if a selected file, the injected environment, or a CLI value cannot be
-/// merged into `T`.
+/// [`crate::OrthoError::MissingRequiredValues`] if a required value is absent,
+/// or another [`crate::OrthoError`] if a selected file, the injected
+/// environment, or a CLI value cannot be merged into `T`.
 pub(super) fn load_and_merge_for_with_matches_with_env<T, E>(
     cli: &T,
     matches: &ArgMatches,
@@ -74,15 +81,14 @@ pub(super) fn load_and_merge_for_with_matches_with_env<T, E>(
 where
     T: OrthoConfig
         + serde::Serialize
-        + DeserializeOwned
         + Default
         + CommandFactory
-        + CliValueExtractor,
+        + CliValueExtractor
+        + RequiredConfigSchema,
     E: EnvSource + ScanEnvSource + 'static,
 {
     let base = file_base(env.as_ref())?;
-    load_and_merge_subcommand_with_matches_with_sources_at(
-        &Prefix::new(T::prefix()),
+    load_and_merge_subcommand_for_with_matches_with_sources_at(
         &SubcommandCliMatches::new(cli, matches),
         SubcommandFileContext::new(&base, env.as_ref()),
         env.clone(),

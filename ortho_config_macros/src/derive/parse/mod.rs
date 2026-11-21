@@ -59,12 +59,15 @@ pub(crate) use literals::lit_crate_path;
 pub(crate) use output_attrs::parse_output_meta;
 pub(crate) use renderer_attrs::parse_renderer_meta;
 pub(crate) use serde_attrs::{
-    SerdeRenameAll, serde_field_rename, serde_has_default, serde_rename_all,
-    serde_serialized_field_key,
+    SerdeRenameAll, serde_container_is_transparent, serde_deserialized_field_key,
+    serde_field_aliases, serde_field_has_custom_deserializer, serde_field_is_flattened,
+    serde_field_rename, serde_field_skips_deserialization, serde_has_default, serde_rename_all,
+    serde_rename_rules, serde_serialized_field_key,
 };
 pub(crate) use struct_attrs::{discard_unknown, parse_ortho_config, parse_struct_attrs};
 pub(crate) use type_utils::{
-    ClapDefaultValueShape, btree_map_inner, hash_map_inner, option_inner, vec_inner,
+    ClapDefaultValueShape, btree_map_inner, hash_map_inner, nested_schema_type, option_inner,
+    vec_inner,
 };
 
 const _: fn(&Attribute, &mut Option<LitStr>) -> syn::Result<()> = clap_arg_id_from_attribute;
@@ -99,6 +102,41 @@ pub(crate) struct StructAttrs {
     pub crate_path: Option<syn::Path>,
 }
 
+/// How a field participates in command-line parsing.
+///
+/// The three cases are mutually exclusive: a clap subcommand selector is not a
+/// configuration value, whereas a skipped field is an ordinary configuration
+/// value that the author deliberately removed from the parser. Call sites that
+/// only care whether an option is rendered use [`Self::is_option`].
+#[derive(Default, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum CliFieldMode {
+    /// Rendered as a command-line option when the field's type supports one.
+    #[default]
+    Option,
+    /// Excluded from the parser but still merged from other configuration
+    /// layers.
+    Skipped,
+    /// A clap subcommand selector; never a configuration value.
+    SubcommandSelector,
+}
+
+impl CliFieldMode {
+    /// Whether the field is a clap subcommand selector.
+    pub(crate) const fn is_subcommand(self) -> bool {
+        matches!(self, Self::SubcommandSelector)
+    }
+
+    /// Whether the author excluded the field from command-line parsing.
+    pub(crate) const fn is_skipped(self) -> bool {
+        matches!(self, Self::Skipped)
+    }
+
+    /// Whether the field is rendered as an ordinary command-line option.
+    pub(crate) const fn is_option(self) -> bool {
+        matches!(self, Self::Option)
+    }
+}
+
 /// Field-level attributes recognised by `#[derive(OrthoConfig)]`.
 ///
 /// - `cli_long`/`cli_short` override generated CLI flags.
@@ -112,6 +150,8 @@ pub(crate) struct StructAttrs {
 ///   merge, allowing file/env values to take precedence over CLI defaults.
 /// - `is_subcommand` marks a clap subcommand selector, which is excluded from
 ///   configuration-field generation.
+/// - `nested` opts the field's type into required-value schema composition, so
+///   absent leaves inside the nested object can be enumerated.
 /// - `inferred_clap_default` stores the default inferred from clap's
 ///   `default_value`, `default_value_t`, or `default_values_t` when
 ///   `cli_default_as_absent` is
@@ -128,12 +168,12 @@ pub(crate) struct FieldAttrs {
     pub inferred_clap_default: Option<ClapInferredDefault>,
     /// Collection policy applied as configuration layers are composed.
     pub merge_strategy: Option<MergeStrategy>,
-    /// Excludes the field from CLI parsing without excluding it from merging.
-    pub skip_cli: bool,
+    /// How the field participates in command-line parsing.
+    pub cli: CliFieldMode,
     /// Omits a clap-provided default from the CLI merge layer.
     pub cli_default_as_absent: bool,
-    /// Marks a clap-owned subcommand selector excluded from config fields.
-    pub is_subcommand: bool,
+    /// Opts the field's type into required-value schema composition.
+    pub nested: bool,
     /// Field documentation metadata copied into generated API documentation.
     pub doc: DocFieldAttrs,
 }

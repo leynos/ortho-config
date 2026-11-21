@@ -56,6 +56,11 @@ const CATEGORY_VALIDATION: &str = "validation";
 const CATEGORY_PROFILE: &str = "profile";
 /// Several loading errors were retained for reporting together.
 const CATEGORY_AGGREGATE: &str = "aggregate";
+/// Required configuration values were still absent after every layer merged.
+///
+/// The report's paths and routes are user-derived data, so they never become
+/// event fields; only this fixed category is emitted.
+const CATEGORY_MISSING_REQUIRED_VALUES: &str = "missing_required_values";
 
 /// Record the decision to gather an environment layer from the live process.
 pub(super) fn csv_env_process_started() {
@@ -200,6 +205,7 @@ const fn error_category(error: &OrthoError) -> &'static str {
         | OrthoError::ReservedProfileName { .. }
         | OrthoError::ProfileForbiddenKey { .. } => CATEGORY_PROFILE,
         OrthoError::Aggregate(_) => CATEGORY_AGGREGATE,
+        OrthoError::MissingRequiredValues(_) => CATEGORY_MISSING_REQUIRED_VALUES,
     }
 }
 
@@ -252,4 +258,37 @@ const fn count_outcome(
     _outcome: &'static str,
     _category: &'static str,
 ) {
+}
+
+#[cfg(test)]
+mod tests {
+    //! Telemetry vocabulary checks for terminal loading decisions.
+    use super::{CATEGORY_MISSING_REQUIRED_VALUES, error_category};
+    use crate::{ConfigPath, MissingRequiredValue, MissingRequiredValues, OrthoError};
+
+    /// A missing-values report gets its own category so a dashboard can count
+    /// it apart from a generic merge failure, and the report's user-derived
+    /// paths and routes never become event fields.
+    #[test]
+    fn missing_required_values_has_a_dedicated_category() {
+        let report = MissingRequiredValues::try_new(
+            Some(String::from("demo")),
+            vec![MissingRequiredValue::new(
+                ConfigPath::new(["url"]),
+                Vec::new(),
+                false,
+            )],
+        )
+        .expect("one entry forms a non-empty report");
+        let error = OrthoError::MissingRequiredValues(Box::new(report));
+        assert_eq!(
+            error_category(&error),
+            CATEGORY_MISSING_REQUIRED_VALUES,
+            "a missing-values report must not count as a merge failure"
+        );
+        assert_eq!(
+            CATEGORY_MISSING_REQUIRED_VALUES, "missing_required_values",
+            "the category label is a dashboard contract"
+        );
+    }
 }

@@ -36,6 +36,9 @@ omitted when undeclared.
 | **Optional**           | Test subprocesses          | Depend on `ortho_config_test_helpers` and call `run_with_deadline`.                  |
 | **Optional**           | Process-mutating helpers   | Replace `env::set_var`, `env::lock`, `cwd::set_dir` with a `MapEnv`.                 |
 | **Optional**           | Injected environment       | Load with `load_from_iter_with_env` and pin the directory on a `MapEnv`.             |
+| **Review if matched**  | Absent-required errors     | Match `OrthoError::MissingRequiredValues`, not a Serde error.                        |
+| **Required if used**   | Subcommand merge helpers   | The `_for_*` helpers now also require `RequiredConfigSchema`.                        |
+| **Optional**           | Nested requirement schemas | Mark a child `nested` and derive `RequiredConfigSchema` on it.                       |
 
 _Table 1: Application-facing work when moving from v0.10.0 to v0.11.0._
 
@@ -361,3 +364,100 @@ policy, and receives one ordered report.
 See
 [Validate skill manifests against commands](users-guide.md#validate-skill-manifests-against-commands)
 for the contract and a worked example.
+
+## 12. Match the enumerated missing-value error
+
+A derived loader no longer reports an absent required value as a Serde
+deserialization error. After every layer is merged, the generated `finish`
+collects the requirements the merged value does not satisfy and fails once with
+`OrthoError::MissingRequiredValues`. The payload names every absent path in
+declaration order, with the routes that can supply each one.
+
+The change is additive to the error enum but not to the error text. Code that
+matched a deserialization error to detect absence, or asserted on a Serde
+message, must match the new variant:
+
+```rust,ignore
+use ortho_config::OrthoError;
+
+match error.as_ref() {
+    OrthoError::MissingRequiredValues(report) => {
+        for item in report.items() {
+            eprintln!("{}", item.path().render());
+        }
+    }
+    other => return Err(other.into()),
+}
+```
+
+A requirement is absent only when the key is absent. A present value — including
+`null` and an empty collection — counts as present for this check, because the
+check reads presence, not acceptability. Serde may still reject such a value,
+which surfaces as `OrthoError::Merge` rather than `MissingRequiredValues`. When
+the merged value contains both absent requirements and invalid present values,
+the report covers the absence set first; correcting it may then surface the
+invalid values. One round of repair is promised only when missing values are
+the sole defect.
+
+Ordinary loads, injected-source loads, profile loads, and the selected
+subcommand merge all use this path. The single-environment subcommand methods
+`load_and_merge_with_env` and `load_and_merge_with_matches_with_env` do too:
+they previously finished through Figment extraction, so an absent required
+value reached you as a deserialization error in `OrthoError::Merge`. The raw
+`DeserializeOwned` subcommand helpers, and their `_with_sources` forms, keep
+the earlier Figment finish, because their callers may name a type with no
+derived schema.
+
+## 13. Adopt nested requirement schemas, or widen your own helpers
+
+`#[derive(OrthoConfig)]` already emits the companion `RequiredConfigSchema`
+implementation, so most applications adopt nothing. Two cases need work.
+
+A nested type must opt in twice: the parent field carries
+`#[ortho_config(nested)]`, and the child type derives
+`my_cfg::RequiredConfigSchema` on its own. A child still needs no CLI and no
+loader, so it can keep deriving nothing else. Marked children are composed in
+both directions; a cyclic composition is a `Validation` error rather than a
+stack overflow. A child that is not marked contributes nothing, and an absent
+optional parent deactivates its subtree.
+
+```rust,ignore
+use ortho_config::RequiredConfigSchema;
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Deserialize, Serialize, RequiredConfigSchema)]
+struct Database {
+    host: String,
+}
+
+#[derive(Debug, Deserialize, Serialize, ortho_config::OrthoConfig)]
+#[ortho_config(prefix = "APP_")]
+struct AppConfig {
+    #[ortho_config(nested, skip_cli)]
+    database: Database,
+}
+```
+
+The four `load_and_merge_subcommand_for*` helpers, and the matching
+`SubcmdConfigMerge` methods, now also bound their type parameter by
+`RequiredConfigSchema`. A subcommand type that derives `OrthoConfig` satisfies
+it. A handwritten implementation, or a generic wrapper that forwards these
+helpers, must add the bound:
+
+```rust,ignore
+fn merge<T>(/* … */) -> ortho_config::OrthoResult<T>
+where
+    T: ortho_config::OrthoConfig + ortho_config::RequiredConfigSchema,
+{
+    // …
+}
+```
+
+Enumeration is best effort by design. It covers declared fields whose
+requiredness is decidable from attribute metadata, and does not predict a
+handwritten `Deserialize`, an unmarked `#[serde(flatten)]`, or an enum payload.
+A `#[ortho_config(default = ...)]` is materialized under the Rust identifier,
+so it supplies a field renamed with `#[serde(rename = "...")]` only when that
+identifier is also an accepted `#[serde(alias = "...")]`. Call
+`ortho_config::ensure_no_missing_required_values::<T>` directly to check a
+value you have already merged yourself.

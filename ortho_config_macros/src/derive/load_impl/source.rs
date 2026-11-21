@@ -70,7 +70,12 @@ pub(crate) fn build_load_from_iter_impl(
 ) -> proc_macro2::TokenStream {
     quote! {
         let composition = Self::#compose_method(iter);
-        composition.into_merge_result(|layers| #config_ident::merge_from_layers(layers))
+        let program = composition
+            .program_label()
+            .map(::std::string::String::from);
+        composition.into_merge_result(|layers| {
+            #config_ident::merge_from_layers_with_program(layers, program.as_deref())
+        })
     }
 }
 
@@ -118,7 +123,12 @@ pub(crate) fn build_load_from_iter_with_sources_impl(
             discovery_source,
             merge_source,
         );
-        let result = composition.into_merge_result(|layers| #config_ident::merge_from_layers(layers));
+        let program = composition
+            .program_label()
+            .map(::std::string::String::from);
+        let result = composition.into_merge_result(|layers| {
+            #config_ident::merge_from_layers_with_program(layers, program.as_deref())
+        });
         #finished
         result
     }

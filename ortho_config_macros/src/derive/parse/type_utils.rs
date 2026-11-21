@@ -72,6 +72,26 @@ pub(crate) fn option_inner(ty: &Type) -> Option<&Type> {
     type_inner(ty, "Option")
 }
 
+/// Returns the inner type if `ty` is `Box<T>`.
+pub(crate) fn box_inner(ty: &Type) -> Option<&Type> {
+    type_inner(ty, "Box")
+}
+
+/// Reaches the type that owns a nested requirement schema.
+///
+/// One outer `Option` is removed because its presence only makes the node
+/// optional; `Box` (and `Option<Box<…>>`) wrappers are transparent to
+/// composition. No other wrapper is unwrapped, so a collection marked nested
+/// keeps its own type and fails the generated trait bound rather than silently
+/// describing the wrong shape.
+pub(crate) fn nested_schema_type(ty: &Type) -> &Type {
+    let mut current = option_inner(ty).unwrap_or(ty);
+    while let Some(inner) = box_inner(current) {
+        current = inner;
+    }
+    current
+}
+
 /// Extracts the element type `T` if `ty` is `Vec<T>`.
 ///
 /// Used internally by the derive macro to identify vector fields that

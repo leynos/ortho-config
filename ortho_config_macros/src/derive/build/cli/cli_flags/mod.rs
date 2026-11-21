@@ -246,7 +246,7 @@ pub(crate) fn build_cli_struct_fields(
     let mut result = Vec::with_capacity(fields.len());
 
     for (field, attrs) in fields.iter().zip(field_attrs) {
-        if attrs.is_subcommand {
+        if attrs.cli.is_subcommand() {
             continue;
         }
         // Register all field names (including skip_cli) so the config_path
@@ -254,7 +254,7 @@ pub(crate) fn build_cli_struct_fields(
         if let Some(ident) = &field.ident {
             context.field_names.insert(ident.to_string());
         }
-        if attrs.skip_cli {
+        if attrs.cli.is_skipped() {
             continue;
         }
         let field_tokens = process_cli_field(field, attrs, &mut context)?;
@@ -298,7 +298,7 @@ pub(crate) fn build_cli_field_metadata(
     let mut result = Vec::with_capacity(fields.len());
 
     for (field, attrs) in fields.iter().zip(field_attrs) {
-        if attrs.is_subcommand || attrs.skip_cli {
+        if !attrs.cli.is_option() {
             continue;
         }
         result.push(process_cli_metadata(field, attrs, &mut context)?);

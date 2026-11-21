@@ -1117,6 +1117,190 @@ without inventing an error for an empty collection. The result extension traits
 `OrthoResultExt`, `OrthoMergeExt`, and `ResultIntoFigment` keep conversions
 explicit at integration boundaries.
 
+### Recover from missing required values
+
+A field is required when it is not an `Option`, has no explicit or inferred
+default, and carries no Serde default at the field or container level. Three
+exceptions refine that rule. An `Option<T>` carrying `deserialize_with` or
+`with` is required unless a Serde default applies, because the custom
+deserializer, not the declared type, decides what absence means. A
+`#[serde(default)]` on a flattened field does not rescue a required child: the
+flatten composes the child's own requirement schema at the current level. And
+an explicit `#[ortho_config(default = ...)]` supplies its value only to the
+loader of the type that declares it: a nested type's default is materialized by
+that type's own loader, which a parent composing it never runs, so the parent
+reports the key and expects the caller to supply it.
+
+Serde-skipped fields (`#[serde(skip)]` and `#[serde(skip_deserializing)]`) are
+outside this rule. The loader never reads them, so their absence is never
+reported, whatever their type.
+
+When required values are absent, the loader returns
+`OrthoError::MissingRequiredValues` with every missing value in declaration
+order, rather than reporting only the first one that Serde notices:
+
+<!-- tested-example: guide-missing-values-output -->
+```plaintext
+Missing required configuration for `acme`
+
+The following value(s) are missing:
+  - `reference`
+  - `database.host`
+
+Please provide them using one of the following methods, in order of precedence:
+  1. Command-Line Argument:
+     --reference <value>
+  2. Environment Variable:
+     ACME_REFERENCE=<value>
+     ACME_DATABASE__HOST=<value>
+  3. Configuration File:
+     reference = "<value>"
+     [database]
+     host = "<value>"
+```
+
+The complete report is guaranteed for a merged document that JSON can
+represent, which is every document a file, environment, or command-line layer
+can build. A selected subcommand merges through Figment, and its finish step
+projects the merged document into JSON so the collector can walk it. A document
+JSON cannot represent, such as one carrying a `u128` above `u64::MAX` that the
+type's own `Default` seeded, falls back to the raw extraction rather than
+failing a load that works: enumeration is skipped for that document alone, and
+a genuinely absent required value there surfaces through the earlier
+deserialization error, which names the first missing field. No loadable
+configuration is rejected because of the fallback.
+
+Each entry lists only the routes the real loader accepts. A field renamed with
+`#[serde(rename = ...)]`, a field marked `skip_cli`, and a leaf inside a nested
+object have no command-line route, so no flag is advertised for them. A nested
+object with no required descendants is reported as the object itself and
+rendered as a file table. Supplying a value through any advertised route clears
+that entry and leaves the rest of the report intact, so a caller can correct
+the configuration one step at a time.
+
+An accepted `#[serde(alias = ...)]` is honoured: the report repeats whichever
+spelling the merged configuration used, so the advertised route populates the
+key that is really read. When the same value arrives under both its canonical
+key and an alias, no entry is reported for it. Serde rejects the duplicate, or
+reports the incomplete value's own missing field, and that error is left as it
+is, because supplying the advertised leaf would leave both spellings in place.
+
+A selected subcommand is covered too, and its routes name that command's
+namespace rather than the struct's own prefix and file root. For the `serve`
+command in
+[Give each subcommand its own settings](#give-each-subcommand-its-own-settings),
+a missing required value is advertised as `ACME_SERVE_CMDS_SERVE_<FIELD>` and
+`cmds.serve.<field>`, which is exactly what that loader reads. Only the
+selected variant contributes requirements; the other variants are never
+consulted. A field's `#[ortho_config(default = ...)]` does not excuse its
+absence here: these loaders never run the declaring type's defaults struct, so
+the value must arrive through a file, the environment, or a clap default the
+flag materializes. That is the plain reading. The matches-aware entry points
+add one layer ahead of file and environment: they seed the merged document with
+the type's own `Default`, so a value that `T::default()`'s serialization
+carries counts as supplied and is not reported. The raw `DeserializeOwned`
+subcommand helpers, and their `_with_sources` forms, keep the earlier behaviour
+and produce no report, because they never learn which type's schema to walk.
+The single-environment methods `load_and_merge_with_env` and
+`load_and_merge_with_matches_with_env` do report, since the type they load
+carries a derived schema.
+
+The payload carries key paths and routes, never configuration values, so
+rendering the error cannot leak a secret. Match the variant when an application
+wants to present the report itself:
+
+<!-- tested-example: guide-missing-values -->
+```rust
+use ortho_config::{OrthoConfig, OrthoError};
+use serde::Deserialize;
+
+#[derive(Debug, Deserialize, OrthoConfig)]
+#[ortho_config(prefix = "ACME_")]
+struct Config {
+    reference: String,
+}
+
+fn main() {
+    match Config::load_from_iter(["acme"]) {
+        Ok(config) => println!("reference={}", config.reference),
+        Err(error) => match error.as_ref() {
+            OrthoError::MissingRequiredValues(report) => {
+                eprintln!("{report}");
+                std::process::exit(2);
+            }
+            other => eprintln!("configuration error: {other}"),
+        },
+    }
+}
+```
+
+The library never exits on its own. A consumer decides whether a missing value
+is fatal, retryable, or recoverable from a prompt.
+
+### Report requirements inside nested types
+
+A child type takes part in requirement reporting only when both halves of the
+opt-in are present: derive `RequiredConfigSchema` on the child, and mark the
+parent field with `#[ortho_config(nested)]`. Add `skip_cli` when the object
+type has no clap value parser for the generated argument, because the CLI
+builder emits an argument for every field it does not skip. The marker
+describes the parent field, never the child type.
+
+<!-- tested-example: guide-nested-requirements -->
+```rust
+use ortho_config::{OrthoConfig, OrthoError, RequiredConfigSchema};
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Deserialize, Serialize, RequiredConfigSchema)]
+struct Database {
+    host: String,
+}
+
+#[derive(Debug, Deserialize, Serialize, OrthoConfig)]
+#[ortho_config(prefix = "APP_")]
+struct AppConfig {
+    #[ortho_config(nested, skip_cli)]
+    database: Database,
+}
+
+fn main() {
+    match AppConfig::load_from_iter(["acme"]) {
+        Ok(config) => println!("host={}", config.database.host),
+        Err(error) => match error.as_ref() {
+            OrthoError::MissingRequiredValues(report) => {
+                let missing: Vec<String> = report
+                    .items()
+                    .iter()
+                    .map(|item| item.path().render())
+                    .collect();
+                println!("missing={}", missing.join(","));
+            }
+            other => eprintln!("configuration error: {other}"),
+        },
+    }
+}
+```
+
+Run against an empty configuration, this prints `missing=database.host`.
+
+Only a marked child contributes requirements. An unmarked child contributes no
+internal keys, so the report names the parent field as a single value and the
+child's leaves stay invisible to it; a leaf-level absence inside a value that
+is present then surfaces through Serde's own error. An absent optional parent
+deactivates its whole subtree, because no value can reach a child the parent
+does not have, while a required parent still reports its required descendants.
+
+`RequiredConfigSchema` is the derive for nested types. It records the type's
+own field keys and requiredness and does nothing else: it creates no CLI, no
+loader, and no discovery policy, so a child never needs `OrthoConfig` merely to
+expose a schema. Do not combine it with `#[derive(OrthoConfig)]` on the same
+type, because the configuration root's derive already emits the implementation
+and adding both produces a duplicate-implementation error. See
+[nested requirement schemas](v0-11-0-migration-guide.md#13-adopt-nested-requirement-schemas-or-widen-your-own-helpers)
+for the migration steps that adopt either half. See the
+[requirement-schema contract](developers-guide.md#the-manual-requirement-schema-contract)
+when implementing the trait by hand.
+
 ## Localize help and parse failures together
 
 Localization is most reliable when the command metadata is translated before

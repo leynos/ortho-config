@@ -29,7 +29,7 @@ pub(crate) fn build_default_struct_fields(
     fields
         .iter()
         .zip(field_attrs.iter())
-        .filter(|(_, attrs)| !attrs.is_subcommand)
+        .filter(|(_, attrs)| !attrs.cli.is_subcommand())
         .map(|(f, _)| {
             let name = match require_named_field(f) {
                 Ok(ident) => ident,
@@ -72,7 +72,7 @@ pub(crate) fn build_default_struct_init(
     fields
         .iter()
         .zip(field_attrs.iter())
-        .filter(|(_, attr)| !attr.is_subcommand)
+        .filter(|(_, attr)| !attr.cli.is_subcommand())
         .for_each(|(f, attr)| {
             let name = match require_named_field(f) {
                 Ok(ident) => ident,

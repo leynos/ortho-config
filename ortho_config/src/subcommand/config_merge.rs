@@ -19,7 +19,8 @@ use super::{
     load_and_merge_subcommand_for_with_sources,
 };
 use crate::{
-    CliValueExtractor, EnvSource, OrthoConfig, OrthoResult, ScanEnvSource, SharedScanEnvSource,
+    CliValueExtractor, EnvSource, OrthoConfig, OrthoResult, RequiredConfigSchema, ScanEnvSource,
+    SharedScanEnvSource,
 };
 
 /// Trait adding a convenience [`SubcmdConfigMerge::load_and_merge`] method to subcommand structs.
@@ -63,7 +64,7 @@ pub trait SubcmdConfigMerge: OrthoConfig + CommandFactory + Sized {
     /// deserialisation fails.
     fn load_and_merge(&self) -> OrthoResult<Self>
     where
-        Self: serde::Serialize + Default,
+        Self: serde::Serialize + Default + RequiredConfigSchema,
     {
         load_and_merge_subcommand_for(self)
     }
@@ -76,7 +77,7 @@ pub trait SubcmdConfigMerge: OrthoConfig + CommandFactory + Sized {
     /// the merged defaults cannot be deserialised.
     fn load_and_merge_with_sources(&self, merge_source: SharedScanEnvSource) -> OrthoResult<Self>
     where
-        Self: serde::Serialize + Default,
+        Self: serde::Serialize + Default + RequiredConfigSchema,
     {
         load_and_merge_subcommand_for_with_sources(self, merge_source)
     }
@@ -94,7 +95,7 @@ pub trait SubcmdConfigMerge: OrthoConfig + CommandFactory + Sized {
     /// deserialisation fails.
     fn load_and_merge_with_matches(&self, matches: &ArgMatches) -> OrthoResult<Self>
     where
-        Self: serde::Serialize + Default + CliValueExtractor,
+        Self: serde::Serialize + Default + CliValueExtractor + RequiredConfigSchema,
     {
         load_and_merge_subcommand_for_with_matches(self, matches)
     }
@@ -112,7 +113,7 @@ pub trait SubcmdConfigMerge: OrthoConfig + CommandFactory + Sized {
         merge_source: SharedScanEnvSource,
     ) -> OrthoResult<Self>
     where
-        Self: serde::Serialize + Default + CliValueExtractor,
+        Self: serde::Serialize + Default + CliValueExtractor + RequiredConfigSchema,
     {
         load_and_merge_subcommand_for_with_matches_with_sources(self, matches, merge_source)
     }
@@ -136,7 +137,7 @@ pub trait SubcmdConfigMerge: OrthoConfig + CommandFactory + Sized {
     /// the merged defaults cannot be deserialised.
     fn load_and_merge_with_env<E>(&self, env: Arc<E>) -> OrthoResult<Self>
     where
-        Self: serde::Serialize + Default,
+        Self: serde::Serialize + Default + RequiredConfigSchema,
         E: EnvSource + ScanEnvSource + 'static,
     {
         load_and_merge_for_with_env(self, &env)
@@ -155,11 +156,14 @@ pub trait SubcmdConfigMerge: OrthoConfig + CommandFactory + Sized {
         env: Arc<E>,
     ) -> OrthoResult<Self>
     where
-        Self: serde::Serialize + Default + CliValueExtractor,
+        Self: serde::Serialize + Default + CliValueExtractor + RequiredConfigSchema,
         E: EnvSource + ScanEnvSource + 'static,
     {
         load_and_merge_for_with_matches_with_env(self, matches, &env)
     }
 }
 
-impl<T> SubcmdConfigMerge for T where T: OrthoConfig + serde::Serialize + Default + CommandFactory {}
+impl<T> SubcmdConfigMerge for T where
+    T: OrthoConfig + serde::Serialize + Default + CommandFactory + RequiredConfigSchema
+{
+}

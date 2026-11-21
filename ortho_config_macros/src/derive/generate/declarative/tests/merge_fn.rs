@@ -94,6 +94,29 @@ fn generate_declarative_merge_from_layers_fn_emits_constructor() -> Result<()> {
                 I: IntoIterator<Item = ortho_config::MergeLayer<'a>>,
             {
                 let mut state = __SampleDeclarativeMergeState::default();
+                state.program_label = ::std::option::Option::None;
+                for layer in layers {
+                    ortho_config::DeclarativeMerge::merge_layer(&mut state, layer)?;
+                }
+                ortho_config::DeclarativeMerge::finish(state)
+            }
+
+            /// Merge the configuration struct from declarative layers,
+            /// labelling a missing-required-value report with `program`.
+            ///
+            /// Generated loading entry points call this with the program name
+            /// they resolved from their arguments. A caller that merges layers
+            /// directly can keep using [`Self::merge_from_layers`], whose
+            /// report falls back to the configuration type name.
+            pub fn merge_from_layers_with_program<'a, I>(
+                layers: I,
+                program: ::std::option::Option<&str>,
+            ) -> ortho_config::OrthoResult<Self>
+            where
+                I: IntoIterator<Item = ortho_config::MergeLayer<'a>>,
+            {
+                let mut state = __SampleDeclarativeMergeState::default();
+                state.program_label = program.map(::std::string::String::from);
                 for layer in layers {
                     ortho_config::DeclarativeMerge::merge_layer(&mut state, layer)?;
                 }

@@ -1,0 +1,11 @@
+error: unknown rename rule `rename_all = "Sentence case"`, expected one of "lowercase", "UPPERCASE", "PascalCase", "camelCase", "snake_case", "SCREAMING_SNAKE_CASE", "kebab-case", "SCREAMING-KEBAB-CASE"
+  --> tests/ui/required_schema_invalid_rename_all.rs:10:34
+   |
+10 | #[serde(rename_all(deserialize = "Sentence case"))]
+   |                                  ^^^^^^^^^^^^^^^
+
+error: unsupported serde rename_all value 'Sentence case'; expected one of "lowercase", "UPPERCASE", "PascalCase", "camelCase", "snake_case", "SCREAMING_SNAKE_CASE", "kebab-case", or "SCREAMING-KEBAB-CASE"
+  --> tests/ui/required_schema_invalid_rename_all.rs:10:34
+   |
+10 | #[serde(rename_all(deserialize = "Sentence case"))]
+   |                                  ^^^^^^^^^^^^^^^

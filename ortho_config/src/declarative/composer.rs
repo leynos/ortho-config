@@ -122,6 +122,12 @@ pub struct LayerComposition {
     layers: Vec<MergeLayer<'static>>,
     /// Errors gathered before the merge callback is invoked.
     errors: Vec<Arc<OrthoError>>,
+    /// Program label resolved from the caller's arguments, when one was known.
+    ///
+    /// It travels with the composition so a `MissingRequiredValues` report can
+    /// name the program the user invoked without the merge state reading
+    /// `std::env::args` itself.
+    program_label: Option<String>,
 }
 
 impl LayerComposition {
@@ -132,7 +138,27 @@ impl LayerComposition {
         reason = "Constructing Vec-based compositions requires allocation"
     )]
     pub fn new(layers: Vec<MergeLayer<'static>>, errors: Vec<Arc<OrthoError>>) -> Self {
-        Self { layers, errors }
+        Self {
+            layers,
+            errors,
+            program_label: None,
+        }
+    }
+
+    /// Attach the program label resolved from the caller's arguments.
+    ///
+    /// Generated loads call this once, immediately after composing, so every
+    /// entry point that returns a composition carries the same label.
+    #[must_use]
+    pub fn with_program_label(mut self, program_label: Option<String>) -> Self {
+        self.program_label = program_label;
+        self
+    }
+
+    /// Borrow the program label, when one was resolved.
+    #[must_use]
+    pub fn program_label(&self) -> Option<&str> {
+        self.program_label.as_deref()
     }
 
     /// Decompose the composition into its constituent parts.

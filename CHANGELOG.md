@@ -96,6 +96,54 @@ All notable changes to this project will be documented in this file.
   No diagnostic field carries them; a positive `summary.deny` count
   distinguishes a policy denial from any other failure.
 
+### Changed (missing required values)
+
+- **Enumerated missing-value errors replace Serde's first-missing-field error
+  (roadmap 7.3.1).** A derived load that previously failed with a merge or
+  deserialization error naming one field now returns
+  `OrthoError::MissingRequiredValues`. Code that matched a deserialization
+  error to detect absence must match the new variant. Presence semantics are
+  unchanged: a present `null`, an empty collection, and an explicit value all
+  still count as supplied. See
+  [the migration guide](docs/v0-11-0-migration-guide.md#12-match-the-enumerated-missing-value-error).
+
+### Added (missing required values)
+
+- **Enumerated missing-value diagnostics (roadmap 7.3.1).** A load that reaches
+  the merged value with required keys absent now returns
+  `OrthoError::MissingRequiredValues` with every absent key in declaration
+  order, instead of stopping at the first field Serde notices. Each entry lists
+  the command-line flags, environment variables, and file keys the real loader
+  accepts for that key, so a caller can recover from one diagnostic. Renamed
+  keys, `skip_cli` fields, and nested leaves advertise only the routes that can
+  actually populate them, and an object-shaped requirement is rendered as a
+  file table. The payload carries key paths and routes, never configuration
+  values, so rendering it cannot leak a secret. Enumeration covers declared
+  fields whose requiredness is decidable from attribute metadata; a required
+  leaf inside an unmarked `#[serde(flatten)]` payload, a custom `Deserialize`,
+  or an enum payload still fails through Serde's own error. Child types take
+  part in nested composition through two complementary steps: derive
+  `RequiredConfigSchema` on the child, and mark the parent field
+  `#[ortho_config(nested)]`, adding `skip_cli` when the object type has no clap
+  value parser for the generated argument. The marker describes the parent
+  field, and `skip_cli` is needed because the CLI builder emits an argument for
+  every field it does not skip. A selected subcommand is covered as well, and
+  its report names that command's `PREFIX_CMDS_<NAME>_<FIELD>` variables and
+  `[cmds.<name>]` file paths, so the advertised spellings are the ones the
+  loader really reads; only the selected variant contributes requirements.
+  These loaders never run the declaring type's generated defaults struct, so a
+  declared default does not excuse absence; the matches-aware entry points do
+  seed the figment with the type's own `Default`, and a value that seed
+  serializes counts as supplied. Enumeration needs a merged document JSON can
+  represent: when the selected-subcommand projection cannot express the
+  document, the loader falls back to the raw extraction, reports Serde's first
+  missing field, and still accepts every configuration that loads without the
+  enumeration. The library never exits; callers decide how to present the
+  report. See
+  [ADR-0024](docs/adrs/adr-0024-enumerate-missing-required-values.md), [ADR-0025](docs/adrs/adr-0025-enumerate-missing-values-for-selected-subcommands.md),
+  and
+  [the user's guide](docs/users-guide.md#recover-from-missing-required-values).
+
 ### Changed (source compatibility)
 
 - **Breaking for struct-literal construction:** documentation IR
@@ -117,6 +165,15 @@ All notable changes to this project will be documented in this file.
   JSON compatibility break; see the
   [v0.11.0 migration guide](docs/v0-11-0-migration-guide.md) for the exact
   edits and roadmap 13.1 for the constructor-based remedy.
+- **Breaking for generic callers:** the four `load_and_merge_subcommand_for*`
+  helpers, and the matching `SubcmdConfigMerge` methods, now also bound their
+  type parameter by `RequiredConfigSchema`. A type that derives `OrthoConfig`
+  already satisfies the bound, because that derive emits the schema
+  implementation; a handwritten `OrthoConfig` implementation, or a generic
+  wrapper that forwards these helpers, must add the bound, deriving
+  `RequiredConfigSchema` on the type where needed. See
+  [the migration guide](docs/v0-11-0-migration-guide.md#13-adopt-nested-requirement-schemas-or-widen-your-own-helpers)
+  for the exact edits.
 
 ### Removed (test helpers)
 

@@ -6,10 +6,6 @@
 //! pluck individual fields out of the resulting object, so the lookup key must
 //! respect `#[serde(rename = "...")]` and `#[serde(rename_all = "...")]`.
 
-use heck::{
-    ToKebabCase, ToLowerCamelCase, ToShoutyKebabCase, ToShoutySnakeCase, ToSnakeCase,
-    ToUpperCamelCase,
-};
 use syn::ext::IdentExt;
 use syn::meta::ParseNestedMeta;
 use syn::{Attribute, Field, LitStr, Token};
@@ -20,21 +16,21 @@ use syn::{Attribute, Field, LitStr, Token};
 /// compute the same JSON field names that serde uses during serialization.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum SerdeRenameAll {
-    /// Lowercases every character in the field name.
+    /// Leaves a struct field untouched; Serde lowercases only enum variants.
     Lower,
     /// Uppercases every character in the field name.
     Upper,
-    /// Capitalizes each word and removes separators.
+    /// Capitalizes the first letter of each underscore-separated word.
     Pascal,
-    /// Preserves the first word's lower case and capitalizes later words.
+    /// Applies [`Self::Pascal`], then lowercases the first character.
     Camel,
-    /// Separates words with underscores in lower case.
+    /// Leaves a struct field untouched; Serde reshapes only enum variants.
     Snake,
-    /// Separates words with underscores in upper case.
+    /// Uppercases every character in the field name.
     ScreamingSnake,
-    /// Separates words with hyphens in lower case.
+    /// Replaces underscores with hyphens.
     Kebab,
-    /// Separates words with hyphens in upper case.
+    /// Uppercases every character, then replaces underscores with hyphens.
     ScreamingKebab,
 }
 
@@ -61,88 +57,265 @@ impl SerdeRenameAll {
         }
     }
 
-    /// Applies this naming convention to a Rust field identifier.
+    /// Applies Serde's struct-field rule to a Rust field identifier.
+    ///
+    /// These are Serde's own field rules, not general case conversions. Two of
+    /// them leave the field alone, and `PascalCase` only capitalizes the first
+    /// letter of each underscore-separated word without lowering the rest. A
+    /// general case converter disagrees on mixed-case identifiers such as
+    /// `api_URL`, which would make the schema name a key Serde never reads.
     fn apply(self, field_name: &str) -> String {
         match self {
-            Self::Lower => field_name.to_ascii_lowercase(),
-            Self::Upper => field_name.to_ascii_uppercase(),
-            Self::Pascal => field_name.to_upper_camel_case(),
-            Self::Camel => field_name.to_lower_camel_case(),
-            Self::Snake => field_name.to_snake_case(),
-            Self::ScreamingSnake => field_name.to_shouty_snake_case(),
-            Self::Kebab => field_name.to_kebab_case(),
-            Self::ScreamingKebab => field_name.to_shouty_kebab_case(),
+            Self::Lower | Self::Snake => field_name.to_owned(),
+            Self::Upper | Self::ScreamingSnake => field_name.to_ascii_uppercase(),
+            Self::Pascal => pascal_case(field_name),
+            Self::Camel => lower_first(&pascal_case(field_name)),
+            Self::Kebab => field_name.replace('_', "-"),
+            Self::ScreamingKebab => field_name.to_ascii_uppercase().replace('_', "-"),
         }
     }
 }
 
-/// Parses `#[serde(rename_all = "...")]` from struct attributes.
+/// Capitalize the first letter of each underscore-separated word.
 ///
-/// Only the serialization-side struct rule is relevant because generated CLI
-/// extraction looks up keys in the serialized configuration object.
-pub(crate) fn serde_rename_all(attrs: &[Attribute]) -> syn::Result<Option<SerdeRenameAll>> {
-    let mut out = None;
+/// Later characters keep their case, so `api_URL` becomes `ApiURL` rather than
+/// the `ApiUrl` a general-purpose converter would produce.
+fn pascal_case(field_name: &str) -> String {
+    let mut pascal = String::new();
+    let mut is_word_start = true;
+    for character in field_name.chars() {
+        if character == '_' {
+            is_word_start = true;
+        } else if is_word_start {
+            pascal.push(character.to_ascii_uppercase());
+            is_word_start = false;
+        } else {
+            pascal.push(character);
+        }
+    }
+    pascal
+}
+
+/// Lowercase the first character and keep the rest as it is.
+fn lower_first(value: &str) -> String {
+    let mut characters = value.chars();
+    characters.next().map_or_else(String::new, |first| {
+        first.to_ascii_lowercase().to_string() + characters.as_str()
+    })
+}
+
+/// One Serde attribute value separated by serialization direction.
+///
+/// A bare `key = "..."` sets both directions. The directional form, written
+/// `key(serialize = "...")` or `key(deserialize = "...")`, sets one side and
+/// leaves the other at Serde's default.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct Directional<T> {
+    /// Value applied when serializing.
+    pub serialize: Option<T>,
+    /// Value applied when deserializing.
+    pub deserialize: Option<T>,
+}
+
+/// Container-level `rename_all` rules, one per direction.
+pub(crate) type SerdeRenameRules = Directional<SerdeRenameAll>;
+
+/// Parses both directions of `#[serde(rename_all = "...")]`.
+pub(crate) fn serde_rename_rules(attrs: &[Attribute]) -> syn::Result<SerdeRenameRules> {
+    parse_directional(attrs, "rename_all", SerdeRenameAll::parse)
+}
+
+/// Parses one directional Serde key into its two direction slots.
+///
+/// `parse_value` decodes the literal for the attribute in question, so the
+/// shared traversal serves both `rename_all` and `rename` without repeating
+/// the bare and directional forms.
+fn parse_directional<T: Clone>(
+    attrs: &[Attribute],
+    key: &str,
+    parse_value: impl Fn(&LitStr) -> syn::Result<T>,
+) -> syn::Result<Directional<T>> {
+    // Spelled out rather than `default()`: the derived `Default` bound would
+    // demand `T: Default`, which a plain enum value need not implement.
+    let mut rules = Directional {
+        serialize: None,
+        deserialize: None,
+    };
     for attr in attrs.iter().filter(|attr| attr.path().is_ident("serde")) {
         attr.parse_nested_meta(|meta| {
-            if meta.path.is_ident("rename_all") {
+            if !meta.path.is_ident(key) {
+                super::discard_unknown(&meta)?;
+                return Ok(());
+            }
+            if meta.input.peek(Token![=]) {
+                let value = parse_value(&meta.value()?.parse::<LitStr>()?)?;
+                rules.serialize = Some(value.clone());
+                rules.deserialize = Some(value);
+                return Ok(());
+            }
+            if !meta.input.peek(syn::token::Paren) {
+                return Ok(());
+            }
+            meta.parse_nested_meta(|nested| set_direction(&nested, &mut rules, &parse_value))
+        })?;
+    }
+    Ok(rules)
+}
+
+/// Records one direction of the `serialize = "..."` / `deserialize = "..."`
+/// form, leaving unknown directions discarded like any other option.
+fn set_direction<T>(
+    nested: &ParseNestedMeta,
+    rules: &mut Directional<T>,
+    parse_value: &impl Fn(&LitStr) -> syn::Result<T>,
+) -> syn::Result<()> {
+    let slot = if nested.path.is_ident("serialize") {
+        &mut rules.serialize
+    } else if nested.path.is_ident("deserialize") {
+        &mut rules.deserialize
+    } else {
+        return super::discard_unknown(nested);
+    };
+    *slot = Some(parse_value(&nested.value()?.parse::<LitStr>()?)?);
+    Ok(())
+}
+
+/// Parses the serialization-side `#[serde(rename_all = "...")]` rule.
+///
+/// Generated CLI extraction looks up keys in the serialized configuration
+/// object, so this is the rule it must reproduce.
+pub(crate) fn serde_rename_all(attrs: &[Attribute]) -> syn::Result<Option<SerdeRenameAll>> {
+    Ok(serde_rename_rules(attrs)?.serialize)
+}
+
+/// Field-level `rename` names, one per direction.
+pub(crate) type SerdeFieldRename = Directional<String>;
+
+/// Parses `#[serde(rename = "...")]` and its directional forms.
+///
+/// A bare `rename = "..."` sets both directions. `rename(serialize = "...")`
+/// leaves the deserialization name at the container default, and vice versa.
+pub(crate) fn serde_field_rename_rules(attrs: &[Attribute]) -> syn::Result<SerdeFieldRename> {
+    parse_directional(attrs, "rename", |value| Ok(value.value()))
+}
+
+/// Parses the serialization-side field rename.
+///
+/// Generated CLI extraction looks up keys in the serialized configuration
+/// object, so a deserialize-only name does not change the serialized key.
+pub(crate) fn serde_field_rename(attrs: &[Attribute]) -> syn::Result<Option<String>> {
+    Ok(serde_field_rename_rules(attrs)?.serialize)
+}
+
+/// Parses `#[serde(alias = "...")]` values in declaration order.
+pub(crate) fn serde_field_aliases(attrs: &[Attribute]) -> syn::Result<Vec<String>> {
+    let mut aliases = Vec::new();
+    for attr in attrs.iter().filter(|attr| attr.path().is_ident("serde")) {
+        attr.parse_nested_meta(|meta| {
+            if meta.path.is_ident("alias") {
                 let value = meta.value()?.parse::<LitStr>()?;
-                out = Some(SerdeRenameAll::parse(&value)?);
+                aliases.push(value.value());
             } else {
                 super::discard_unknown(&meta)?;
             }
             Ok(())
         })?;
     }
-    Ok(out)
+    Ok(aliases)
 }
 
-/// Parses `#[serde(rename = "...")]` and `rename(serialize = "...")` from
-/// field attributes.
+/// Returns true if the field is excluded from deserialization.
 ///
-/// The explicit field key takes precedence over a container `rename_all`
-/// rule, and a deserialize-only name does not change the serialized key.
-pub(crate) fn serde_field_rename(attrs: &[Attribute]) -> syn::Result<Option<String>> {
-    let mut out = None;
+/// Both `skip` and `skip_deserializing` mean the loader never reads a value
+/// for the field, so no missing-value report can be truthful for it.
+pub(crate) fn serde_field_skips_deserialization(attrs: &[Attribute]) -> syn::Result<bool> {
+    serde_field_has_bare_flag(attrs, &["skip", "skip_deserializing"])
+}
+
+/// Returns true if the field composes a flattened Serde object.
+///
+/// A flattened field's own name never appears as a key, so requirement
+/// enumeration must not report it unless the field also carries the nested
+/// marker.
+pub(crate) fn serde_field_is_flattened(attrs: &[Attribute]) -> syn::Result<bool> {
+    serde_field_has_bare_flag(attrs, &["flatten"])
+}
+
+/// Returns true if Serde replaces the field's deserialization function.
+///
+/// `#[serde(with = "...")]` is shorthand for `serialize_with` plus
+/// `deserialize_with` on the same module, so either spelling installs a
+/// deserializer. Requirement enumeration cannot replay it, which makes the
+/// field's declared type an unreliable description of what Serde will accept.
+pub(crate) fn serde_field_has_custom_deserializer(attrs: &[Attribute]) -> syn::Result<bool> {
+    let mut found = false;
     for attr in attrs.iter().filter(|attr| attr.path().is_ident("serde")) {
         attr.parse_nested_meta(|meta| {
-            if !meta.path.is_ident("rename") {
-                super::discard_unknown(&meta)?;
-                return Ok(());
+            let is_custom = meta.path.is_ident("deserialize_with") || meta.path.is_ident("with");
+            if !is_custom {
+                return super::discard_unknown(&meta);
             }
-
-            if meta.input.peek(Token![=]) {
-                let value = meta.value()?.parse::<LitStr>()?;
-                out = Some(value.value());
-                return Ok(());
-            }
-
-            if !meta.input.peek(syn::token::Paren) {
-                return Ok(());
-            }
-
-            meta.parse_nested_meta(|nested| parse_serde_rename_serialize(&nested, &mut out))?;
+            // Consume the module path so nested parsing stays positioned at the
+            // next Serde option, exactly as `parse_default_meta` does.
+            meta.value()?.parse::<LitStr>()?;
+            found = true;
             Ok(())
         })?;
     }
-    Ok(out)
+    Ok(found)
 }
 
-/// Records only the serialization name from Serde's directional rename form.
+/// Returns true if the container deserializes as its single inner value.
 ///
-/// Deserialization aliases do not affect the JSON key used to extract CLI
-/// values after serializing the configuration struct.
-fn parse_serde_rename_serialize(
-    nested: &ParseNestedMeta,
-    rename: &mut Option<String>,
-) -> syn::Result<()> {
-    if !nested.path.is_ident("serialize") {
-        super::discard_unknown(nested)?;
-        return Ok(());
-    }
+/// Serde's `#[serde(transparent)]` reads and writes the one non-skipped field
+/// directly, so the keys this type's own field schema names sit one level below
+/// the key a containing type owns. Requirement composition must stop at the
+/// container instead of naming children no loader ever reads.
+pub(crate) fn serde_container_is_transparent(attrs: &[Attribute]) -> syn::Result<bool> {
+    serde_field_has_bare_flag(attrs, &["transparent"])
+}
 
-    let value = nested.value()?.parse::<LitStr>()?;
-    *rename = Some(value.value());
-    Ok(())
+/// Detects whether any of `flags` appears as a bare Serde option.
+fn serde_field_has_bare_flag(attrs: &[Attribute], flags: &[&str]) -> syn::Result<bool> {
+    let mut found = false;
+    for attr in attrs.iter().filter(|attr| attr.path().is_ident("serde")) {
+        attr.parse_nested_meta(|meta| {
+            let is_flag = meta
+                .path
+                .get_ident()
+                .is_some_and(|ident| flags.iter().any(|flag| ident == flag));
+            if is_flag {
+                found = true;
+            } else {
+                super::discard_unknown(&meta)?;
+            }
+            Ok(())
+        })?;
+    }
+    Ok(found)
+}
+
+/// Computes the JSON key Serde accepts for `field` when deserializing.
+///
+/// An explicit deserialization name wins over the container rule; the rule is
+/// applied to the unrawed identifier, which is what Serde itself does.
+pub(crate) fn serde_deserialized_field_key(
+    field: &Field,
+    rename_all: Option<SerdeRenameAll>,
+) -> syn::Result<String> {
+    let Some(ident) = field.ident.as_ref() else {
+        return Err(syn::Error::new_spanned(
+            field,
+            "unnamed fields are not supported",
+        ));
+    };
+    if let Some(rename) = serde_field_rename_rules(&field.attrs)?.deserialize {
+        return Ok(rename);
+    }
+    let field_name = ident.unraw().to_string();
+    Ok(rename_all
+        .map(|rule| rule.apply(&field_name))
+        .unwrap_or(field_name))
 }
 
 /// Computes the JSON key Serde uses for `field` given an optional

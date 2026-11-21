@@ -15,6 +15,11 @@ use std::path::Path;
 use std::sync::Arc;
 use tempfile::TempDir;
 
+#[path = "support/strict_required.rs"]
+mod strict_required;
+
+use strict_required::{STRICT_REFERENCE_VAR, StrictCmd, assert_reports_the_absent_reference};
+
 /// Derived configuration found through its project dotfile.
 #[derive(Debug, Deserialize, Serialize, OrthoConfig)]
 #[ortho_config(prefix = "CWDSEAM_")]
@@ -270,6 +275,55 @@ fn subcommand_matches_form_keeps_clap_defaults_absent(
         merged.retries == expected,
         "expected {expected}, got {}",
         merged.retries
+    );
+    Ok(())
+}
+
+/// The single-environment form enumerates an absent required value.
+///
+/// Without the schema-aware entry point the merged value simply fails to
+/// deserialize, so a caller learns that something is missing but not which key
+/// or where to supply it.
+#[test]
+fn single_environment_merge_enumerates_an_absent_required_value() -> Result<()> {
+    let dir = tempfile::tempdir().context("create the empty directory")?;
+
+    assert_reports_the_absent_reference(
+        StrictCmd::default().load_and_merge_with_env(Arc::new(env_in(dir.path()))),
+    )?;
+
+    let supplied = StrictCmd::default()
+        .load_and_merge_with_env(Arc::new(
+            env_in(dir.path()).with_var(STRICT_REFERENCE_VAR, "from-env"),
+        ))
+        .map_err(|err| anyhow!(err))?;
+    ensure!(
+        supplied.reference == "from-env",
+        "the offered environment route must supply the value, got {supplied:?}"
+    );
+    Ok(())
+}
+
+/// The matches-aware form enumerates the same absent required value.
+#[test]
+fn matches_form_enumerates_an_absent_required_value() -> Result<()> {
+    let dir = tempfile::tempdir().context("create the empty directory")?;
+    let matches = StrictCmd::command().get_matches_from(["strict"]);
+
+    assert_reports_the_absent_reference(
+        StrictCmd::default()
+            .load_and_merge_with_matches_with_env(&matches, Arc::new(env_in(dir.path()))),
+    )?;
+
+    let supplied = StrictCmd::default()
+        .load_and_merge_with_matches_with_env(
+            &matches,
+            Arc::new(env_in(dir.path()).with_var(STRICT_REFERENCE_VAR, "from-env")),
+        )
+        .map_err(|err| anyhow!(err))?;
+    ensure!(
+        supplied.reference == "from-env",
+        "the matches form must read the same environment layer, got {supplied:?}"
     );
     Ok(())
 }

@@ -1,20 +1,23 @@
 # Proposed design for improved missing value error messages
 
-Status: proposed. This document describes the desired diagnostic shape, not the
-current implementation state. The active public `OrthoError` enum in
-`ortho_config/src/error/types.rs` does not expose an
-`OrthoError::MissingRequiredValues` variant.
+Status: implemented in roadmap task 7.3.1. The schema contract, requiredness
+matrix, and supply-route rules are settled in
+[ADR-0024](adrs/adr-0024-enumerate-missing-required-values.md). The public
+`OrthoError` enum in `ortho_config/src/error/types.rs` exposes the
+`OrthoError::MissingRequiredValues` variant; this document records the design
+that produced it.
 
-The current implementation routes missing required configuration values through
-existing error channels. Required command-line arguments rejected by `clap`
-surface as `OrthoError::CliParsing`; missing or invalid values discovered while
-deserializing merged configuration layers surface as `OrthoError::Merge` or
-related gathering/deserialization errors; and multiple source failures may be
-reported through `OrthoError::Aggregate`.
+Loads that finish composing their layers with absent required values now return
+`OrthoError::MissingRequiredValues`. The enum variant separates that case from
+the errors that remain: required command-line arguments rejected by `clap`
+still surface as `OrthoError::CliParsing`; values that are present but invalid
+still surface as `OrthoError::Merge` or the related gathering and
+deserialization errors; and multiple source failures may still be reported
+through `OrthoError::Aggregate`.
 
-The implementation work is tracked in [roadmap.md](roadmap.md), especially the
-phase 7.3.1 agent-native error-diagnostics task. Roadmap item 5.1.1 confirmed
-that this feature was not implemented under the proposed enum variant.
+The implementation work was tracked in [roadmap.md](roadmap.md) as the phase
+7.3.1 agent-native error-diagnostics task. Roadmap item 5.1.1 recorded that the
+feature was not implemented under the proposed enum variant at that time.
 
 This design focuses on replacing the generic `figment::Error` for missing
 fields with a custom, helpful error message that guides the user on how to fix
@@ -22,32 +25,31 @@ the problem.
 
 ## 1. The new error message format
 
-When one or more required configuration values are missing, the application
-should exit with a clear, actionable error message. The proposed format is:
+When one or more required configuration values are missing, the load returns a
+clear, actionable error message, and the application should exit with it. The
+rendered format is:
 
 ```plaintext
-Error: Missing required configuration for `my-program`
+Missing required configuration for `my-program`
 
 The following value(s) are missing:
   - `reference`
   - `database.host`
 
 Please provide them using one of the following methods, in order of precedence:
-
   1. Command-Line Argument:
      --reference <value>
-     --database-host <value>
-
   2. Environment Variable:
      MY_APP_REFERENCE=<value>
      MY_APP_DATABASE__HOST=<value>
-
-  3. Configuration File (e.g., .my_app.toml):
+  3. Configuration File:
      reference = "<value>"
-
      [database]
      host = "<value>"
 ```
+
+The library never exits. A consumer's `main` decides the process exit code and
+may prefix the rendering with `error:`, as the users' guide example does.
 
 This format addresses all the requirements:
 
@@ -66,75 +68,144 @@ This format addresses all the requirements:
 To support this new error message, a new variant should be added to the
 `OrthoError` enum in `ortho_config/src/error/types.rs`. This separates the
 "missing value" case from other gathering errors, allowing for custom
-formatting.
+formatting. The payload is typed rather than a preformatted string, so callers
+can inspect paths without parsing prose:
 
 ```rust
-// in ortho_config/src/error/types.rs
-
-use thiserror::Error;
-
-#[derive(Debug, Error)]
-#[non_exhaustive]
-pub enum OrthoError {
-    // … existing variants
-
-    #[error("{0}")]
-    MissingRequiredValues(String), // New variant for the formatted error message
-}
+#[error("{0}")]
+MissingRequiredValues(Box<MissingRequiredValues>),
 ```
+
+`MissingRequiredValues` owns a non-empty ordered list of
+`MissingRequiredValue { path: ConfigPath, routes: Vec<SupplyRoute>,
+expects_object: bool }`.
+The full public surface, including the `RequiredConfigSchema` companion trait
+and the `#[ortho_config(nested)]` marker, is specified in
+[ADR-0024](adrs/adr-0024-enumerate-missing-required-values.md).
+
+### 2.1 Settled schema support matrix
+
+Runtime requiredness follows the loader, not the documentation IR:
+
+| Declared shape or attribute                   | Requiredness  |
+| --------------------------------------------- | ------------- |
+| `Option<T>` (one outer layer)                 | Optional      |
+| `#[ortho_config(default = ...)]`              | Optional      |
+| Inferred clap default                         | Optional      |
+| `#[serde(default)]` on the field or container | Optional      |
+| `#[serde(skip)]` / `skip_deserializing`       | Not inspected |
+| Collections without a default                 | Required      |
+| Any other scalar, map, or opaque type         | Required      |
+
+Both default rows assume a loader that materializes the declared default. Only
+`#[derive(OrthoConfig)]` emits one: it builds a defaults struct holding the
+declared values and merges that struct under every other layer. A type that
+derives the standalone schema has no loader, and its parent's loader builds no
+defaults layer for it, so a declared default there never reaches the merged
+value and its field stays required. The schema-only derive states this by
+asking for a schema without materialized defaults.
+
+A `#[serde(default)]` on a flattened field is the one exception to that table:
+Serde always deserializes the field from the unmatched keys, so the default
+applies only to a field it never saw and never rescues the child. A flattened
+child therefore resolves to absence exactly when its type is `Option`.
+
+A field's own deserializer is consulted after both defaults, and it changes one
+answer in that table. Serde raises a missing-field error instead of calling the
+helper that turns absence into `None`, so an `Option<T>` field read through
+`#[serde(deserialize_with = "...")]` or `#[serde(with = "...")]` is required. A
+Serde default at either level keeps it optional. The same replacement means the
+child's declared type no longer describes what the loader reads, so a
+`#[ortho_config(nested)]` field with a custom deserializer is reported as an
+opaque leaf under its own key rather than as an object with composed children.
+
+A `#[serde(transparent)]` child is the second case where composition would name
+keys no loader reads. Such a container reads and writes its single inner value,
+so the keys its own schema records sit one level below the key the parent owns.
+The parent macro cannot see a child's container attributes, so the signal
+travels through the trait: `RequiredConfigSchema::declares_nested_object`
+answers `false` for a transparent container, and the generated composition
+helper reports the field as an opaque leaf instead of composing its children.
+An under-reported requirement is survivable — Serde still raises its own error
+for the value — whereas an invented child names a key the file cannot carry.
+
+Nested enumeration is opt-in: only a field marked `#[ortho_config(nested)]`
+composes the child's schema. `#[serde(flatten)]` composes at the current level
+only when paired with that marker. An arbitrary custom `Deserialize`
+implementation, a flatten without the marker, an enum payload, and the raw
+`DeserializeOwned` subcommand helpers stay outside the coverage contract and
+keep their existing error behaviour. The schema-aware `_for` subcommand helpers
+do enumerate: they finish the merged figment through the same collector, scoped
+to the environment prefixes and file sections that loader reads.
+
+Supply routes are computed for reported entries only, in CLI, environment, and
+configuration-file order. A route is omitted when its provider cannot consume
+the spelling: a non-identifier canonical key has no CLI flag, and a path
+segment containing a literal dot has no environment variable. The environment
+test applies to the completed variable name, prefix included, as well as to
+each segment. A name containing `=` or a NUL has no variable at all — every
+process environment treats `=` as the separator between name and value, and a
+NUL terminates the name — and a name with leading whitespace never matches,
+because the provider trims a name before comparing it with the prefix. A
+segment test is still needed on its own, because the provider splits the joined
+name: `database_.host` becomes a variable it reads back as `database._host`, so
+an edge underscore also loses the environment route. The configuration-file
+route is always offered, and it quotes any segment outside TOML's bare-key
+alphabet, which keeps the advertised spelling one the file can actually express.
 
 ## 3. Implementation design
 
-The core of this change lies in the `load_from_iter` function generated by the
-`OrthoConfig` derive macro. Instead of calling `fig.extract()` and letting it
-fail with a `MissingField` error, the implementation pre-emptively checks for
-missing values.
+The derive macro records a required-value schema alongside the loader it
+generates. `#[derive(OrthoConfig)]` emits `RequiredConfigSchema` for the
+configuration root, and the standalone `#[derive(RequiredConfigSchema)]` serves
+nested child types that do not implement `OrthoConfig`. The schema is static:
+it records deserialization keys, aliases, requiredness, and the container's
+environment prefix and CLI flags. It never consults the environment, the
+process arguments, or a configuration file at macro time.
 
-### 3.1. Identifying Missing Fields
+### 3.1. Identifying missing values
 
-After merging all configuration sources into the final `Figment` instance but
-*before* calling `extract()`, the implementation should iterate over the fields
-of the user's configuration struct. For each field that isn't an `Option<T>`,
-it should check if a value for that field exists in the `Figment` instance.
+The generated `load_from_iter` pipeline composes the layers, merges them, and
+then inspects the merged value rather than interrogating the intermediate
+`Figment`. A pure collector walks the schema against that value and reports
+every absent required path, so enumerating leaves never depends on which layer
+supplied a sibling. Section 2.1's support matrix decides requiredness, and
+nested enumeration happens only through `#[ortho_config(nested)]`.
 
-The `figment::Figment` struct does not have a public API to list all keys it
-knows about, but the code iterates through the fields of the target struct and
-checks for their presence in the `Figment` instance. This can be done by
-attempting to extract each field individually.
+The collector also records whether an absent path expects an object, which lets
+the presentation render `[database]` instead of `database = "<value>"`.
 
-A helper function can be created to recursively walk the struct definition and
-build a list of required field paths (e.g., `"reference"`, `"database.host"`).
+A node the merged value spells two accepted ways at once is skipped rather than
+inspected. A canonical key and an accepted alias name the same value, so Serde
+rejects the second spelling as a duplicate field, or reports the first
+spelling's missing field when that value is incomplete. Both diagnostics are
+the deserializer's, and a missing-value report written beneath the node would
+describe an absence the loader never reaches while advertising a route that
+cannot repair the duplication.
 
-### 3.2. Generating the Error Message
+### 3.2. Generating the error message
 
-If any required fields are missing, the implementation will not proceed to the
-final `extract()` call. Instead, it will:
+The collector produces `MissingRequiredValues`, which owns a non-empty ordered
+list of paths together with the supply routes computed for each. Presentation
+belongs to `ortho_config`, not the generated loader:
 
-1. **Collect all missing field paths**: This will create a list like
-   `["reference", "database.host"]`.
+- The program label is the one the merge step received, so a caller that passes
+  an explicit program name sees that name.
+- Routes are emitted only when the provider can consume the spelling, and they
+  appear in command-line, environment, and configuration-file order.
+- Values never appear in the rendering; only keys, flags, and variable names
+  do.
 
-2. **Get the program name**: This can be retrieved from
-   `std::env::args().next()`.
-
-3. **Get the environment variable prefix**: This is available from the
-   `#[ortho_config(prefix = "…")]` attribute.
-
-4. **Format the error message**: Using the template from section 1, it will
-   dynamically generate the CLI flags (by replacing underscores with hyphens,
-   i.e., not fully kebab-case), environment variables (using the prefix and
-   converting to `UPPER_SNAKE_CASE`), and TOML keys.
-
-5. **Return the new error**: The formatted string will be wrapped in the
-   `OrthoError::MissingRequiredValues` variant and returned.
-
-This approach ensures that all missing fields are reported at once, providing a
-complete picture to the user.
+The full public surface is specified in
+[ADR-0024](adrs/adr-0024-enumerate-missing-required-values.md), and the
+developers' guide records the ownership boundaries.
 
 ## 4. Historical implementation outline
 
 This outline is retained as design rationale. It is not a completed task list.
-The active roadmap is [roadmap.md](roadmap.md), which records the phase 5 truth
-audit and schedules implementation or restoration work in phase 7.3.1.
+The phase 5 truth audit in [roadmap.md](roadmap.md) scheduled the
+implementation as phase 7.3.1, which is now delivered; the outline below
+records the original sequencing, not the final module layout.
 
 ### Task 1: Introduce the New `OrthoError` Variant
 

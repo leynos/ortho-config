@@ -180,10 +180,10 @@ fn build_arg_models(
     let mut seen: HashMap<FluentMessageId, (Span, String)> = HashMap::new();
 
     for (field, attrs) in fields.iter().zip(field_attrs) {
-        if attrs.is_subcommand {
+        if attrs.cli.is_subcommand() {
             continue;
         }
-        if attrs.skip_cli || clap_field_is_flattened(field)? {
+        if attrs.cli.is_skipped() || clap_field_is_flattened(field)? {
             continue;
         }
         let Some(name_ident) = &field.ident else {

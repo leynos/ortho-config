@@ -77,6 +77,13 @@ const CATEGORY_CYCLIC_EXTENDS: &str = "cyclic_extends";
 const CATEGORY_PROFILE: &str = "profile";
 /// Several loading errors were retained for reporting together.
 const CATEGORY_AGGREGATE: &str = "aggregate";
+/// Required configuration values were still absent after every layer merged.
+///
+/// Subcommand discovery runs before any configuration value is merged, so this
+/// category cannot arise on the discovery path today. It is named rather than
+/// folded into a catch-all because the vocabulary is closed, and an unlisted
+/// category here would be a silent leak of an unknown class.
+const CATEGORY_MISSING_REQUIRED_VALUES: &str = "missing_required_values";
 
 /// Record that an absolute named value supplied the Unix configuration home.
 #[cfg(any(unix, target_os = "redox"))]
@@ -248,6 +255,7 @@ const fn error_category(error: &OrthoError) -> &'static str {
         | OrthoError::ReservedProfileName { .. }
         | OrthoError::ProfileForbiddenKey { .. } => CATEGORY_PROFILE,
         OrthoError::Aggregate(_) => CATEGORY_AGGREGATE,
+        OrthoError::MissingRequiredValues(_) => CATEGORY_MISSING_REQUIRED_VALUES,
     }
 }
 
@@ -299,3 +307,36 @@ fn count_candidate(outcome: &'static str) {
 /// The outcome is ignored; this feature configuration emits no counter.
 #[cfg(all(not(feature = "metrics"), any(unix, target_os = "redox")))]
 const fn count_candidate(_outcome: &'static str) {}
+
+#[cfg(test)]
+mod tests {
+    //! Discovery telemetry vocabulary checks for error classification.
+    use super::{CATEGORY_MISSING_REQUIRED_VALUES, error_category};
+    use crate::{ConfigPath, MissingRequiredValue, MissingRequiredValues, OrthoError};
+
+    /// The discovery vocabulary is closed, so the new variant is named rather
+    /// than falling through a catch-all. Discovery runs before values merge, so
+    /// the category cannot arise here today.
+    #[test]
+    fn missing_required_values_is_named_even_though_discovery_cannot_raise_it() {
+        let report = MissingRequiredValues::try_new(
+            None,
+            vec![MissingRequiredValue::new(
+                ConfigPath::new(["url"]),
+                Vec::new(),
+                false,
+            )],
+        )
+        .expect("one entry forms a non-empty report");
+        let error = OrthoError::MissingRequiredValues(Box::new(report));
+        assert_eq!(
+            error_category(&error),
+            CATEGORY_MISSING_REQUIRED_VALUES,
+            "the discovery vocabulary must name a missing-values report"
+        );
+        assert_eq!(
+            CATEGORY_MISSING_REQUIRED_VALUES, "missing_required_values",
+            "the category label is a dashboard contract"
+        );
+    }
+}

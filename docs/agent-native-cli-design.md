@@ -633,12 +633,23 @@ should name the valid set. This applies to enum values, output formats,
 delivery schemes, locale identifiers, package names, binary targets, profile
 names, and policy modes.
 
-Roadmap item 5.1.1 reconciled the missing-required-values design with the
-actual error enum. The current public surface does not expose
-`OrthoError::MissingRequiredValues`; missing required values still route
-through the existing command-line parsing, merge, gathering/deserialization, or
-aggregate error channels. The improved aggregate diagnostic remains phase 7.3.1
-implementation work.
+Roadmap item 7.3.1 realized the missing-required-values design. A load that
+reaches the merged value with required keys absent now returns
+`OrthoError::MissingRequiredValues`, whose payload enumerates every absent key
+in declaration order and lists the command-line flags, environment variables,
+and file keys the real loader accepts for each one. The guarantee covers
+declared fields whose requiredness the derive can decide from attribute
+metadata; a required leaf inside an unmarked `#[serde(flatten)]` payload, a
+custom `Deserialize`, or an enum payload still fails through Serde's own error.
+The selected-subcommand loaders carry one further exception: a matches-aware
+load whose merged document cannot be projected into JSON — a `Default` holding a
+`u128` above `u64::MAX`, which the raw helpers still accept through the
+field's own deserializer — extracts directly and skips enumeration for that
+document, so a caller must not rely on receiving every absent key there.
+[ADR-0025](adrs/adr-0025-enumerate-missing-values-for-selected-subcommands.md#amendments)
+records that limitation. Invalid values remain deserialization errors, and the
+library itself never exits, so a caller decides how to present and act on the
+diagnostic.
 
 ### 6.4 Mutation boundaries and retries
 
@@ -964,8 +975,6 @@ Schema v1 history:
 
 The design and roadmap updates must address these known gaps:
 
-- the improved `MissingRequiredValues` diagnostic is reconciled as proposed
-  phase 7 work, but is not yet implemented;
 - `cargo-orthohelp` has no structured `--json` result mode;
 - `cargo-orthohelp` does not yet enumerate all valid choices in errors;
 - generated file writes are not specified as atomic;

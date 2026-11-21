@@ -118,7 +118,7 @@ fn a_project_file_outside_the_pinned_directory_is_ignored() -> Result<()> {
 }
 
 /// A required field must still fail as a missing field once the accumulator
-/// starts from an empty object, and the message must say so.
+/// starts from an empty object, and the enumerated diagnostic must name it.
 #[rstest]
 fn required_field_is_still_reported_missing() -> Result<()> {
     let layers: Vec<MergeLayer<'static>> = Vec::new();
@@ -126,8 +126,8 @@ fn required_field_is_still_reported_missing() -> Result<()> {
         .expect_err("a missing required field must not merge successfully");
     let message = error.to_string();
     ensure!(
-        message.contains("missing field"),
-        "expected a missing-field error, got: {message}"
+        message.contains("Missing required configuration") && message.contains("`name`"),
+        "expected an enumerated missing-value error, got: {message}"
     );
     Ok(())
 }

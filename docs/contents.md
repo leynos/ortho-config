@@ -107,6 +107,12 @@
   review the accepted `output(...)` derive group, the refusal-versus-silence
   distinction, the omission rules for a declared block, and the deferred stream
   framing and numeric exit taxonomy.
+- [ADR-0024: Enumerate missing required configuration values](adrs/adr-0024-enumerate-missing-required-values.md):
+  review the typed missing-values payload, the opt-in schema composition
+  contract, the requiredness matrix, and the truthful supply-route rules.
+- [ADR-0025: Enumerate missing required values for selected subcommands](adrs/adr-0025-enumerate-missing-values-for-selected-subcommands.md):
+  review the loader-scoped supply routes and the widened subcommand merge
+  bounds that extend ADR-0024 to selected subcommands.
 - [Archived v0.8.0 roadmap](archive/v0-8-0-roadmap.md): review completed
   phases, steps, and tasks from the roadmap that preceded the active
   agent-native plan.
@@ -248,6 +254,9 @@
     and stable protocol fields in roadmap 7.2.2.
   - [Structured output and exit metadata](execplans/7-2-3-structured-output-and-exit-metadata.md):
     review the proposed metadata, lint and exit-contract work for roadmap 7.2.3.
+  - [Enumerate missing required values](execplans/7-3-1-enumerating-missing-required-values.md):
+    review the plan and implementation record for typed missing-value
+    diagnostics, schema coverage, and the proof-adoption test in roadmap 7.3.1.
   - [Profile metadata](execplans/9-1-1-profile-metadata.md): plan for roadmap
     item 9.1.1, optional profile selection and layering.
   - [Adopt rstest-bdd v0.5.0](execplans/adopt-rstest-bdd-v0-5-0.md): plan for

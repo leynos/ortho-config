@@ -29,9 +29,15 @@ where
 }
 
 /// Consumes an unrecognized key-value or list without recording it.
+///
+/// The value is parsed as one expression rather than as a token stream: a
+/// token-stream parse runs to the end of the attribute, which would swallow
+/// every entry that follows. `#[serde(rename = "ref", alias = "reference")]`
+/// loses the alias that way, and the alias is what decides which merged keys
+/// the loader accepts.
 pub(crate) fn discard_unknown(meta: &syn::meta::ParseNestedMeta) -> syn::Result<()> {
     if meta.input.peek(Token![=]) {
-        meta.value()?.parse::<proc_macro2::TokenStream>()?;
+        meta.value()?.parse::<Expr>()?;
     } else if meta.input.peek(syn::token::Paren) {
         let content;
         parenthesized!(content in meta.input);

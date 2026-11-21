@@ -97,7 +97,7 @@ fn validate_project_root_field(
         ));
     };
     let valid_type = is_path_buf(&field.ty) || option_inner(&field.ty).is_some_and(is_path_buf);
-    if field_attrs.skip_cli || !valid_type {
+    if field_attrs.cli.is_skipped() || !valid_type {
         return Err(syn::Error::new_spanned(
             field,
             "`project_root_from` must name a non-skipped `PathBuf` or `Option<PathBuf>` field",

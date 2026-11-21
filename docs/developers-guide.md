@@ -468,6 +468,244 @@ MAML parameter prose belongs to
 consumes its ordered paragraphs; XML structure and escaping remain in
 `render.rs`. Other output formats retain their own formatting contracts.
 
+### Serde rename and field-key reproduction
+
+`Directional<T>` in `ortho_config_macros/src/derive/parse/serde_attrs.rs` holds
+one Serde attribute value per direction: `serialize` and `deserialize`. A bare
+`key = "..."` sets both directions; the directional form
+`key(serialize = "...")` or `key(deserialize = "...")` sets one side and leaves
+the other at Serde's default. One traversal, `parse_directional`, serves both
+`rename_all`, as `SerdeRenameRules = Directional<SerdeRenameAll>`, and
+`rename`, as `SerdeFieldRename = Directional<String>`.
+
+`serde_deserialized_field_key` computes the key Serde accepts when
+deserializing: an explicit `rename(deserialize = ...)` wins, otherwise the
+container `rename_all` rule is applied to the unrawed identifier, which is what
+Serde itself does. `serde_serialized_field_key` is the mirror for
+serialization. Generated CLI extraction uses the serialized-side helpers,
+because it looks keys up in the serialized configuration object.
+
+This path applies no `heck` case conversion. `heck` remains a dependency for
+other modules, such as `subcommand_docs.rs`, but the schema reproduces Serde's
+own struct-field rules in `SerdeRenameAll::apply`: `lowercase` and `snake_case`
+leave a struct field untouched, `SCREAMING_SNAKE_CASE`/`UPPERCASE` uppercase it,
+`PascalCase` capitalizes the first letter of each underscore-separated word
+without lowering the rest, `camelCase` adds `lower_first`, `kebab-case`
+replaces underscores with hyphens, and `SCREAMING-KEBAB-CASE` uppercases before
+replacing them. A general case converter disagrees on mixed-case identifiers
+such as `api_URL`, which would make the schema name a key Serde never reads.
+
+A rule the derive cannot reproduce is rejected rather than approximated:
+`SerdeRenameAll::parse` returns a compile error naming the supported set for
+any other `rename_all` value, and `serde_deserialized_field_key` errors on an
+unnamed field. [ADR-0024](adrs/adr-0024-enumerate-missing-required-values.md)
+records the decision to reproduce Serde's reading rather than guess at it.
+
+### Required-value schema ownership
+
+`ortho_config_macros/src/derive/generate/required_schema/mod.rs` owns the
+emitted `RequiredConfigSchema` implementation for both the `OrthoConfig` derive
+and the standalone `RequiredConfigSchema` derive. The generator records only
+what the derive already knows: deserialization keys, aliases, the requiredness
+the attribute grammar decides, and CLI hints for leaves the generated parser
+can actually populate. It never reads a configuration value, the environment,
+or the process arguments at macro time.
+
+Mark the parent field of a nested child type with `#[ortho_config(nested)]`,
+and add `skip_cli` when that field's type has no clap value parser for the
+generated argument. The CLI builder emits an argument for every field it does
+not skip, and clap needs a value parser for the argument's type, which an
+object type normally does not provide, so the build fails without `skip_cli` in
+that case. The generated schema strips one `Option` and any `Box` wrappers
+before composing the child, so an optional parent deactivates its subtree while
+a required parent still activates its required descendants.
+
+`requiredness::activation` decides one field's activation, and the choice
+depends on which loader reads the type. A declared or inferred default is
+recorded as `Activation::DefaultBacked`, not as `Optional`, because only the
+loader of the declaring type materializes it. `SchemaChildren::compose` turns
+every composed `DefaultBacked` node into `Required`, one level per compose
+call, so a parent reports a key that no active layer supplies. A schema-only
+child is unaffected: it has no loader, so the generator already reports its
+declared defaults as required.
+
+The selected-subcommand loaders are the other reading that never runs the
+declaring type's generated defaults struct, but they do not share one layer
+list. The plain loaders build their figment from file, environment, and the
+serialized CLI value only. The matches-aware loaders add one further layer
+ahead of the file and environment layers: `injected_matches_figment` in
+`ortho_config/src/subcommand/sources.rs` starts from
+`Serialized::defaults(T::default())`, so the type's `Default` is merged as
+ordinary data before anything is read, and the user-supplied CLI values are
+overlaid last. That seed is not the generated defaults struct, but it is a real
+layer in the document.
+
+`ensure_no_missing_required_values_scoped` therefore applies the same demotion
+to the root's fields on both readings, so a declared default is not treated as
+a supply merely because it is declared. Presence, not the demotion, decides the
+report: a key that any layer put in the merged document is supplied and is
+never reported, and only a key the document omits is enumerated with its real
+routes. On the plain path that means a key is reported unless file,
+environment, or the caller's CLI value carried it. On the matches-aware path it
+is also reported only when `T::default()`'s serialization omitted it, which is
+why a default the serializer skips, and a default clap materializes, are
+reported differently from one the seed carries.
+
+`ortho_config/src/required_values/` owns the runtime side: `schema.rs` defines
+the model, `collect.rs` is the pure collector, and `mod.rs` exposes
+`ensure_no_missing_required_values` plus the program-label helper. The
+collector walks the merged JSON value, not the deserialized configuration, so
+it can report every requirement in schema declaration order before Serde stops
+at the first missing field. Display lives in
+`ortho_config/src/error/missing/display.rs` and must not discover requirements
+or consult process state.
+
+New supply routes belong in `SupplyRoute` only when a generated loader accepts
+them for the requirement in question. A route advertised for a key the parser
+cannot populate would send an agent down a path that never succeeds.
+
+Route construction takes a `collect::RouteScope`, because the namespace a
+loader reads is not always the type's own prefix and file root. An ordinary
+load derives its scope from the type's `RouteHints`. A selected subcommand reads
+`PREFIX_CMDS_<NAME>_*` variables and the `[cmds.<name>]` file section instead,
+so `sources::finish_with_required_values` builds a subcommand scope before
+collecting. `subcommand_env_prefix` in `ortho_config/src/subcommand/mod.rs` is
+the single source of that environment prefix, shared by the provider and the
+diagnostic, so the advertised spelling and the read spelling cannot drift. The
+raw `DeserializeOwned` subcommand helpers keep the plain Figment finish and
+collect nothing, because they never know which type's schema to compose.
+
+### The manual requirement-schema contract
+
+`RequiredConfigSchema` in `ortho_config/src/required_values/schema.rs` is the
+public, handwritten half of the schema: an implementation of
+`collect_required_schema(&mut RequiredSchemaStack)` returns `Vec<SchemaField>`
+in declaration order. `ortho_config/src/required_values/mod.rs` re-exports the
+trait and its model types.
+
+`RequiredSchemaStack` is the cycle guard. An implementation must call `enter`
+before composing a child type and `leave` afterwards, and the collector returns
+`RequiredSchemaError::CyclicSchema` when a type reappears in its own
+composition chain.
+
+`SchemaField::optional_subtree` demotes the node and every descendant to
+`Activation::Optional`. A flattened `Option<Child>` is all-or-nothing to Serde:
+if any part fails to deserialize, the whole child resolves to `None`, so
+demoting only the immediate fields would still report a missing leaf inside a
+nested object.
+
+`CliFlagHint` is `{ key, flag, takes_value }` and exists only for a key the
+generated parser can spell. `RouteHints` is `{ prefix, cli_flags }`, collected
+once per configuration type. `RequiredConfigSchema::required_route_hints()`
+defaults to empty, which suppresses only the command-line route: the collector
+always adds the configuration-file route, and it adds an unprefixed environment
+route whenever the path is expressible, because `prefix` is then `None` rather
+than absent.
+
+`RequiredConfigSchema::declares_nested_object()` defaults to `true`, and a
+`#[serde(transparent)]` container answers `false`, so a parent reports it as an
+opaque leaf under its own key rather than inventing children no loader reads.
+[ADR-0024](adrs/adr-0024-enumerate-missing-required-values.md) records the
+schema decision.
+
+### Environment route truthfulness
+
+`required_values::env_route::environment_variable` in
+`ortho_config/src/required_values/env_route.rs` renders the variable the
+configured provider reads, or returns `None`. The provider trims a variable's
+name, strips the prefix, uppercases the remainder, splits the joined name on
+every `__`, and lowercases each part.
+
+A segment is expressible only when it is non-empty, carries no surrounding
+whitespace, contains neither `.` nor `__`, and has no ASCII uppercase letter
+and no `=` or NUL byte (`is_expressible`). `=` separates name from value in
+every process environment and NUL terminates the C string the platform call
+receives, so advertising either spelling would name a variable no loader can
+observe.
+
+The whole joined path must round-trip, not just each segment:
+`provider_reads_the_same_path` joins the segments with `__`, replaces every
+`__` with `.`, splits on `.`, and requires the result to equal the original
+segments. An underscore at a segment edge merges with the separator:
+`database_` and `host` join to `database___host`, which the provider reads as
+`database` plus `_host`, so such a path gets no environment route at all rather
+than a variable that populates a different key.
+
+The completed name is checked too (`name_can_be_observed`): the provider trims
+before matching the prefix and after removing it, so a leading or trailing
+space means the name is never observed.
+
+A route is offered only when replaying the provider's transforms reproduces the
+key path exactly; otherwise the suggestion would populate a different key or
+name something no process can hold. The check is a pure function of a
+`ConfigPath` and a prefix and holds no provider or I/O state. Keep the check
+aligned with the provider's transforms whenever either changes.
+[ADR-0024](adrs/adr-0024-enumerate-missing-required-values.md) records the
+route-vocabulary decision, and
+[ADR-0025](adrs/adr-0025-enumerate-missing-values-for-selected-subcommands.md)
+records the selected-subcommand scope.
+
+### Program-label flow
+
+A report names the program the user invoked, and the label reaches the error
+without the loader reading process state. `program_label_from_args` in
+`ortho_config/src/required_values/mod.rs` derives it from the first argument:
+the file name of `argv[0]` when it has one, the bare name otherwise, and `None`
+for an empty or unrepresentable argument. Generated loads call it with the
+argument list they were given —
+`ortho_config_macros/src/derive/load_impl/cli.rs` for the CLI-bearing path and
+`ortho_config_macros/src/derive/load_impl_profiles.rs` for the profile-aware
+one — and attach the result with `LayerComposition::with_program_label` in
+`ortho_config/src/declarative/composer.rs`.
+
+The composition owns the label, not the layers: no file, environment, or
+command-line layer can set it. The generated entry point in
+`ortho_config_macros/src/derive/load_impl_entry.rs` reads it back with
+`LayerComposition::program_label` and passes it to
+`merge_from_layers_with_program`, which is emitted by
+`ortho_config_macros/src/derive/generate/declarative/mod.rs` and stores the
+label in the merge state. The finish step in that directory's `merge_tokens.rs`
+is the code that reads it when it builds `MissingRequiredValues`; a caller that
+merges layers directly supplies no label, so the report falls back to the
+configuration type name.
+
+### The subcommand load pipeline
+
+`recorded_load` in `ortho_config/src/subcommand/sources.rs` runs one sequence
+for every source-aware subcommand load: announce the start, build the figment,
+finish it, announce the outcome. Keeping the order in one place means the
+recorded duration covers file discovery and environment scanning, because the
+start event precedes the build.
+
+`load_extracted` is the raw wrapper:
+`recorded_load(build, |fig| fig.extract().into_ortho_merge())`. The raw entry
+points carry no `RequiredConfigSchema`, so they can only deserialize; the
+schema-aware `_for` entry points call `recorded_load` with
+`finish_with_required_values` instead.
+
+The exported wrappers share one pipeline and differ on two axes: the finishing
+step, and which figment builder they pass in. `injected_figment` merges file
+and environment defaults with the sanitized CLI value, while
+`injected_matches_figment` begins from `Serialized::defaults(T::default())` and
+then overlays only the CLI values clap marked explicit.
+
+The raw helpers' `DeserializeOwned` boundary is deliberate: a caller may name a
+type with no schema metadata. The comment on `load_extracted` records the
+policy beside its schema-aware counterpart.
+
+### CLI field classification
+
+`FieldAttrs.cli` in `ortho_config_macros/src/derive/parse/mod.rs` is a
+`CliFieldMode`, and the derive reads CLI handling from it alone. The variants
+are `Option` for an ordinary flag that clap may render, `Skipped` for a field
+excluded from parsing but still merged from other layers, and
+`SubcommandSelector` for a clap subcommand picker that is never a configuration
+value. `CliFieldMode::is_option`, `is_skipped`, and `is_subcommand` are the
+only classified answers, so a new generator cannot reintroduce the two booleans
+the enum replaced. The parser's attribute documentation still accepts the
+`skip_cli` and `is_subcommand` spellings, which it maps to the corresponding
+variants.
+
 ## CLI long-flag validation ownership
 
 `LongFlagCandidate` in

@@ -99,7 +99,7 @@ fn validate_profile_serialized_key(
     serde_rename_all: Option<SerdeRenameAll>,
 ) -> syn::Result<()> {
     for (field, attrs) in fields.iter().zip(field_attrs) {
-        if attrs.is_subcommand {
+        if attrs.cli.is_subcommand() {
             continue;
         }
         if serde_serialized_field_key(field, serde_rename_all)? == "profile" {

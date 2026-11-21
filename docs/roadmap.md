@@ -329,15 +329,15 @@ unsafe mutation surfaces before release.
 
 ### 7.3. Rebuild improved required-value diagnostics
 
-- [ ] 7.3.1. Implement or restore enumerating missing-required-values errors
+- [x] 7.3.1. Implement or restore enumerating missing-required-values errors
   after the phase 5 truth audit.
   - Requires 5.1.1.
   - See improved-error-message-design.md §§1-3 and agent-native-cli-design.md
     §6.3.
-  - [ ] Aggregate all missing required values before returning an error.
-  - [ ] Show valid supply paths through CLI flags, environment variables, and
+  - [x] Aggregate all missing required values before returning an error.
+  - [x] Show valid supply paths through CLI flags, environment variables, and
     file keys.
-  - [ ] Add unit, macro, and behavioural tests that prove agents can
+  - [x] Add unit, macro, and behavioural tests that prove agents can
     self-correct from one diagnostic.
 
 ## 8. Make `cargo-orthohelp` the reference CLI

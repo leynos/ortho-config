@@ -1,0 +1,533 @@
+# Architectural decision record (ADR) 0024: Enumerate missing required configuration values
+
+## Status
+
+Accepted for implementation.
+
+Amended by
+[ADR-0025](adr-0025-enumerate-missing-values-for-selected-subcommands.md)
+(2026-11-15).
+
+Date: 2026-11-09.
+
+## Context and problem statement
+
+A caller that omits several required configuration values currently learns
+about one of them per attempt. The merged value reaches `serde_json` without
+any requirement metadata, so the deserializer reports the first absent field it
+meets as an `OrthoError::Merge`. An agent driving a command-line tool therefore
+cannot build a successful second invocation from the first diagnostic: it must
+discover the remaining requirements by retrying.
+
+The information needed to do better already exists in the derive input. The
+macro sees each field, its type, its Serde naming attributes, its
+`#[ortho_config(default)]` expression, its inferred clap default, whether it is
+excluded from the CLI, and its environment prefix. What it does not see is the
+syntax of another type's fields, so nested requirement enumeration needs an
+explicit composition mechanism rather than reflection or a second
+deserialization pass.
+
+Two further constraints bound the solution. First, a false requiredness claim
+is worse than no claim: `Option`, defaults, container defaults, skipped fields,
+collections, and custom deserializers do not share one rule. Second, an
+advertised supply route must be one the real provider consumes. A fabricated
+`--database-host` flag or an environment name the provider cannot nest would
+send the caller down a dead end.
+
+## Decision drivers
+
+- One typed, inspectable error listing every absent requirement, in schema
+  order, without duplicates.
+- Truthful supply routes: CLI, environment, and configuration-file spellings
+  that the actual loader accepts for that canonical path.
+- Requiredness derived from the loader's real semantics, never from
+  documentation-only metadata.
+- Nested enumeration only where a type explicitly opts in; arbitrary Serde
+  implementations stay opaque and keep their existing errors.
+- Finite schema construction with bounded recursion and no double evaluation of
+  defaults or custom deserializers.
+- Preservation of precedences, collection merging, profiles, injected sources,
+  and clap help/version behaviour.
+- No new production dependency.
+
+## Options considered
+
+### Option A: Pre-flight Figment probes
+
+Inspect the final `Figment` with `find_value` per field. Rejected: the design
+works on the pre-merge object model, `find_value` can fail on combined-provider
+errors, and the field list would still need the same schema. It also misses
+collection overlays that exist only in the declarative finish state.
+
+### Option B: Deserialize field by field
+
+Attempt `serde_json::from_value` for each field and classify "missing field"
+failures. Rejected: it classifies English error strings, cannot separate
+absence from invalid input, evaluates custom deserializers repeatedly, and
+violates the requirement never to treat every deserialization failure as
+absence.
+
+### Option C: Explicit schema composition
+
+Generate a requirement schema from the derive input, compose child schemas only
+through an opt-in field marker, inspect the final merged `Value` once, and
+report the ordered set of activated absent requirements. Accepted.
+
+### Option D: Arbitrary Serde reflection
+
+Recover nested requirements from the deserializer or from documentation IR.
+Rejected: no stable reflection exists, documentation IR is descriptive rather
+than authoritative, and deriving runtime requiredness from it would be false.
+
+| Topic                       | A: Figment probes | B: field deserialize | C: explicit schema | D: reflection |
+| --------------------------- | ----------------- | -------------------- | ------------------ | ------------- |
+| Aggregates all requirements | Partly            | No                   | Yes                | Partly        |
+| Distinguishes invalid input | No                | No                   | Yes                | No            |
+| Single evaluation           | Yes               | No                   | Yes                | Unknown       |
+| Nested types without bounds | No                | No                   | Opt-in only        | No            |
+| Uses authoritative metadata | No                | No                   | Yes                | No            |
+
+_Table 1: Comparison of missing-requirement discovery strategies._
+
+## Decision outcome
+
+### Runtime module and public surface
+
+Runtime schema and collection code live in `ortho_config/src/required_values/`.
+Presentation lives with the error payload under `ortho_config/src/error/`. Both
+are reachable from downstream macro expansion through the crate root and the
+existing error facade.
+
+```rust
+pub trait RequiredConfigSchema {
+    fn collect_required_schema(
+        stack: &mut RequiredSchemaStack,
+    ) -> Result<Vec<SchemaField>, RequiredSchemaError>;
+
+    fn required_route_hints() -> RouteHints {
+        RouteHints::default()
+    }
+}
+
+pub struct RequiredSchemaStack { /* type-name recursion stack */ }
+
+impl RequiredSchemaStack {
+    pub fn new() -> Self;
+    pub fn enter<T: ?Sized>(&mut self) -> Result<(), RequiredSchemaError>;
+    pub fn leave<T: ?Sized>(&mut self);
+}
+
+pub struct SchemaField {
+    pub key: String,
+    pub aliases: Vec<String>,
+    pub activation: Activation,
+    pub children: SchemaChildren,
+}
+
+pub enum Activation {
+    Required,
+    Optional,
+    // Optional only to the loader of the declaring type.
+    DefaultBacked,
+}
+
+pub enum SchemaChildren {
+    Leaf,
+    Nested(Vec<SchemaField>),
+}
+
+pub struct RouteHints {
+    pub prefix: Option<String>,
+    pub cli_flags: Vec<CliFlagHint>,
+}
+
+pub struct CliFlagHint {
+    pub key: String,
+    pub flag: String,
+    pub takes_value: bool,
+}
+
+pub fn ensure_no_missing_required_values<T: RequiredConfigSchema>(
+    value: &serde_json::Value,
+    program: &str,
+) -> OrthoResult<()>;
+
+pub fn program_label_from_args(args: &[std::ffi::OsString]) -> Option<String>;
+```
+
+The `OrthoConfig` derive emits `RequiredConfigSchema`. A schema-only derive of
+the same trait lets a child type participate without deriving a stand-alone CLI
+or implementing `OrthoConfig`. The schema-only derive emits nothing when the
+same item also derives `OrthoConfig`, so the two cannot conflict.
+
+### Requiredness matrix
+
+A field is required unless its declared shape or attributes guarantee a value:
+
+| Declared shape or attribute                                                  | Requiredness  |
+| ---------------------------------------------------------------------------- | ------------- |
+| `Option<T>` (one outer layer)                                                | Optional      |
+| `Option<T>` with a custom deserializer                                       | Required      |
+| `#[ortho_config(default = ...)]` or inferred clap default, own loader active | Optional      |
+| The same default composed by a parent, or on a schema-only type              | Required      |
+| `#[serde(default)]` on the field                                             | Optional      |
+| `#[serde(default)]` on the container                                         | Optional      |
+| `#[serde(skip)]` or `skip_deserializing`                                     | Not inspected |
+| `Vec<T>`, `BTreeMap<K, V>`, `HashMap<K, V>`                                  | Required      |
+| Any other scalar, map, or opaque type                                        | Required      |
+
+Collections are required unless a default supplies them, because the loader
+emits an empty collection only through an explicit default or a merge overlay.
+The documentation IR's "collections are non-required" rule is descriptive and
+does not drive runtime decisions.
+
+The two default rows turn on which loader is active. `#[derive(OrthoConfig)]`
+emits a defaults struct, and it covers only the fields of the type it is
+derived on. A parent that composes the type never runs that loader and builds
+no defaults layer beneath itself, so the child's declared default never reaches
+the merged value and does not make its field optional. The schema records the
+narrower fact as `Activation::DefaultBacked` rather than as optional, and
+`SchemaChildren::compose` requires it. A type deriving the standalone schema
+has no loader at all, so its declared defaults are required from the start.
+
+A field marked `#[serde(flatten)]` without the nested marker is not inspected:
+its keys do not appear under its own name, so any report would name a key the
+loader never reads. With both `#[serde(flatten)]` and
+`#[ortho_config(nested)]`, the child's fields compose at the current level,
+which is exactly Serde's flatten contract.
+
+A field-level `#[serde(deserialize_with = "...")]` or `#[serde(with = "...")]`
+outranks the declared type, because `expr_is_missing` checks the field default,
+then the container default, and only then the field's deserializer — which,
+when present, raises a missing-field error instead of calling the helper that
+yields `None` for an `Option`. `Option<T>` is therefore required unless a
+default applies. The replacement also means the child's `Deserialize`
+implementation may never run, so `#[ortho_config(nested)]` cannot promise that
+the child's keys are the ones read: such a field is reported as an opaque leaf
+under its own key, and a flattened one contributes no composed requirement.
+
+A `#[serde(transparent)]` child is opaque for a different reason. Serde reads
+and writes its single non-skipped field directly, so the keys this child's
+schema records sit one level below the key the parent owns; composing them
+would name children no loader reads. Container attributes of an arbitrary child
+type are not visible to the parent's macro, so the child answers
+`RequiredConfigSchema::declares_nested_object` with `false`, and generated code
+composes through `SchemaChildren::compose`, which returns an opaque leaf for
+such a type.
+
+### Canonical keys and aliases
+
+A canonical key is the field's deserialization name: an undirected
+`#[serde(rename)]`, a `rename(deserialize = ...)` direction, a
+`rename_all(deserialize = ...)` rule, or the unrawed identifier. Aliases are
+`#[serde(alias = ...)]` values. A requirement is present when the object holds
+the canonical key or any alias; an accepted alias is never reported as missing.
+Serialize-only renames do not move the canonical key, because deserialization
+does not accept them.
+
+The generated CLI and defaults structs copy no Serde naming attributes, so
+their layers use the identifier. A CLI hint is therefore emitted only when the
+canonical key equals the identifier; otherwise the field has no CLI route and
+none is advertised.
+
+### Activation and observation
+
+For each schema node the collector compares one merged `Value` with the
+declared requirements, in declaration order, recording only activated and
+absent observations.
+
+- A present key is never missing. Explicit null and empty values are present
+  and are left to Serde's type rules.
+- A present object under a nested node is inspected recursively.
+- A present non-object under a nested node is invalid, not a collection of
+  missing children. It contributes nothing; other requirements are still
+  reported, so the complete absence set precedes any invalid-value error.
+- An absent optional node deactivates its subtree.
+- An absent required nested node activates its required descendants. If it has
+  none, the node itself is reported with an object-shaped file route, so an
+  absent required object containing only optional children cannot escape the
+  report.
+- A declared default is a supply layer only for the loader of the type that
+  declares it, so the schema records that narrower fact instead of calling the
+  field optional. The generated defaults struct belongs to that loader; a
+  parent composing the type never builds it, and the parent's merged value
+  never carries the default. `SchemaChildren::compose` therefore demotes every
+  composed `DefaultBacked` node to required, level by level, so a parent
+  reports the key. Without this, the report would omit a value nothing
+  supplies, and the user would meet the deserializer's second failure only
+  after fixing the reported one. A schema-only child is unaffected: it has no
+  loader, so its declared defaults are already required.
+
+The report is the ordered, deduplicated subsequence of activated absent
+requirements. It contains no supplied values. Source, discovery, and parse
+failures retain precedence because no trustworthy merged value exists.
+
+### Supply routes
+
+Routes are computed for reported entries only, in CLI, environment,
+configuration-file order.
+
+- **CLI** only for a top-level requirement whose canonical key is the
+  identifier the generated CLI layer emits. The flag and value arity come from
+  the generated clap field.
+- **Environment** only when no path segment contains a literal dot, because the
+  provider splits on `__` and then nests on `.`, and only when every segment
+  can name a variable at all. A segment containing `=` or a NUL cannot: every
+  process environment treats `=` as the separator between name and value, and a
+  NUL terminates the name. The variable is the prefix followed by the
+  uppercased segments joined with `__`, matching
+  `CsvEnv::prefixed(prefix).uppercase(true).split("__")`, or the unprefixed
+  spelling for a raw provider.
+- **Configuration file** always, rendered as `key = value` for a leaf or a
+  `[table]` header for an object requirement.
+
+The program label comes from the argument list the loader was given. Direct
+`merge_from_layers` calls have no argument list and use the configuration type
+name instead. Diagnostics never read the ambient process arguments or
+environment.
+
+### Error payload and display
+
+`OrthoError::MissingRequiredValues(Box<MissingRequiredValues>)` joins the
+`#[non_exhaustive]` enum. `MissingRequiredValues` owns a non-empty ordered list
+of
+`MissingRequiredValue { path: ConfigPath, routes: Vec<SupplyRoute>,
+expects_object: bool }`,
+built through a fallible constructor. `ConfigPath` keeps its segments
+separately, so a literal dotted key is distinct from a nested path; rendering
+quotes and escapes any segment a TOML bare key cannot express, which is what
+makes a configuration-file route a spelling the file can actually carry.
+Display renders the program label, the ordered missing paths, and the grouped
+routes. The initial contract is English and does not consult a localizer.
+
+A cyclic opt-in schema is a declaration defect, not a user input error. The
+collector detects it with a type-identity stack and returns
+`RequiredSchemaError::CyclicSchema`; the runtime entry point maps that to
+`OrthoError::Validation` under the `required_values_schema` key. Reusing a type
+in sibling fields is allowed and does not trip the cycle check.
+
+### Coverage contract
+
+Full enumeration covers top-level fields and nested types that opt in with
+`#[ortho_config(nested)]`. It does not cover: requirements that live inside an
+arbitrary custom `Deserialize` implementation, `#[serde(flatten)]` without the
+nested marker, enum payloads, or selected-subcommand values merged through the
+Figment extraction helpers. Those paths keep their existing error behaviour. A
+field with a custom deserializer is reported as an opaque leaf when absent as a
+direct value; absent leaves inside a supplied opaque value remain Serde errors.
+A `#[serde(transparent)]` child is treated the same way: the field is reported
+under its own key, and the keys inside the forwarded value stay with Serde.
+
+## Goals and non-goals
+
+- Goals:
+  - Report every activated absent requirement in one typed error.
+  - Advertise only routes the actual providers accept.
+  - Let an agent correct a load in one round when absence is the sole defect.
+  - Keep schema ownership explicit and the recursion finite.
+- Non-goals:
+  - Reflecting over arbitrary Serde types.
+  - Replaying defaults or custom deserializers to discover requirements.
+  - Translating the diagnostic in this phase.
+  - Changing documentation IR, agent context, or policy schemas.
+
+## Consequences
+
+- The derive grows a companion trait and a field marker. Types that opt into
+  nested diagnostics must implement or derive the schema trait.
+- `finish` performs one linear schema walk before deserialization. The cost is
+  proportional to the declared requirements, not to the configuration size.
+- The merged `Value` is inspected once, so defaults and custom deserializers
+  are not evaluated twice.
+- Routes are conservative: when a spelling cannot be shown to work, it is
+  omitted rather than guessed.
+
+## Known risks and limitations
+
+- A new field on a nested type that is not marked `nested` silently stays
+  outside enumeration; the coverage test pins the supported set.
+- A `#[serde(rename)]` field has no CLI route today because the generated CLI
+  struct does not reproduce the rename. The diagnostic omits the route rather
+  than advertising a broken flag.
+- Selected-subcommand merges that finish through Figment extraction cannot
+  carry the schema; their missing values keep the existing error shape.
+- A cyclic schema aborts diagnostics with a validation error instead of
+  enumerating requirements; the alternative would be unbounded traversal.
+
+## Amendments
+
+### 2026-11-15 — selected-subcommand enumeration
+
+[ADR-0025](adr-0025-enumerate-missing-values-for-selected-subcommands.md)
+removes the coverage contract's exclusion of selected-subcommand merges. A
+selected subcommand now collects through a loader-specific `RouteScope` before
+deserialization, so its report names `PREFIX_CMDS_<NAME>_key` variables and
+`[cmds.<name>]` file paths — the spellings that loader really reads — instead
+of the type's own prefix and file root.
+
+The consequence is a widened bound: the four `load_and_merge_subcommand_for*`
+helpers and the matching `SubcmdConfigMerge` methods now require
+`RequiredConfigSchema`, which every type deriving `OrthoConfig` already
+satisfies.
+
+The coverage contract above and the matching risk bullet are retained as
+history. Read both as superseded on this point only; every other limitation
+still applies.
+
+### 2026-11-15 — flatten defaults and field rename rules
+
+Two refinements narrow how a field's own attributes are read. Both follow
+Serde's source rather than an intuitive reading of its documentation.
+
+**A field default never rescues a flatten.** `#[serde(default)]` on a flattened
+field is inert: Serde deserializes the field from the unmatched keys through
+`FlatMapDeserializer`, and `extract_collected` applies no default wrapper, so a
+child that cannot deserialize still fails. The earlier requiredness rule that a
+field default makes a field optional therefore does not extend to a flatten. A
+flattened child resolves to absence exactly when its type is `Option`, which
+keeps the `optional_subtree` demotion on that case alone.
+
+**Field rename rules are not case conversions.** A `rename_all` entry is
+applied to a field by `apply_to_field`, whose table leaves a field name
+unchanged for `lowercase` and `snake_case` and, for `PascalCase`, `camelCase`,
+`kebab-case` and `SCREAMING-KEBAB-CASE`, transforms only the separators and the
+first letter. General-purpose case conversion would rename an identifier Serde
+still reads under its declared spelling, so the schema would name a key no
+loader consumes. The canonical key follows that table exactly.
+
+### 2026-11-15 — custom deserializers and the variable-name alphabet
+
+**A custom deserializer outranks the declared type.** `expr_is_missing` checks
+the field default, then the container default, and only then
+`field.attrs.deserialize_with()`. When a deserializer is installed, the missing
+branch returns `missing_field` rather than calling `de::missing_field`, the
+helper that yields `None` for an `Option`. `#[serde(with = "...")]` installs
+the same deserializer through `m::deserialize`, so both spellings are
+recognized. An `Option<T>` field is required under either unless a Serde
+default applies, and an `ortho_config` default keeps its existing
+identifier-and-alias rule.
+
+**An opaque child has no enumerable keys.** The same replacement means the
+child's `Deserialize` implementation may never run, so
+`#[ortho_config(nested)]` cannot promise that the child's key model is what the
+loader reads. Composing it would report leaves the deserializer is free to
+ignore. Such a field is reported as an opaque leaf under its own key, which is
+the one route the deserializer is guaranteed to receive; a flattened field with
+a custom deserializer contributes no requirement at all, because it has no key
+of its own to report.
+
+**A variable name excludes two byte values.** Every process environment treats
+`=` as the separator between name and value, and a NUL terminates the C string
+the platform call receives. A path segment containing either therefore has no
+environment route, whatever the provider's case and separator transforms do.
+The configuration-file route remains, and it now quotes and escapes any segment
+outside TOML's bare-key alphabet, so the advertised spelling is one the file
+can express.
+
+### 2026-11-15 — the whole path decides an environment route
+
+**Segment checks are not enough.** The provider joins the path with `__` and
+then replaces _every_ `__` in the joined name with a dot, so a segment edge
+merges with the separator. `database_` joined to `host` gives
+`database___host`, which the provider reads as `database` plus `_host`;
+advertising `APP_DATABASE___HOST` would populate a different key and repair
+nothing. The collector therefore replays the provider's split on the joined
+name and offers an environment route only when the replay reproduces the
+canonical path exactly. A leading underscore keeps its route, because the
+prefix strip exposes it rather than absorbing it: `_database.host` is reached
+through `APP__DATABASE__HOST`.
+
+### 2026-11-15 — a node spelled two accepted ways is left to the deserializer
+
+**A duplicate spelling is not an absence.** A canonical key and an accepted
+alias name the same value, so a merged configuration holding both is ambiguous.
+Serde raises a duplicate-field error on the second spelling, but only after the
+first one has deserialized; when that first value is incomplete, its
+missing-field error surfaces first. Either way the failure is the
+deserializer's, and neither can be repaired by supplying the leaf a report
+would have advertised, because the second spelling remains.
+
+The collector therefore classifies each node before visiting it: no accepted
+spelling present is absence, exactly one is the node to inspect, and more than
+one is `Conflicting`. A conflicting node is neither reported nor descended
+into. Earlier rounds read only the canonical key first, which reported
+`database.host` for a value holding both `database` and `db` and advertised a
+route that could not repair the load. Distinct spellings are counted, not raw
+aliases, because a rename can leave the canonical key also listed as an alias.
+
+### 2026-11-16 — opaque containers and unmaterialized defaults
+
+**A transparent container composes nothing.** `#[serde(transparent)]` reads and
+writes the container's single non-skipped field directly, so the keys its own
+schema names belong to the value stored _under_ the parent's key, not to the
+containing object. Composing them would advertise children no configuration
+file can supply at that level. The parent's macro cannot inspect the child's
+container attributes, and special-casing a path spelled `#[serde(transparent)]`
+would only cover children whose declaration the caller can see, so the child
+answers for itself: `RequiredConfigSchema::declares_nested_object` returns
+`false`, and the generated composition goes through `SchemaChildren::compose`,
+which yields an opaque leaf for such a type. The default answer stays `true`,
+so every existing schema keeps its children.
+
+**A declared default needs the loader that materializes it.** The requiredness
+matrix lists both default forms as optional, which is true only where a loader
+turns the declaration into a supply layer. `#[derive(OrthoConfig)]` builds a
+defaults struct from its own fields and merges it beneath every other layer;
+that is the only place a declared or inferred clap default enters the merged
+value. A type deriving the standalone schema supplies keys to its parent's
+loader, and that loader's defaults struct covers only the parent's own fields,
+so a default declared on the child never reaches the merged value. The schema
+generator therefore carries whether the companion derive materializes defaults
+and treats declared defaults as optional only when it does.
+
+That flag alone answers the wrong question, because it is a property of the
+type and optionality is a property of a reading. A child that derives
+`OrthoConfig` does materialize its own defaults, so it reports them as
+optional, yet its parent never runs that loader. The schema therefore records
+the narrower `Activation::DefaultBacked` and lets composition decide:
+`SchemaChildren::compose` requires every node whose only supply was the
+declaring type's default, so the parent reports the key while the child's own
+load still tolerates absence. Two loads of the same declaration, differing only
+in the active loader, thus disagree about the report, which is the truthful
+outcome.
+
+### 2026-11-20 — where the adapter boundary sits
+
+Enumeration crosses three boundaries, and each belongs to a different module.
+Figment owns layer order and extraction, and the only place a Figment type is
+named is the adapter that projects it: `finish_with_required_values` in
+`ortho_config/src/subcommand/sources.rs` builds the merged document and hands
+it to the collector. The collector owns presence and route truthfulness over
+that document and names no Figment type. Presentation owns spelling:
+`ortho_config/src/error/missing/display.rs` lays out the report, and
+`ConfigPath::render` is the one key-spelling routine that both the report and
+the suggested file section call, so a single message cannot spell one key two
+ways. `required_values::env_route` is route vocabulary rather than an adapter:
+it is a pure function of a `ConfigPath` and a prefix that replays the
+provider's transforms, performs no I/O, and consults no Figment type.
+
+The merged document is `serde_json::Value` because that type is the crate's
+canonical merge representation, not a serialization detail of this feature.
+`ortho_config` re-exports `serde_json` so generated code can name
+`ortho_config::serde_json::Value`, the declarative finish path already builds
+that value and passes it to `declarative::from_value_merge`, and the collector
+consults the same value. A second domain tree would duplicate the
+representation and add a translation that carries no additional information, so
+the collector keeps the crate's value type and the figment projection stays in
+the adapter.
+
+### 2026-11-21 — which spelling routine is shared
+
+The 2026-11-20 amendment said `ConfigPath::render` is the routine both the
+report and the suggested file section call. They share `render_segment`, not
+`ConfigPath::render`. `ConfigPath::render` maps `render_segment` over the
+path's segments and joins them with `.`, while `FileSection` in the same module
+calls `render_segment` directly for each table header and each assignment. One
+key still has one spelling, because every caller quotes segments through the
+same function; the report only adds the joining.
+
+## References
+
+- [Execplan: Enumerate missing required configuration values](../execplans/7-3-1-enumerating-missing-required-values.md).
+- [Improved error message design](../improved-error-message-design.md).
+- [Design document](../design.md).

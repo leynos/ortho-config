@@ -4,9 +4,11 @@ mod aggregate;
 mod constructors;
 mod conversions;
 mod helpers;
+mod missing;
 mod types;
 
 pub use helpers::is_display_request;
+pub use missing::{ConfigPath, MissingRequiredValue, MissingRequiredValues, SupplyRoute};
 pub use types::OrthoError;
 
 pub(crate) use aggregate::AggregatedErrors;

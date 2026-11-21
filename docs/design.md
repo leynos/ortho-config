@@ -168,6 +168,77 @@ and explicit:
 These helpers are intentionally small and composable so call-sites remain easy
 to read without hiding the semantics of error mapping.
 
+#### Missing required values
+
+Missing required configuration values are reported through a typed error rather
+than the deserializer's first failure; the decision, requiredness matrix, and
+coverage limits are recorded in
+[ADR-0024](adrs/adr-0024-enumerate-missing-required-values.md). [ADR-0025](adrs/adr-0025-enumerate-missing-values-for-selected-subcommands.md)
+extends that contract to selected subcommands.
+
+- `ortho_config/src/required_values/` owns schema declarations, the recursion
+  stack, the pure absence collector, and the route computation. Its public
+  surface exists for generated code and for callers that implement
+  `RequiredConfigSchema` manually.
+- `ortho_config/src/error/` owns the payload types and their presentation. The
+  display path never discovers requirements and never reads process arguments
+  or the environment.
+- Generated `finish` code calls the collector once, after collection overlays
+  and before final deserialization. The raw generic `from_value_merge<T>` keeps
+  its existing behaviour because `T` there is only `DeserializeOwned` and
+  carries no schema.
+- Route construction takes a loader scope. An ordinary load derives it from the
+  type's route hints; a selected subcommand passes the `PREFIX_CMDS_<NAME>_`
+  prefix and the `[cmds.<name>]` section its loader reads, so a diagnostic
+  cannot name a value that loader never consults.
+- A flattened child resolves to absence only when its type is `Option`,
+  because that is the one shape for which Serde turns a failed child into
+  `None`. A `#[serde(default)]` on a flattened struct does not rescue it: Serde
+  applies a default to a field it never saw, and a flattened field is always
+  deserialized from the unmatched keys. The composed subtree of an `Option`
+  child is therefore demoted as a whole, including any nested object, while
+  every other flatten keeps its requirements.
+- A declared default is a supply layer only for the loader of the type that
+  declares it. The schema records `Activation::DefaultBacked` for such a field,
+  and `SchemaChildren::compose` requires it, because a parent never runs the
+  child's loader and so never builds the defaults struct that carries the
+  value. The child's own load keeps tolerating absence.
+- A field-level custom deserializer outranks the declared type. Serde consults
+  a field default, then a container default, and only then the field's
+  deserializer; when one is installed it raises a missing-field error instead
+  of calling the helper that turns absence into `None`. An `Option<T>` field
+  read through `#[serde(deserialize_with = "...")]` or `#[serde(with = "...")]`
+  is therefore required unless a default applies. The replacement also means
+  the child's `Deserialize` implementation may never run, so a
+  `#[ortho_config(nested)]` field with a custom deserializer is reported as an
+  opaque leaf under its own key, and a flattened one contributes no composed
+  requirement at all.
+- Field keys follow Serde's own field rules rather than a general case
+  conversion. `lowercase` and `snake_case` leave a struct field unchanged, and
+  `PascalCase` only capitalizes the first letter of each underscore-separated
+  word. A general converter would disagree on identifiers such as `api_URL` or
+  `api__key`, naming a key Serde never reads.
+- A `#[ortho_config(default = ...)]` value is materialized under the Rust
+  identifier. It supplies a renamed field only when that identifier is also an
+  accepted `#[serde(alias = "...")]`; otherwise the field stays required.
+- A node the merged value spells two accepted ways at once is neither reported
+  nor descended into. A canonical key and an accepted alias name the same
+  value, so Serde rejects the second spelling as a duplicate field, and an
+  incomplete first spelling fails with its own missing-field error before the
+  second is even reached. The absence is therefore the deserializer's to
+  report, and no advertised route could repair it: supplying the leaf leaves
+  both spellings in the merged value.
+- An environment route is offered only when the provider's transforms leave the
+  spelling unchanged and the spelling can name a variable at all. A segment
+  containing `=` or a NUL can never do so: every process environment treats `=`
+  as the separator between name and value, and a NUL terminates the name. The
+  check covers the whole path, not each segment alone, because the provider
+  splits the joined name: an edge underscore merges with the `__` separator, so
+  `database_.host` would be advertised as a variable the provider reads back as
+  `database._host`.
+- Configuration-file routes render every key as TOML accepts it, emitting a
+  quoted and escaped basic string for any segment a bare key cannot express.
+
 ### 4.3. Declarative configuration merging
 
 Figment kept the hello_world example readable, yet it forced the
