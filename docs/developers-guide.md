@@ -2739,6 +2739,32 @@ feature, onto `bridge/telemetry_metrics.rs`. Keep the split. A second caller
 recording the same fact would double-count it, and a persistence test should
 not need a metrics recorder.
 
+Publishing compares the existing `ir.json` with the new payload through a
+bounded comparison. `cached_ir_matches` opens the entry and reads its metadata;
+`compare_cache_entry` rejects a non-regular entry, returns `false` when the
+metadata length differs from the payload, and otherwise reads through
+`take(json.len() + 1)` before comparing bytes. Check the length first, so a
+large mismatched entry costs one metadata read and no allocation; the extra
+byte keeps an entry that grew between the metadata read and the body read from
+matching on a truncated prefix. `CacheEntry` in `bridge/ir_cache.rs` is the
+only route for a body read on the publish path; its inner handle is private,
+and only its `Read` implementation exposes the bytes. Route a new read through
+it, or the publish-path test will not observe it.
+
+On Unix the entry is opened with `O_NONBLOCK` through `rustix`, because a
+read-only open of a FIFO waits indefinitely for a writer. The opened handle is
+then rejected as a `PublishStage::Read` failure when it is not a regular file.
+`rustix` is therefore a Unix runtime dependency of `cargo-orthohelp`, not a
+dev-dependency; it is part of the `cfg(unix)` build and must stay there.
+
+`bridge/ir_cache_read_observation.rs` is a test-only, thread-local read counter.
+`CacheEntry`'s `Read` implementation records each returned byte count, and the
+publish-path test resets the counter before `write_ir_cache` and asserts zero
+after a size-mismatched publish. It exists because the `compare_cache_entry`
+seam tests drive the comparison directly and cannot see a read added above it.
+It is **not** a metrics or tracing facility: it must stay compiled out of
+non-test builds and must not gain recorders, labels, or production call sites.
+
 The counter is `cargo_orthohelp.bridge_cache.events`, and both of its labels
 (`operation`, `outcome`) are drawn from the closed enums in
 `bridge/telemetry_metrics.rs`. Never attach a path, cache key, or error string.
