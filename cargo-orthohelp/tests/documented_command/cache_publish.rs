@@ -7,8 +7,10 @@
 //! meets a run without `--cache`, which builds the bridge and publishes
 //! unconditionally.
 
+#[cfg(unix)]
+use super::EXIT_FAILURE;
 use super::cache_entries::{IR_FILE, clear_cached_ir, find_fixture_ir};
-use super::{DOCUMENTED_RUN_MUTEX, EXIT_FAILURE, build_state, run_documented_command};
+use super::{DOCUMENTED_RUN_MUTEX, build_state, run_documented_command};
 use anyhow::{Context, Result, ensure};
 use cap_std::{ambient_authority, fs::Dir};
 use std::path::{Path, PathBuf};
@@ -48,11 +50,13 @@ impl Drop for RestoreEntry {
 ///
 /// Writing the original bytes back is not an option here: opening a FIFO for
 /// writing blocks until a reader appears, so the guard removes it instead.
+#[cfg(unix)]
 struct RemoveFifo {
     /// The cache entry directory holding the FIFO.
     dir: Dir,
 }
 
+#[cfg(unix)]
 impl Drop for RemoveFifo {
     fn drop(&mut self) {
         let _removed = self.dir.remove_file(IR_FILE);
