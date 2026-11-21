@@ -17,11 +17,14 @@
 //!
 //! The model mirrors the production kernel rather than calling it: the real
 //! types carry `String`s, `Vec`s, and serde attributes, none of which Verus can
-//! reason about. Every production slot has one model counterpart, but this file
-//! proves the obligations over the model only; it does not prove that the
-//! production traversal implements the model. The differential property tests
-//! in `ortho_config/src/docs/profile_redaction/proptests.rs` are bounded
-//! evidence for that correspondence, not a proof of it.
+//! reason about. Every production slot the projection can change has a model
+//! counterpart; slots the policy preserves verbatim are collapsed, because
+//! projecting them is the identity (the mapping table below shows which
+//! production slots each model slot stands for). This file proves the
+//! obligations over the model only; it does not prove that the production
+//! traversal implements the model. The differential property tests in
+//! `ortho_config/src/docs/profile_redaction/proptests.rs` are bounded evidence
+//! for that correspondence, not a proof of it.
 //!
 //! | model                       | production                                     |
 //! | --------------------------- | ---------------------------------------------- |
