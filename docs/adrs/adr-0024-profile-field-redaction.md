@@ -194,7 +194,11 @@ tests that walk the nested production type, not by the proof.
 
 The proof establishes V1 and V2 for the model. It does not establish that the
 production `redacted_for_output` implements the model; that correspondence is
-the residual testing boundary described under Known risks.
+the residual testing boundary described under Known risks. The bounded property
+corpus populates the document-level declaration records — `windows`,
+`behaviour`, `renderer`, and `output` — rather than leaving them absent, and
+the slot assertions compare all five record slots, so a traversal that dropped
+one fails both the model comparison and the integrity assertion.
 
 ## Goals and non-goals
 

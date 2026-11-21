@@ -380,10 +380,10 @@ model in `verus/profile_redaction.rs` mirrors the production slots and proves
 noninterference and projection integrity over an unbounded parent-before-child
 encoding of the command tree. Verus cannot reason about `String`, `Vec`, or
 serde attributes, so the model is a specification rather than generated code,
-and the correspondence is discharged by the differential property tests in
-`ortho_config/src/docs/profile_redaction/` together with the golden and
-contract suites in `cargo-orthohelp/tests/`; the developers' guide records that
-residual boundary.
+and the correspondence is supported by bounded evidence: the differential
+property tests in `ortho_config/src/docs/profile_redaction/` together with the
+golden and contract suites in `cargo-orthohelp/tests/`. It is not verified, and
+the developers' guide records that residual boundary.
 
 ### 2.3 Value typing and defaults
 

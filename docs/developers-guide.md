@@ -141,11 +141,15 @@ One production entry is registered:
 - Modelled abstraction, and the residual boundary: the model carries no
   `String`, `Vec`, or serde attribute, and slots the policy preserves verbatim
   are collapsed into one model slot. Verus rejects structural recursion through
-  a `Seq` of nodes, so the recursive production traversal is closed by the
-  differential property tests in `ortho_config/src/docs/profile_redaction/` and
-  by the golden and contract suites in `cargo-orthohelp/tests/`, not by the
-  proof. The proof covers the projection's semantics over the model; it does
-  not certify the running binary.
+  a `Seq` of nodes, so the recursive production traversal is covered only by
+  the differential property tests in `ortho_config/src/docs/profile_redaction/`
+  and by the golden and contract suites in `cargo-orthohelp/tests/`, not by the
+  proof. That evidence is bounded: the corpus reaches depth four, 32 command
+  nodes and 64 fields, and it carries populated `windows`, `behaviour`,
+  `renderer`, and `output` records rather than absent ones, so a traversal that
+  dropped a record is visible both to the model comparison and to the slot
+  assertions. The proof covers the projection's semantics over the model; it
+  does not certify the running binary.
 
 ## Clap default inference
 
