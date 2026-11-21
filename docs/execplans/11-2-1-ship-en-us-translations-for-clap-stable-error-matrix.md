@@ -1297,6 +1297,24 @@ stopping and reporting.
       sequentially and each started once. The focused `clap_error_coverage`
       suite runs 77 tests, up from 59, all passing.
 
+- [x] (2026-11-21) Round-19 record reflow. The Round-19 Progress entries were
+      first written as one task-list item holding three paragraphs, and the
+      blank line before the third made its six-space continuation an *indented*
+      code block. That became the document's first code block, so MD046's
+      `consistent` style bound the five fenced blocks to the indented style and
+      the gate reported five errors. A bisect proved the Progress insertion was
+      the cause: removing it left zero MD046 errors, and the file was restored
+      byte-identically afterwards. The entry is now two single-paragraph
+      bullets, which is how every other Progress entry is written. The spelling
+      sub-gate then rejected six `-ise` forms in the new prose, because the
+      shared dictionary's en-GB-oxendict policy prefers `-ize`; all six were
+      rewritten at equal length so no line needed rewrapping. `make fmt`,
+      `make markdownlint` (0 issues, spelling clean, `typos.toml` current) and
+      `make check-fmt` (113 files unchanged) pass on the committed document.
+      The code files are byte-identical to the certified tree, so the code
+      gates carry over by content identity: the support-module diff still
+      hashes to `516df4f259af7920`.
+
 ## Surprises & discoveries
 
 The plan first incorporated merged PR #651 at
