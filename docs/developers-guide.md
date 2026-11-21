@@ -1912,9 +1912,12 @@ generated `OrthoConfigDocs` and `OrthoConfigSubcommandDocs` method projects its
 own subtree or group, and a parent embeds the projected children. That costs
 one decision-and-projection pass per boundary rather than per node, which
 `derived_deep_chain_projects_once_per_boundary` in
-`ortho_config/src/docs/profile_redaction/derive_tests.rs` pins; the selector's
-group pass over an already-projected child is real work, but it decides only
-the group rule and never re-projects a child's values.
+`ortho_config/src/docs/profile_redaction/derive_tests.rs` pins. The selector's
+group pass over an already-projected child repeats that work over the child's
+nodes: it re-walks each member and re-applies the projection, which changes
+nothing there because the projection is idempotent. What the group pass adds is
+the whole-group decision, so a protected member suppresses every member's
+command examples.
 
 ### Agent context
 

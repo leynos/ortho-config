@@ -132,11 +132,11 @@ fn derived_deep_chain_projects_once_per_boundary() {
 
     // Three struct boundaries, each projecting its own subtree of 3, 2 and 1
     // nodes, with one decision pass and one projection pass per node:
-    // 2 * (3 + 2 + 1). Each subcommand selector then projects the group it
-    // returns with those same two passes over its members' nodes: 2 * (2 + 1)
-    // for the middle selector and 2 * 1 for the leaf selector. The group pass
-    // is not a second projection of a child's own boundary — the child already
-    // returned a projected document — but it is real work, so it is counted.
+    // 2 * (3 + 2 + 1). Each subcommand selector then re-walks the group it
+    // returns with those same two passes: `MiddleCommand` returns one member
+    // owning 2 nodes (2 * 2) and `LeafCommand` one owning 1 (2 * 1). The
+    // re-walk is real work — the projection is idempotent, so its result does
+    // not change — and it is counted here.
     assert_eq!(
         visits, 18,
         "each derived boundary projects its own subtree exactly once"

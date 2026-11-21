@@ -212,9 +212,10 @@ impl DocMetadata {
     /// member's command-level examples are suppressed; when none does, the
     /// documents are returned unchanged apart from their own projection.
     ///
-    /// Each member is projected exactly once, so a document a child boundary
-    /// already projected keeps its result and only takes the group decision.
-    /// Members are projected in the caller's order.
+    /// Each member goes through the decision and projection passes, so a
+    /// document a child boundary already projected keeps its result without a
+    /// special case: the projection is idempotent. Members are projected in
+    /// the caller's order.
     ///
     /// # Examples
     ///
