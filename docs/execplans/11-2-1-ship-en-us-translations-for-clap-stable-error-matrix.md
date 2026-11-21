@@ -1360,13 +1360,35 @@ stopping and reporting.
         audit call fails all five. The four mutations fail disjoint sets of
         tests, so each guard owns its own evidence.
 
-- [x] (2026-11-21) Round-20 certificate on the frozen tree. `make fmt`, then
-      `make check-fmt`, `make typecheck`, `make lint`, `make markdownlint`,
-      `make nixie`, `make test-workflow-contracts`, `make test`, and the
-      standalone `make boundary` the assessment asked for, run sequentially
-      and each started once. The standalone boundary result is recorded
-      separately below because it is the acceptance item the Round-19
-      certificate left open.
+- [x] (2026-11-21) Round-20 certificate on the frozen tree, which became
+      commit `63106ab8`. `make fmt`, `make check-fmt` (113 files unchanged),
+      `make typecheck`, `make lint` (rustdoc, Clippy and Whitaker clean;
+      docstring coverage 1044/1044, 100.0%), `make markdownlint` (0 issues in
+      113 files, spelling gate clean and `typos.toml` current), `make nixie`
+      (114 diagrams), `make test-workflow-contracts` (729 passed, 1 skipped),
+      `make test` and the standalone `make boundary` all pass, run
+      sequentially and each started once. `make test` ran 122 binaries with
+      3226 passed, 0 failed and 44 ignored, and the Python suite 128 passed
+      with 5 skipped. The standalone `make boundary` — the acceptance item the
+      Round-19 certificate left open — passed with 44 passed, 0 failed and 10
+      ignored in 31.70 s, so the assessment's request is answered on this
+      candidate without a load-blocked or allowance-killed run. The focused
+      `clap_error_coverage` suite passes 83 tests, up from 77. Typecheck and
+      lint reported in seconds because their Rust blobs are byte-identical to
+      the preceding run's, where Clippy and Whitaker ran in full; the
+      intervening change is documentation and spelling configuration only.
+
+- [x] (2026-11-21) Two certificate attempts were refused before the green one,
+      and both refusals were repaired in the source rather than silenced.
+      `make lint` failed on fifteen denied `clippy::shadow_reuse` errors in
+      `item_attributes`, whose arms bound `item` inside a function whose
+      parameter was also `item`; the parameter is now `declaration` and the
+      lint stays denied. The next attempt passed nine gates and failed only
+      `make markdownlint`, whose spelling sub-gate read the identifier
+      `analyze_error_kind` in this plan as a misspelling; a backtick-bound
+      pattern was added to `typos.local.toml` and the generated `typos.toml`
+      was regenerated and committed, which is the route the spelling policy
+      prescribes for a real identifier.
 
 ## Surprises & discoveries
 
