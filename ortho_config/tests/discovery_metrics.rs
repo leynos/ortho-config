@@ -113,6 +113,41 @@ fn a_candidate_failure_increments_the_labelled_counter() {
     );
 }
 
+/// A failed selector counts a `required_failure` outcome.
+///
+/// The selector is a non-empty explicit choice, so the candidate failure is
+/// fatal even though the terminal load outcome may still be `not_found`.
+#[test]
+fn a_failed_selector_counts_a_required_failure_outcome() {
+    use ortho_config::ConfigDiscovery;
+    use std::sync::Arc;
+
+    let recorder = DebuggingRecorder::new();
+    let snapshotter = recorder.snapshotter();
+
+    metrics::with_local_recorder(&recorder, || {
+        let discovery = ConfigDiscovery::builder("demo")
+            .clear_project_roots()
+            .env_var("DEMO_CONFIG")
+            .env_source(Arc::new(
+                MapEnv::new().with_var("DEMO_CONFIG", "/nonexistent/selected.toml"),
+            ))
+            .build();
+        drop(discovery.load_first());
+    });
+
+    let entries = counters(snapshotter.snapshot());
+    assert_eq!(
+        counter_for(
+            &entries,
+            "ortho_config.discovery.outcomes",
+            ("outcome", "required_failure"),
+        ),
+        1,
+        "one required-failure outcome should be counted, got {entries:?}"
+    );
+}
+
 #[test]
 fn discovery_increments_attempt_and_outcome_counters() {
     let recorder = DebuggingRecorder::new();

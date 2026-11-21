@@ -147,8 +147,8 @@ impl ConfigDiscovery {
         let mut winner = None;
         let mut layers = Vec::new();
 
-        for (index, candidate) in Self::scope_candidates(scope, set) {
-            let required = Self::is_required_candidate(index, set.required_bound);
+        for candidate in Self::scope_candidates(scope, set) {
+            let required = candidate.required;
             match Self::chain_layers(&candidate.path, required) {
                 Ok(Some(chain)) => {
                     layers.extend(Self::unique_layers(chain, loaded_paths));
@@ -186,12 +186,11 @@ impl ConfigDiscovery {
     fn scope_candidates(
         scope: DiscoveryScope,
         set: &CandidateSet,
-    ) -> impl Iterator<Item = (usize, &Candidate)> {
+    ) -> impl Iterator<Item = &Candidate> {
         set.candidates
             .iter()
-            .enumerate()
             .rev()
-            .filter(move |(_, candidate)| candidate.in_scope(scope))
+            .filter(move |candidate| candidate.in_scope(scope))
     }
 
     /// Keeps only the first layer for each canonical path across all scopes.

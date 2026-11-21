@@ -288,41 +288,54 @@ fn unprefixed_derived_loading_replays_generated_key_transforms(
     Ok(())
 }
 
+/// Returns true when `error` is, or contains, a file failure.
+///
+/// The error may arrive alone or in an aggregate; the wrapper is not the claim.
+fn contains_file_error(error: &ortho_config::OrthoError) -> bool {
+    match error {
+        ortho_config::OrthoError::File { .. } => true,
+        ortho_config::OrthoError::Aggregate(aggregated) => {
+            aggregated.iter().any(contains_file_error)
+        }
+        _ => false,
+    }
+}
+
 /// A malformed optional candidate must not suppress an unknown-profile error.
 ///
-/// Candidate order is what makes this case decisive: the selector is pushed
-/// before the XDG bases, so the malformed selector is walked first and its
-/// error recorded, and the later XDG file supplies the chain that survives.
-/// `discovery_failed` answers "were the profile tables inspected", so it must
-/// stay clear here — the surviving chain *was* read, and it defines no `ci`
-/// table. Widening the flag to "did any candidate fail" would let this
-/// unrelated parse complaint hide the genuine selection error, and the load
-/// would silently return the base value of 3 while `selection()` still named
-/// `ci`.
+/// Candidate order is what makes this case decisive: the XDG nested canonical
+/// file is pushed before the XDG dotfile, so the malformed canonical file is
+/// walked first and its error recorded, and the later dotfile supplies the
+/// chain that survives. `discovery_failed` answers "were the profile tables
+/// inspected", so it must stay clear here — the surviving chain *was* read, and
+/// it defines no `ci` table. Widening the flag to "did any candidate fail"
+/// would let this unrelated parse complaint hide the genuine selection error,
+/// and the load would silently return the base value of 3 while `selection()`
+/// still named `ci`.
 #[test]
 fn a_malformed_optional_candidate_still_reports_an_unknown_profile() -> Result<()> {
     let fixture_dir = tempfile::tempdir().context("create profiled loading fixture")?;
     // Written through a capability handle, as the repository's filesystem
-    // lints require. The selector names this file directly and is itself
-    // optional, so its parse failure is recorded without stopping the walk.
+    // lints require. This is an automatic candidate, so its parse failure is
+    // recorded without stopping the walk.
     let cap = Dir::open_ambient_dir(fixture_dir.path(), ambient_authority())
         .context("open profiled loading fixture directory")?;
-    cap.write("broken.toml", b"this is not toml = = =\n")
-        .context("write malformed selector candidate")?;
-    let broken_path = fixture_dir.path().join("broken.toml");
-    // The fallback the walk reaches next, at the name discovery derives from
-    // the struct's `PROFILED_CONFIG_` prefix: `<base>/<app_name>/config.toml`.
-    // It parses, so it becomes the chain, and it defines no profile at all.
     let xdg_dir = fixture_dir.path().join("xdg");
     cap.create_dir("xdg").context("create xdg fixture dir")?;
     cap.create_dir("xdg/profiled_config")
         .context("create profiled config dir")?;
-    cap.write("xdg/profiled_config/config.toml", b"retries = 3\n")
+    cap.write(
+        "xdg/profiled_config/config.toml",
+        b"this is not toml = = =\n",
+    )
+    .context("write malformed automatic candidate")?;
+    // The fallback the walk reaches next. It parses, so it becomes the chain,
+    // and it defines no profile at all.
+    cap.write("xdg/.profiled_config.toml", b"retries = 3\n")
         .context("write profile-less fallback candidate")?;
 
     let source = Arc::new(
         MapEnv::new()
-            .with_var("PROFILED_CONFIG_CONFIG_PATH", &broken_path)
             .with_var("PROFILED_CONFIG_PROFILE", "ci")
             .with_var("XDG_CONFIG_HOME", &xdg_dir),
     );
@@ -340,6 +353,45 @@ fn a_malformed_optional_candidate_still_reports_an_unknown_profile() -> Result<(
     ensure!(
         message.contains("no profiles were found"),
         "the chain was read and holds no profile tables, got: {message}"
+    );
+    Ok(())
+}
+
+/// A malformed required selector surfaces even when a later file loads.
+///
+/// The selector is pushed before the XDG bases, so the malformed file is
+/// walked first. Its required failure must outrank both the valid XDG fallback
+/// and profile validation, whose chain loaded successfully.
+#[test]
+fn a_malformed_required_selector_surfaces_before_profile_validation() -> Result<()> {
+    let fixture_dir = tempfile::tempdir().context("create profiled loading fixture")?;
+    let cap = Dir::open_ambient_dir(fixture_dir.path(), ambient_authority())
+        .context("open profiled loading fixture directory")?;
+    cap.write("broken.toml", b"this is not toml = = =\n")
+        .context("write malformed selector candidate")?;
+    let broken_path = fixture_dir.path().join("broken.toml");
+    let xdg_dir = fixture_dir.path().join("xdg");
+    cap.create_dir("xdg").context("create xdg fixture dir")?;
+    cap.create_dir("xdg/profiled_config")
+        .context("create profiled config dir")?;
+    cap.write("xdg/profiled_config/config.toml", b"retries = 3\n")
+        .context("write valid fallback candidate")?;
+
+    let source = Arc::new(
+        MapEnv::new()
+            .with_var("PROFILED_CONFIG_CONFIG_PATH", &broken_path)
+            .with_var("PROFILED_CONFIG_PROFILE", "ci")
+            .with_var("XDG_CONFIG_HOME", &xdg_dir),
+    );
+    let discovery: SharedEnvSource = source.clone();
+    let merge: SharedScanEnvSource = source;
+
+    let error = ProfiledConfig::load_from_iter_with_sources(["profiled-config"], discovery, merge)
+        .map(|config| config.retries)
+        .expect_err("the malformed selector must fail the load");
+    ensure!(
+        contains_file_error(error.as_ref()),
+        "expected a file error for the selector, got {error:?}"
     );
     Ok(())
 }

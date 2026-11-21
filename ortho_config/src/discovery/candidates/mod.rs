@@ -75,7 +75,7 @@ impl ConfigDiscovery {
                 continue;
             };
             for candidate in self.candidates_for_base(base_path.as_path()) {
-                let _ = acc.push_unique(candidate, origin.source, Some(origin.scope));
+                let _ = acc.push_automatic(candidate, origin.source, origin.scope);
             }
         }
     }
@@ -210,11 +210,8 @@ impl ConfigDiscovery {
                 acc,
                 CandidateOrigin::new(telemetry::CANDIDATE_HOME, DiscoveryScope::User),
             );
-            let _ = acc.push_unique(
-                home_path.join(&self.dotfile_name),
-                telemetry::CANDIDATE_HOME,
-                Some(DiscoveryScope::User),
-            );
+            let dotfile = home_path.join(&self.dotfile_name);
+            let _ = acc.push_automatic(dotfile, telemetry::CANDIDATE_HOME, DiscoveryScope::User);
         }
         source
     }
@@ -236,7 +233,9 @@ impl ConfigDiscovery {
                 let Some(path) = self.anchored(PathBuf::from(value)) else {
                     return telemetry::SELECTOR_DROPPED;
                 };
-                let _ = acc.push_unique(path, telemetry::CANDIDATE_SELECTOR, None);
+                // A non-empty selector is explicit, so its path is required even
+                // though unset and empty values reach no arm here.
+                let _ = acc.push_required(path, telemetry::CANDIDATE_SELECTOR);
                 telemetry::SELECTOR_ACCEPTED
             }
         }
@@ -261,10 +260,10 @@ impl ConfigDiscovery {
     /// Adds one project filename for each configured root in caller order.
     fn push_projects(&self, acc: &mut CandidateAccumulator) {
         for root in &self.project_roots {
-            let _ = acc.push_unique(
+            let _ = acc.push_automatic(
                 root.join(&self.project_file_name),
                 telemetry::CANDIDATE_PROJECT,
-                Some(DiscoveryScope::Project),
+                DiscoveryScope::Project,
             );
         }
     }
@@ -328,24 +327,21 @@ impl ConfigDiscovery {
             .collect()
     }
 
-    /// Assembles candidates in precedence order and records the required prefix.
+    /// Assembles candidates in precedence order and records their requiredness.
     ///
     /// Required paths lead the list, followed by optional explicit paths, the
     /// configured selector, platform locations, home locations, and project
-    /// roots. Deduplication preserves the first source label and whether the
-    /// first occurrence was required.
+    /// roots. Deduplication preserves the first source label but promotes an
+    /// entry to required when any rung that names it is required.
     pub(super) fn candidate_set(&self) -> CandidateSet {
         let mut acc = CandidateAccumulator::default();
-        let mut required_bound = 0;
 
         for path in &self.required_explicit_paths {
-            if acc.push_unique(path.clone(), telemetry::CANDIDATE_REQUIRED_EXPLICIT, None) {
-                required_bound += 1;
-            }
+            let _ = acc.push_required(path.clone(), telemetry::CANDIDATE_REQUIRED_EXPLICIT);
         }
 
         for path in &self.explicit_paths {
-            let _ = acc.push_unique(path.clone(), telemetry::CANDIDATE_EXPLICIT, None);
+            let _ = acc.push_optional(path.clone(), telemetry::CANDIDATE_EXPLICIT);
         }
 
         let selector = self.push_selector(&mut acc);
@@ -356,7 +352,6 @@ impl ConfigDiscovery {
 
         CandidateSet {
             candidates: acc.candidates,
-            required_bound,
             decisions: CandidateDecisions {
                 selector,
                 xdg_config_home: xdg.config_home,

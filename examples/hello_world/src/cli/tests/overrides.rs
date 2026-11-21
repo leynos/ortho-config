@@ -70,6 +70,24 @@ fn load_config_overrides_returns_none_without_files() -> Result<()> {
     Ok(())
 }
 
+/// Checks that a missing selected file fails despite a project fallback.
+#[rstest]
+fn load_config_overrides_reports_missing_selector_despite_fallback() -> Result<()> {
+    let fixture = ConfigFixture::new()?;
+    fixture.write(".hello_world.toml", "is_excited = true")?;
+    let missing = fixture.path().join("missing.toml");
+    let discovery = fixture.discovery(MapEnv::new().with_var("HELLO_WORLD_CONFIG_PATH", &missing));
+
+    let err = load_config_overrides_from_discovery(&discovery)
+        .err()
+        .ok_or_else(|| anyhow!("expected the missing selector to fail the load"))?;
+    ensure!(
+        matches!(err, crate::error::HelloWorldError::Configuration(_)),
+        "expected a configuration error, got {err:?}"
+    );
+    Ok(())
+}
+
 /// Checks that discovered overrides include the selected fixture path.
 #[rstest]
 fn load_config_overrides_returns_path() -> Result<()> {

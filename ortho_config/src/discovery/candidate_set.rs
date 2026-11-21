@@ -85,6 +85,9 @@ pub(super) struct Candidate {
     pub(super) path: PathBuf,
     /// Bounded source label used in telemetry instead of exposing the path.
     pub(super) source: &'static str,
+    /// Whether absence or a load failure must be reported regardless of later
+    /// candidates. Requiredness is the union of every rung that named the path.
+    pub(super) required: bool,
     /// Every scope that generated this deduplicated path.
     scopes: Vec<DiscoveryScope>,
 }
@@ -101,53 +104,109 @@ impl Candidate {
     }
 }
 
+/// One candidate to add, with the labels and policy that travel with it.
+///
+/// Grouping these fields keeps [`CandidateAccumulator::push_unique`] within the
+/// repository's four-argument ceiling, and keeps the requiredness decision next
+/// to the rung that made it instead of deriving it from the source label.
+pub(super) struct CandidateSpec {
+    /// Owned path attempted by discovery; insertion order is preference order.
+    pub(super) path: PathBuf,
+    /// Bounded source label used in telemetry instead of exposing the path.
+    pub(super) source: &'static str,
+    /// Whether absence or a load failure must be reported as fatal.
+    pub(super) required: bool,
+    /// Automatic discovery scope, or `None` for explicit and selector paths.
+    pub(super) scope: Option<DiscoveryScope>,
+}
+
 /// Accumulates candidates while deduplicating per the platform's path rules.
 #[derive(Default)]
 pub(super) struct CandidateAccumulator {
     /// Unique candidates in first-seen preference order.
     pub(super) candidates: Vec<Candidate>,
-    /// The index of each path's entry, so a later rung can record its scope on
-    /// the entry an earlier rung created instead of being refused outright.
+    /// The index of each path's entry, so a later rung can record its scope and
+    /// requiredness on the entry an earlier rung created instead of being
+    /// refused outright.
     seen: HashMap<DedupKey, usize>,
 }
 
 impl CandidateAccumulator {
-    /// Adds a new path once, while recording later scope memberships on its entry.
+    /// Adds a required explicit candidate.
+    ///
+    /// A missing or failed required candidate is reported even when a later
+    /// optional candidate loads.
+    pub(super) fn push_required(&mut self, path: PathBuf, source: &'static str) -> bool {
+        self.push_unique(CandidateSpec {
+            path,
+            source,
+            required: true,
+            scope: None,
+        })
+    }
+
+    /// Adds an optional explicit candidate with no automatic scope.
+    pub(super) fn push_optional(&mut self, path: PathBuf, source: &'static str) -> bool {
+        self.push_unique(CandidateSpec {
+            path,
+            source,
+            required: false,
+            scope: None,
+        })
+    }
+
+    /// Adds an optional candidate generated from an automatic base.
+    pub(super) fn push_automatic(
+        &mut self,
+        path: PathBuf,
+        source: &'static str,
+        scope: DiscoveryScope,
+    ) -> bool {
+        self.push_unique(CandidateSpec {
+            path,
+            source,
+            required: false,
+            scope: Some(scope),
+        })
+    }
+
+    /// Adds a new path once, recording later rung memberships on its entry.
     ///
     /// # Examples
     ///
     /// Pushing the same path for user and project scope returns `true` then
     /// `false`; the single stored candidate belongs to both scopes.
-    pub(super) fn push_unique(
-        &mut self,
-        candidate: PathBuf,
-        source: &'static str,
-        scope: Option<DiscoveryScope>,
-    ) -> bool {
-        if candidate.as_os_str().is_empty() {
+    pub(super) fn push_unique(&mut self, spec: CandidateSpec) -> bool {
+        let CandidateSpec {
+            path,
+            source,
+            required,
+            scope,
+        } = spec;
+        if path.as_os_str().is_empty() {
             return false;
         }
-        let key = ConfigDiscovery::dedup_key(&candidate);
-        let listed = self.seen.get(&key).copied();
-        if let Some(index) = listed {
+        let key = ConfigDiscovery::dedup_key(&path);
+        if let Some(index) = self.seen.get(&key).copied() {
             // The path is already listed, so it must not be listed twice. A
-            // rung that supplies a scope does add something, though: without
-            // this the surviving entry would be reachable only from the rung
-            // that happened to run first, and a request naming the later
-            // scope would find no candidate at all.
-            self.record_scope(index, scope);
+            // later rung can still add its scope and its requiredness: without
+            // the scope the surviving entry would be reachable only from the
+            // rung that happened to run first, and without the requiredness a
+            // selector naming an optional explicit path could still fall back.
+            self.record_membership(index, required, scope);
             return false;
         }
         self.seen.insert(key, self.candidates.len());
         self.candidates.push(Candidate {
-            path: candidate,
+            path,
             source,
+            required,
             scopes: scope.into_iter().collect(),
         });
         true
     }
 
-    /// Add a later rung's scope to an entry an earlier rung already listed.
+    /// Add a later rung's scope and requiredness to an existing entry.
     ///
     /// `requested` is the later rung's scope: `None` for a rung that has none,
     /// and `Some` for one whose path is already listed under a different scope.
@@ -155,14 +214,26 @@ impl CandidateAccumulator {
     /// list is a preference order, so re-positioning it would change which
     /// location a scope's walk reaches first.
     ///
+    /// Requiredness is promoted rather than replaced. If any rung says the path
+    /// must exist, the candidate is required; a later optional rung cannot undo
+    /// the stricter contract, and an earlier optional one cannot relax it.
+    ///
     /// `index` is one this accumulator recorded itself, and `candidates` only
     /// ever grows, so the entry is always there. A miss does nothing rather
     /// than panicking: one is unreachable, and the other would be a panic path
     /// in a library.
-    fn record_scope(&mut self, index: usize, requested: Option<DiscoveryScope>) {
+    fn record_membership(
+        &mut self,
+        index: usize,
+        required: bool,
+        requested: Option<DiscoveryScope>,
+    ) {
         let Some(candidate) = self.candidates.get_mut(index) else {
             return;
         };
+        if required {
+            candidate.required = true;
+        }
         let Some(scope) = requested else {
             return;
         };
@@ -200,12 +271,10 @@ impl CandidateDecisions {
     }
 }
 
-/// The assembled candidate list, its required prefix, and the decisions taken.
+/// The assembled candidate list and the decisions taken while building it.
 pub(super) struct CandidateSet {
     /// Ordered unique locations, from most-preferred to least-preferred.
     pub(super) candidates: Vec<Candidate>,
-    /// Number of leading candidates whose absence or load failure must be reported.
-    pub(super) required_bound: usize,
     /// Decisions retained for emission by the load operation boundary.
     pub(super) decisions: CandidateDecisions,
 }

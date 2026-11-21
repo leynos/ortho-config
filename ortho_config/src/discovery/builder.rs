@@ -153,6 +153,31 @@ impl ConfigDiscoveryBuilder {
     }
 
     /// Sets the environment variable consulted for an explicit configuration path.
+    ///
+    /// A non-empty value names a required path. If the selected file is
+    /// missing, unreadable, malformed, uses a disabled format, or cannot expand
+    /// its `extends` chain, [`ConfigDiscovery::load_first`] returns that error
+    /// even when a later automatic candidate would have loaded.
+    ///
+    /// An unset or empty value selects nothing: it does not fail closed, and
+    /// automatic discovery continues normally.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use ortho_config::{ConfigDiscovery, MapEnv};
+    /// use std::sync::Arc;
+    ///
+    /// let env = Arc::new(MapEnv::new().with_var("DEMO_CONFIG", "/etc/demo.toml"));
+    /// let discovery = ConfigDiscovery::builder("demo")
+    ///     .env_var("DEMO_CONFIG")
+    ///     .env_source(env)
+    ///     .build();
+    /// assert_eq!(
+    ///     discovery.candidates().first().map(std::path::PathBuf::as_path),
+    ///     Some(std::path::Path::new("/etc/demo.toml"))
+    /// );
+    /// ```
     #[must_use]
     pub fn env_var(mut self, env_var: impl Into<String>) -> Self {
         self.env_var = Some(env_var.into());
@@ -230,7 +255,10 @@ impl ConfigDiscoveryBuilder {
     /// Adds an explicit candidate path that must exist.
     ///
     /// This is primarily used for CLI-specified paths where falling back to
-    /// other discovery locations would be surprising.
+    /// other discovery locations would be surprising. A missing, unreadable,
+    /// malformed, or broken-`extends` required path is fatal to
+    /// [`ConfigDiscovery::load_first`], even when a later optional candidate
+    /// loads successfully.
     #[must_use]
     pub fn add_required_path(mut self, path: impl Into<PathBuf>) -> Self {
         self.required_explicit_paths.push(path.into());

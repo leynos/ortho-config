@@ -76,10 +76,12 @@ impl std::fmt::Debug for ConfigDiscovery {
 
 /// Result of a discovery attempt that keeps required and optional errors separate.
 ///
-/// Callers can surface [`DiscoveryLoadOutcome::required_errors`] regardless of whether a configuration
-/// file eventually loads, while deferring [`DiscoveryLoadOutcome::optional_errors`] until fallbacks are
-/// exhausted. This mirrors the builder contract where required explicit paths
-/// must exist.
+/// [`ConfigDiscovery::load_first`] returns
+/// [`DiscoveryLoadOutcome::required_errors`] as a failure even when a
+/// configuration file eventually loads, while deferring
+/// [`DiscoveryLoadOutcome::optional_errors`] until fallbacks are exhausted.
+/// This mirrors the builder contract where required explicit paths and
+/// non-empty selector values must exist.
 ///
 /// # Examples
 ///
@@ -107,13 +109,16 @@ pub struct DiscoveryLoadOutcome {
 /// Generic composition result that captures a discovered value along with errors.
 ///
 /// This type unifies single-layer and multi-layer discovery outcomes, avoiding
-/// duplication of error-handling logic.
+/// duplication of error-handling logic. Callers must surface
+/// [`LayerDiscoveryOutcome::required_errors`] even when `value` is populated;
+/// optional errors are deferred until no candidate produced a value.
 #[derive(Debug, Default)]
 #[must_use]
 pub struct LayerDiscoveryOutcome<T> {
     /// Successfully composed value, if any.
     pub value: T,
-    /// Errors originating from required explicit candidates.
+    /// Errors originating from required candidates, including a non-empty
+    /// environment-selector path.
     pub required_errors: Vec<Arc<OrthoError>>,
     /// Errors produced by optional discovery candidates.
     pub optional_errors: Vec<Arc<OrthoError>>,

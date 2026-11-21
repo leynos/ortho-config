@@ -76,6 +76,57 @@ fn cli_file_env_errors(error_context: &ErrorContext) -> Result<()> {
     }
 }
 
+#[given("an automatic configuration file setting DDLINT_PORT to {value}")]
+fn automatic_port(error_context: &ErrorContext, value: String) -> Result<()> {
+    let value = normalize_scalar(&value);
+    set_nonblank_scalar_once(
+        &error_context.auto_contents,
+        format!("port = {value}"),
+        "automatic configuration file",
+    )
+}
+
+#[when("the config is loaded with a missing selected file")]
+fn load_with_missing_selected(error_context: &ErrorContext) -> Result<()> {
+    let contents = error_context
+        .auto_contents
+        .take_or("automatic configuration file not provided")?;
+    // The guard stays bound until the loader below has read the fixture.
+    let (fixture_dir, _config_path) = config_fixture(".ddlint.toml", Some(&contents))?;
+    let missing = fixture_dir.path().join("missing.toml");
+    let source = MapEnv::new()
+        .with_current_dir(fixture_dir.path())
+        .with_var("HOME", fixture_dir.path().join("no-home"))
+        .with_var("XDG_CONFIG_HOME", fixture_dir.path().join("no-xdg-home"))
+        .with_var("XDG_CONFIG_DIRS", fixture_dir.path().join("no-xdg-dirs"))
+        .with_var("DDLINT_CONFIG_PATH", missing);
+    let (discovery, merge) = shared_sources(source);
+    let config_result = ErrorConfig::load_from_iter_with_sources(["prog"], discovery, merge);
+    error_context.agg_result.set(config_result);
+    Ok(())
+}
+
+/// Returns true when `error` is, or contains, a file error.
+fn is_file_error(error: &ortho_config::OrthoError) -> bool {
+    match error {
+        ortho_config::OrthoError::File { .. } => true,
+        ortho_config::OrthoError::Aggregate(aggregated) => aggregated.iter().any(is_file_error),
+        _ => false,
+    }
+}
+
+#[then("a file error is returned")]
+fn file_error_only(error_context: &ErrorContext) -> Result<()> {
+    let result = error_context
+        .agg_result
+        .take_or("aggregated result unavailable")?;
+    let err = result
+        .err()
+        .ok_or_else(|| anyhow!("expected a file error"))?;
+    ensure!(is_file_error(err.as_ref()), "unexpected error: {err:?}");
+    Ok(())
+}
+
 #[then("a CLI parsing error is returned")]
 fn cli_error_only(error_context: &ErrorContext) -> Result<()> {
     let result = error_context

@@ -33,6 +33,42 @@ fn write_cap_file(dir: &Utf8Dir, name: &str, contents: &str) -> Result<()> {
     Ok(())
 }
 
+/// Returns true when `error` names a file called `file_name`.
+///
+/// A single discovery failure is usually returned directly; once more than one
+/// diagnostic survives it wraps them in [`OrthoError::Aggregate`], so the helper
+/// searches both shapes. Comparing the file name rather than the full path
+/// keeps the assertion portable: Windows canonical paths carry a `\\?\` prefix
+/// under `std::fs` but not under the loader's `dunce` canonicalisation.
+fn names_file_error(error: &OrthoError, file_name: &str) -> bool {
+    match error {
+        OrthoError::File { path, .. } => {
+            path.file_name().and_then(|name| name.to_str()) == Some(file_name)
+        }
+        OrthoError::Aggregate(aggregated) => aggregated
+            .iter()
+            .any(|inner| names_file_error(inner, file_name)),
+        _ => false,
+    }
+}
+
+/// Assert that `result` failed with a file error naming `file_name`.
+fn expect_file_error(
+    result: crate::OrthoResult<Option<figment::Figment>>,
+    file_name: &str,
+) -> Result<()> {
+    match result {
+        Ok(_) => Err(anyhow!("expected discovery to fail for {file_name}")),
+        Err(error) => {
+            ensure!(
+                names_file_error(error.as_ref(), file_name),
+                "expected a file error for {file_name}, got {error:?}"
+            );
+            Ok(())
+        }
+    }
+}
+
 #[rstest]
 fn load_first_reads_first_existing_file(
     sample_config_file: Result<(TempDir, Utf8PathBuf)>,
@@ -60,47 +96,203 @@ fn load_first_reads_first_existing_file(
 }
 
 #[rstest]
-fn load_first_skips_invalid_candidates(config_temp_dir: Result<TempDir>) -> Result<()> {
+fn load_first_fails_when_selector_candidate_is_invalid(
+    config_temp_dir: Result<TempDir>,
+) -> Result<()> {
     let temp_dir = config_temp_dir?;
     let dir_path = temp_dir.path();
     let invalid = dir_path.join("broken.toml");
     let valid = dir_path.join("valid.toml");
     let dir = open_cap_utf8_dir(dir_path)?;
-    {
-        let mut invalid_file = dir.create("broken.toml").context("create invalid config")?;
-        invalid_file
-            .write_all(b"is_enabled = ???")
-            .context("write invalid config")?;
-    }
-    {
-        let mut valid_file = dir.create("valid.toml").context("create valid config")?;
-        valid_file
-            .write_all(b"is_enabled = false")
-            .context("write valid config")?;
-    }
+    write_cap_file(&dir, "broken.toml", "is_enabled = ???")?;
+    write_cap_file(&dir, "valid.toml", "is_enabled = false")?;
     let discovery = ConfigDiscovery::builder("hello_world")
         .env_var("HELLO_WORLD_CONFIG_PATH")
         .env_source(Arc::new(
             MapEnv::new().with_var("HELLO_WORLD_CONFIG_PATH", &invalid),
         ))
-        .add_explicit_path(valid.clone())
+        .add_explicit_path(valid)
         .build();
 
-    let figment = match discovery.load_first() {
-        Ok(Some(figment)) => figment,
-        Ok(None) => return Err(anyhow!("expected fallback configuration to load")),
-        Err(err) => return Err(anyhow!("discovery failed to load configuration: {err}")),
-    };
+    // The valid explicit path is a fallback the walk reaches, so the failure
+    // here proves a required selector's error outranks a successful later
+    // candidate rather than merely proving that every candidate failed.
+    let outcome = discovery.load_first_partitioned();
+    ensure!(
+        outcome.figment.is_some(),
+        "expected the valid explicit fallback to load"
+    );
+    ensure!(
+        !outcome.required_errors.is_empty(),
+        "expected the invalid selector to be retained as a required error"
+    );
+    expect_file_error(discovery.load_first(), "broken.toml")?;
+    ensure!(
+        dir.metadata("broken.toml").is_ok(),
+        "expected invalid file retained for later diagnostics"
+    );
+    Ok(())
+}
+
+#[rstest]
+fn load_first_fails_when_required_path_is_missing(config_temp_dir: Result<TempDir>) -> Result<()> {
+    let temp_dir = config_temp_dir?;
+    let dir_path = temp_dir.path();
+    let missing = dir_path.join("absent.toml");
+    let valid = dir_path.join("valid.toml");
+    let dir = open_cap_utf8_dir(dir_path)?;
+    write_cap_file(&dir, "valid.toml", "is_enabled = true")?;
+
+    let discovery = ConfigDiscovery::builder("hello_world")
+        .env_source(Arc::new(MapEnv::new()))
+        .add_required_path(&missing)
+        .add_explicit_path(valid)
+        .build();
+
+    let outcome = discovery.load_first_partitioned();
+    ensure!(
+        outcome.figment.is_some(),
+        "expected the optional fallback to load"
+    );
+    expect_file_error(discovery.load_first(), "absent.toml")
+}
+
+#[rstest]
+fn load_first_fails_when_selector_path_is_missing(config_temp_dir: Result<TempDir>) -> Result<()> {
+    let temp_dir = config_temp_dir?;
+    let dir_path = temp_dir.path();
+    let missing = dir_path.join("absent.toml");
+    let valid = dir_path.join("valid.toml");
+    let dir = open_cap_utf8_dir(dir_path)?;
+    write_cap_file(&dir, "valid.toml", "is_enabled = true")?;
+
+    let discovery = ConfigDiscovery::builder("hello_world")
+        .env_var("HELLO_WORLD_CONFIG_PATH")
+        .env_source(Arc::new(
+            MapEnv::new().with_var("HELLO_WORLD_CONFIG_PATH", &missing),
+        ))
+        .add_explicit_path(valid)
+        .build();
+
+    let outcome = discovery.load_first_partitioned();
+    ensure!(
+        outcome.figment.is_some(),
+        "expected the optional fallback to load"
+    );
+    expect_file_error(discovery.load_first(), "absent.toml")
+}
+
+#[rstest]
+fn load_first_fails_when_selector_extends_chain_is_broken(
+    config_temp_dir: Result<TempDir>,
+) -> Result<()> {
+    let temp_dir = config_temp_dir?;
+    let dir_path = temp_dir.path();
+    let child = dir_path.join("child.toml");
+    let valid = dir_path.join("valid.toml");
+    let dir = open_cap_utf8_dir(dir_path)?;
+    write_cap_file(
+        &dir,
+        "child.toml",
+        "extends = \"missing-base.toml\"\nis_enabled = true",
+    )?;
+    write_cap_file(&dir, "valid.toml", "is_enabled = false")?;
+
+    let discovery = ConfigDiscovery::builder("hello_world")
+        .env_var("HELLO_WORLD_CONFIG_PATH")
+        .env_source(Arc::new(
+            MapEnv::new().with_var("HELLO_WORLD_CONFIG_PATH", &child),
+        ))
+        .add_explicit_path(valid)
+        .build();
+
+    expect_file_error(discovery.load_first(), "missing-base.toml")
+}
+
+/// A selector that exists but cannot be read is still a required failure.
+#[cfg(unix)]
+#[rstest]
+fn load_first_fails_when_selector_is_unreadable(config_temp_dir: Result<TempDir>) -> Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+
+    let temp_dir = config_temp_dir?;
+    let dir_path = temp_dir.path();
+    let unreadable = dir_path.join("unreadable.toml");
+    let valid = dir_path.join("valid.toml");
+    let dir = open_cap_utf8_dir(dir_path)?;
+    write_cap_file(&dir, "unreadable.toml", "is_enabled = true")?;
+    write_cap_file(&dir, "valid.toml", "is_enabled = false")?;
+    std::fs::set_permissions(&unreadable, std::fs::Permissions::from_mode(0o000))?;
+    // A privileged runner can read the file regardless of its mode, so skip
+    // rather than assert something the environment cannot exercise.
+    if std::fs::read(&unreadable).is_ok() {
+        return Ok(());
+    }
+
+    let discovery = ConfigDiscovery::builder("hello_world")
+        .env_var("HELLO_WORLD_CONFIG_PATH")
+        .env_source(Arc::new(
+            MapEnv::new().with_var("HELLO_WORLD_CONFIG_PATH", &unreadable),
+        ))
+        .add_explicit_path(valid)
+        .build();
+
+    expect_file_error(discovery.load_first(), "unreadable.toml")
+}
+
+/// A selector naming a file in a format disabled at build time fails closed.
+#[cfg(not(feature = "json5"))]
+#[rstest]
+fn load_first_fails_when_selector_format_is_disabled(
+    config_temp_dir: Result<TempDir>,
+) -> Result<()> {
+    let temp_dir = config_temp_dir?;
+    let dir_path = temp_dir.path();
+    let selected = dir_path.join("selected.json5");
+    let valid = dir_path.join("valid.toml");
+    let dir = open_cap_utf8_dir(dir_path)?;
+    write_cap_file(&dir, "selected.json5", "{ is_enabled: true }")?;
+    write_cap_file(&dir, "valid.toml", "is_enabled = false")?;
+
+    let discovery = ConfigDiscovery::builder("hello_world")
+        .env_var("HELLO_WORLD_CONFIG_PATH")
+        .env_source(Arc::new(
+            MapEnv::new().with_var("HELLO_WORLD_CONFIG_PATH", &selected),
+        ))
+        .add_explicit_path(valid)
+        .build();
+
+    expect_file_error(discovery.load_first(), "selected.json5")
+}
+
+/// An unset or empty selector selects nothing, so automatic discovery loads.
+#[rstest]
+#[case::unset(None)]
+#[case::empty(Some(""))]
+fn load_first_ignores_unset_or_empty_selector(
+    #[case] selector_value: Option<&str>,
+    sample_config_file: Result<(TempDir, Utf8PathBuf)>,
+) -> Result<()> {
+    let (temp_dir, _config_path) = sample_config_file?;
+    let mut env = MapEnv::new().with_var("XDG_CONFIG_HOME", temp_dir.path());
+    if let Some(value) = selector_value {
+        env = env.with_var("HELLO_WORLD_CONFIG_PATH", value);
+    }
+
+    let discovery = ConfigDiscovery::builder("hello_world")
+        .env_var("HELLO_WORLD_CONFIG_PATH")
+        .env_source(Arc::new(env))
+        .build();
+    let figment = discovery
+        .load_first()
+        .map_err(|err| anyhow!(err))?
+        .ok_or_else(|| anyhow!("expected the automatic candidate to load"))?;
     let config: SampleConfig = figment
         .extract()
         .context("extract sample config from figment")?;
     ensure!(
-        !config.is_enabled,
-        "expected valid candidate to override invalid env file"
-    );
-    ensure!(
-        dir.metadata("broken.toml").is_ok(),
-        "expected invalid file retained for later diagnostics"
+        config.is_enabled,
+        "expected the automatic candidate's value, got {config:?}"
     );
     Ok(())
 }

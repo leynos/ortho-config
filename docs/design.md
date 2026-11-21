@@ -493,13 +493,21 @@ on a hand-built policy or by naming a CLI field through the derive attribute
 `None` value leaves the default root in place.
 
 `ConfigDiscovery::load_first` delegates to `load_config_file`, short-circuiting
-once a readable file is found. Failed reads are skipped so later candidates can
-load successfully. When every candidate fails, the helper now returns `Err`
-containing the aggregated diagnostics (all recorded discovery errors) so
-callers can surface them together. If no candidates exist, the function returns
-`Ok(None)`. Returning `OrthoResult` keeps the API aligned with the rest of the
-crate and allows downstream binaries to continue using their existing
-`From<Arc<OrthoError>>` implementations.
+once a readable file is found. Optional candidates that fail to read are
+skipped so later candidates can load successfully. Required candidates are
+fatal: a path added with `add_required_path`, or a non-empty path selected by
+the builder's `env_var` selector, reports its missing, unreadable, malformed,
+disabled-format, or `extends` failure even when a later candidate loads. That
+matches the derive-generated `compose_layers` policy, which always appends
+required errors. Automatic discovery candidates stay optional, preserving the
+buffered-error policy established for
+[issue 96](https://github.com/leynos/ortho-config/issues/96). When a required
+candidate fails, or when every candidate fails, the helper returns `Err`
+containing the aggregated diagnostics (required diagnostics, plus optional
+diagnostics only when nothing loaded) so callers can surface them together. If
+no candidates exist, the function returns `Ok(None)`. Returning `OrthoResult`
+keeps the API aligned with the rest of the crate and allows downstream binaries
+to continue using their existing `From<Arc<OrthoError>>` implementations.
 
 Discovery reads the named environment variables it needs — the
 configuration-path selector, the XDG base directories, the Windows
