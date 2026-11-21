@@ -123,7 +123,11 @@ semantic inventory test. Neither comparison parses source on its own.
 - **Closed attribute lists.** The gate trusts only the compiler attributes and
   the nine built-in derives it names. Upstream adopting a compiler attribute
   outside those lists, or a derive inside `clap_builder`'s own inventory
-  source, fails the gate until the list is extended deliberately.
+  source, fails the gate until the list is extended deliberately. A built-in
+  derive name is resolved through its binding as well as its spelling: an
+  explicit `use` that rebinds one is refused unless its path is rooted at `std`,
+  `core` or `alloc`, so an upstream module importing a derive under a built-in
+  name also fails the gate until the list or the binding is reviewed.
 
 ## Consequences and validation
 
@@ -159,9 +163,13 @@ procedural macro can replace an annotated item before the walk parses it, so an
 attribute path that is not one of the compiler's own names is refused: a
 multi-segment path directly, the same macro applied through `cfg_attr`, an
 unknown `derive`, and a `use` item that binds an imported macro to a
-one-segment name. The symlink controls also show the direction they must not
-take: an alias of the declaring module stays uncounted rather than refused, and
-a tree using only the compiler's attributes stays counted.
+one-segment name. A built-in derive name is resolved through its binding too:
+an explicit `use` item that rebinds one is refused, and so is one rooted at
+`std` once a local `mod std` or `extern crate … as std` gives that root a local
+meaning. The controls also show the direction they must not take: the reviewed
+`use std::fmt::Debug;` trait import stays counted beside the built-in `Debug`
+derive, an alias of the declaring module stays uncounted rather than refused,
+and a tree using only the compiler's attributes stays counted.
 
 ## Alternatives rejected
 

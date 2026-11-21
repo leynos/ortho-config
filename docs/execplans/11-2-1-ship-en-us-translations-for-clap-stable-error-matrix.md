@@ -1,39 +1,46 @@
 # Ship the en-US clap error matrix (11.2.1)
 
-Status: M3 complete — the matrix, the en-US strings, the runtime consultation,
-the pre-publication gate, the consumer and developer documentation, and the
-roadmap checkbox are all in place. The branch has been replayed onto
-`origin/main` at `0dbd7bd7`, after main released v0.11.0 and published its own
-ADR-0023, so this branch's notes are re-versioned to v0.12.0 and its gate ADR
-is renumbered to 0024. Candidate `a0ba5f1b` passed the full nine-gate
-certificate; its two documentation successors `6d421d5f` and `5ab1e7e9` are
-green in hosted CI and were certified for the Markdown gates alone, as Progress
-records. A whole-plan assessment of `5ab1e7e9` then returned "not yet complete"
-with two fail-closed gaps in the source walk, both repaired in a candidate that
-passed its own nine-gate certificate and a hosted run including CodeScene. The
-replayed candidate `02c37347` has since passed the same certificate, and the
-published head `4908409f` — that candidate plus its record — is green on every
-hosted job. A whole-plan assessment of `4908409f` then returned "not yet
-complete" with two further fail-closed gaps in the source walk, both repaired
-with a control apiece in candidate `b3b9d21f`, which passed the same
-certificate and a hosted run. A whole-plan assessment of `b3b9d21f` then
-returned "not yet complete" with two more: a local `macro_rules!` that shadows
-the standard macro an inert list trusts, and a conditional inline module whose
-declared file the walk skipped. Both are repaired in code head `2522013d`,
-which carries a full local certificate, and the record head `213fd827` is green
-on every job of the pull-request lane (2026-11-20). The hosted CodeScene check
-then flagged one advisory duplication in the new symlink controls; candidate
-`bb0fa4a3` extracts their shared staging, passed the re-taken certificate, and
-is green on every hosted job including CodeScene (2026-11-20), as Progress
-records. A further assessment on candidate `0895fffc` found two fail-closed
-gaps in the macro and symlink controls. The code head in this branch's next
-commit repairs both — macro names resolve against the definitions textually in
-scope at each call, the macro names a call's arguments invoke are resolved too,
-and each symlink control's target resolves to the inventory it hides — with a
-control for each and with non-vacuity probes (2026-11-20), as Progress records.
-The code head `09a82c4e` carries the full certificate, including the standalone
+Status: IN PROGRESS
+
+The matrix, the en-US strings, the runtime consultation, the pre-publication
+gate, the consumer and developer documentation, and the roadmap checkbox are
+all in place; M3 is delivered and delivery continues through review and merge.
+The branch has been replayed onto `origin/main` at `0dbd7bd7`, after main
+released v0.11.0 and published its own ADR-0023, so this branch's notes are
+re-versioned to v0.12.0 and its gate ADR is renumbered to 0024. Candidate
+`a0ba5f1b` passed the full nine-gate certificate; its two documentation
+successors `6d421d5f` and `5ab1e7e9` are green in hosted CI and were certified
+for the Markdown gates alone, as Progress records. A whole-plan assessment of
+`5ab1e7e9` then returned "not yet complete" with two fail-closed gaps in the
+source walk, both repaired in a candidate that passed its own nine-gate
+certificate and a hosted run including CodeScene. The replayed candidate
+`02c37347` has since passed the same certificate, and the published head
+`4908409f` — that candidate plus its record — is green on every hosted job. A
+whole-plan assessment of `4908409f` then returned "not yet complete" with two
+further fail-closed gaps in the source walk, both repaired with a control
+apiece in candidate `b3b9d21f`, which passed the same certificate and a hosted
+run. A whole-plan assessment of `b3b9d21f` then returned "not yet complete"
+with two more: a local `macro_rules!` that shadows the standard macro an inert
+list trusts, and a conditional inline module whose declared file the walk
+skipped. Both are repaired in code head `2522013d`, which carries a full local
+certificate, and the record head `213fd827` is green on every job of the
+pull-request lane (2026-11-20). The hosted CodeScene check then flagged one
+advisory duplication in the new symlink controls; candidate `bb0fa4a3` extracts
+their shared staging, passed the re-taken certificate, and is green on every
+hosted job including CodeScene (2026-11-20), as Progress records. A further
+assessment on candidate `0895fffc` found two fail-closed gaps in the macro and
+symlink controls. The code head in this branch's next commit repairs both —
+macro names resolve against the definitions textually in scope at each call,
+the macro names a call's arguments invoke are resolved too, and each symlink
+control's target resolves to the inventory it hides — with a control for each
+and with non-vacuity probes (2026-11-20), as Progress records. The code head
+`09a82c4e` carries the full certificate, including the standalone
 `make boundary` that admission saturation had blocked, and is green on every
-hosted job including CodeScene and Gecko (2026-11-20).
+hosted job including CodeScene and Gecko (2026-11-20). A whole-plan assessment
+of `8055cee0` then reported that an explicit `use` item can rebind a built-in
+derive name to a procedural macro and that the plan's `Status:` line carried a
+value outside the permitted set; both are repaired in the Round-21 candidate,
+as Progress records.
 
 This ExecPlan is a living document. Keep Constraints, Tolerances, Risks,
 Progress, Surprises & discoveries, Decision log, Outcomes & retrospective,
@@ -955,7 +962,7 @@ stopping and reporting.
         whole `clap_error_coverage` target passes (56 tests), so the stricter
         nested rule rejects none of that crate's real transcriptions.
       - Documentation follows the behaviour: design §6.1.1 records both
-        refusals, and ADR-0024's negative-control paragraph names both controls.
+        refusals, and ADR-0026's negative-control paragraph names both controls.
 
 - [x] (2026-11-20) Certifying that repair took two structural corrections,
       and the standalone `make boundary` certificate was attempted but
@@ -1023,7 +1030,7 @@ stopping and reporting.
       - The resolved `clap_builder` 4.6.7 inventory still counts 17 and the
         `clap_error_coverage` target passes 59 tests, so the stricter rules
         reject none of that crate's real source.
-      - Design §6.1.1 and ADR-0024's negative-control paragraph record both
+      - Design §6.1.1 and ADR-0026's negative-control paragraph record both
         refusals.
 
 - [x] (2026-11-20) The `2522013d` repair carries a full local certificate.
@@ -1392,6 +1399,58 @@ stopping and reporting.
       was regenerated and committed, which is the route the spelling policy
       prescribes for a real identifier.
 
+- [x] (2026-11-21) Round-21 derive-binding repair of the publication gate. The
+      twelfth whole-plan assessment
+      (`EP-11-2-1-whole-plan-8055cee0-20261121T0637Z`, head `8055cee0`)
+      reported that `expansion.rs` accepted a derive when its name appeared in
+      `INERT_DERIVES`, so the check tested the spelling rather than the
+      binding: `use inventory_macros::Inject as Debug;` followed by
+      `#[derive(Debug)]` invokes the imported procedural macro, which appends
+      its output to the annotated item's scope. It also asked this plan's
+      header to carry one permitted bare `Status:` value.
+      - The hole was proved with `rustc --edition 2024 -Zunpretty=expanded` on
+        throwaway crates whose proc-macro crate emits
+        `pub enum ErrorKind { A, B, C }` from a derive declared as `Inject`.
+        Renaming that derive to `Debug` in the `use` item appends the enum
+        beside the annotated `Marker`, and importing a derive literally named
+        `Debug` does the same. A local `mod std` re-exporting the derive as
+        `Debug` makes `use std::fmt::Debug;` reach it, and
+        `extern crate injector as std;` reaches it through the root.
+      - Three routes do not shadow, which is what keeps the rule narrow. A
+        `use std::fmt::Debug;` trait import leaves the built-in derive in place
+        and expands to `impl ::core::fmt::Debug for Marker`; an external glob
+        bringing in a derive literally named `Debug` is rejected as
+        `E0659: Debug is ambiguous`, so a compiling crate is not redirected by
+        one; and a local `macro_rules! Debug` beside `#[derive(Debug)]` still
+        produces the built-in impl, because bang macros are a separate macro
+        kind.
+      - `expansion.rs` now computes each module's `shadowed_derives` from that
+        module's own explicit `use` bindings and refuses a built-in derive
+        whose name one of them rebinds. A binding whose first path segment is
+        `std`, `core` or `alloc` is trusted, because the standard library
+        exports no procedural derive, unless the module rebinds the root itself
+        through `mod std`, `extern crate … as std`, or any other local binding
+        of the name. `imports.rs` records each explicit binding together with
+        its root so that question is answerable, and inline modules are audited
+        against their own bindings because Rust modules do not inherit `use`
+        items.
+      - Controls: the trees `module_tree/imported_derive` and
+        `module_tree/poisoned_root` are refused with the derive-binding reason;
+        `classes.rs` adds `rebound_derive` and `rebound_root`; and
+        `module_tree/builtin_attributes` now carries the reviewed
+        `use std::fmt::Debug;` behind a where-clause, so the accepted direction
+        is exercised rather than assumed.
+      - Non-vacuity, each mutation restored byte-identically under a SHA-256
+        check of `expansion.rs` at `7946deb2`: emptying the shadowed set fails
+        the four new cases; dropping the root-rebinding clause fails
+        `poisoned_root` and `rebound_root` alone while the accepted tree still
+        passes; and refusing every compiler root fails the accepted tree and
+        the real `clap_builder` inventory count. The focused
+        `clap_error_coverage` suite is 87 tests, up from 83.
+      - The header now reads `Status: IN PROGRESS`, the one permitted value
+        that describes an implementation delivered into an open review, with
+        the narrative moved below it.
+
 ## Surprises & discoveries
 
 The plan first incorporated merged PR #651 at
@@ -1706,6 +1765,25 @@ is a two-line program that produces `E0659`, which is what the Progress entry
 records. A rule that the whole exemption rests on deserves a probe that would
 have failed if the rule did not hold.
 
+The Round-20 argument that a built-in *attribute* name cannot be shadowed does
+not carry over to derive names, and the difference is one resolution rule. An
+attribute path resolves in the same macro namespace a `use` item binds, so a
+same-named binding makes the attribute ambiguous; a `derive` argument does not,
+because the prelude's derive is only a fallback and an explicit binding wins.
+The probe pair that made the Round-20 exemption sound — `E0659` for the
+attribute — produced a silent substitution for the derive on the same nightly.
+"Names cannot be shadowed" therefore has to be established per position, not
+per language.
+
+The `macro_rules!` case is the counter-example that kept the rule small. Bang
+macros and derive macros share the macro namespace in the reference, which
+suggests a local `macro_rules! Debug` should interfere; the probe shows it does
+not, and the built-in impl is still generated. Dropping the macro set from the
+implementation removed a recursion, a question about textual scope between
+sibling modules, and a refusal that no evidence supported. The design was
+simplified by a measurement rather than by an argument, which is the cheaper
+direction to be wrong in.
+
 ## Decision log
 
 - 2026-10-14: propose the design's build-script mechanism, with M0 as an
@@ -1854,20 +1932,32 @@ have failed if the rule did not hold.
   human review, while trusting a name the compiler does not own is the failure
   mode the gate exists to prevent.
 
+- 2026-11-21: resolve a built-in derive name through its module's explicit `use`
+  bindings before trusting it, rather than trusting the spelling. An explicit
+  import shadows the prelude's derive, so `use … as Debug;` makes
+  `#[derive(Debug)]` run an imported procedural macro that appends items the
+  walk cannot read. A path rooted at `std`, `core` or `alloc` cannot name a
+  procedural derive, so the reviewed `use std::fmt::Debug;` stays accepted,
+  while a module that rebinds the root itself voids that exemption. Globs and
+  `macro_rules!` definitions are not resolved, because a probe shows neither
+  shadows: a same-named glob is `E0659`-ambiguous, and a bang macro of the name
+  leaves the built-in derive in place.
+
 ## Outcomes & retrospective
 
 The implementation is complete and delivery is not; Progress records the
 current candidate and each repair. Acceptance criteria E1–E4 are implemented
 and evidenced in Progress, and none is outstanding as an implementation
 obligation. What this section does not claim is that the gate's refusal set is
-closed: two successive assessment rounds each found a shape the preceding round
-had certified, so the next round may find another. The users' guide enumerates
-the matrix, names the override identifiers, and documents the display-only and
-missing-input behaviour; the developers' guide owns the gate's troubleshooting
-procedure and its variant-intake steps; the roadmap records 11.2.1 as done with
-its finding and validation notes; and ADR-0028 records the mechanism.
+closed: successive assessment rounds have each found a shape the preceding
+round had certified, so the next round may find another. The users' guide
+enumerates the matrix, names the override identifiers, and documents the
+display-only and missing-input behaviour; the developers' guide owns the gate's
+troubleshooting procedure and its variant-intake steps; the roadmap records
+11.2.1 as done with its finding and validation notes; and ADR-0026 records the
+mechanism.
 
-The gate is not claimed to have reached its final shape. Seven whole-plan
+The gate is not claimed to have reached its final shape. Twelve whole-plan
 assessment rounds have each removed a way for the count to describe a build the
 compiler does not make: a conditional `mod` hop or file-level `#![cfg]`, a
 condition applied through a nested `cfg_attr`, a `#[path]` redirect, an assumed
@@ -1875,8 +1965,10 @@ condition applied through a nested `cfg_attr`, a `#[path]` redirect, an assumed
 because a `cfg` condition can hold and the gate cannot evaluate it — a nested
 macro invocation, a conditional declaration whose module file the walk cannot
 read, a local `macro_rules!` that shadows the standard macro an inert list
-would trust, and a conditional subtree skipped before its declared file was
-resolved. A compiling or counted shape the gate cannot prove now fails closed.
+would trust, a conditional subtree skipped before its declared file was
+resolved, an attribute path whose macro replaces the annotated item, and a
+built-in derive name rebound by an explicit `use` import. A compiling or
+counted shape the gate cannot prove now fails closed.
 
 The hosted `Lint` blocker is cleared. The `bumpy-road-function` finding that
 Whitaker's rolling suite introduced at `880939d1` fired only in files
@@ -1889,19 +1981,19 @@ symlink controls, is repaired by extracting the staging they shared; the file
 now reviews at 10.0 and the delta against `origin/main` reports no issues in
 the checked changes. No CodeScene issue is outstanding.
 
-One acceptance item remains open on this branch. The standalone `make boundary`
-target now has a green local run on the repaired tree: 44 passed, 0 failed and
-10 ignored in 87.68 s, after two earlier attempts were load-blocked under
-compile-admission saturation (35 passed, 9 failed, 10 ignored in 905.20 s, then
-34 passed, 10 failed, 10 ignored in 907.83 s), every one of those failures an
-allowance kill with no assertion or rustc diagnostic. The dispatch-only
-`Publish dry run` is red on the code head, and that red is release ordering
-inherited from main rather than a defect in this change. The code head carrying
-the 2026-11-20 repairs, `09a82c4e`, carries the full local gate certificate and
-is green on every job of the pull-request lane, including CodeScene and Gecko.
-On `6d421d5f`, run `43796595772` completed with step 38 green on Linux and step
-37 on Windows, because that head predates main's #661; `ef46b48d` then made
-`cargo-orthohelp` import
+The standalone `make boundary` acceptance item is closed on this branch. The
+target has a green local run on each repaired tree, most recently 44 passed, 0
+failed and 10 ignored in 31.70 s in the Round-20 certificate, after two earlier
+attempts were load-blocked under compile-admission saturation (35 passed, 9
+failed, 10 ignored in 905.20 s, then 34 passed, 10 failed, 10 ignored in 907.83
+s), every one of those failures an allowance kill with no assertion or rustc
+diagnostic. The dispatch-only `Publish dry run` is red on the code head, and
+that red is release ordering inherited from main rather than a defect in this
+change. The code head carrying the 2026-11-20 repairs, `09a82c4e`, carries the
+full local gate certificate and is green on every job of the pull-request lane,
+including CodeScene and Gecko. On `6d421d5f`, run `43796595772` completed with
+step 38 green on Linux and step 37 on Windows, because that head predates
+main's #661; `ef46b48d` then made `cargo-orthohelp` import
 `ortho_config::agent_context::{ExitClass, OutputContract, StdoutPurpose}`,
 which the published `ortho_config` 0.11.0 does not have. Every
 `cargo-orthohelp` file naming those types is byte-identical to `origin/main`,
@@ -2600,3 +2692,10 @@ a test-time source inventory comparison plus a matrix-versus-reviewed-count
 const assertion. The implementor must reconcile §6.1.1 and the roadmap and
 record the choice in an ADR before feature implementation. The guarantee covers
 the configured workspace publication graph only.
+
+Revision note (2026-11-21): resolve a built-in derive name through its module's
+explicit `use` bindings, refuse a built-in derive whose name one of them
+rebinds, record the two refusal fixtures and the two declaration classes that
+evidence it, and move the header's status to one permitted bare value. The
+change narrows what the publication gate accepts; it does not alter the matrix,
+the runtime consultation, or the reviewed total.
