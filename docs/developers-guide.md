@@ -596,9 +596,11 @@ nested object.
 
 `CliFlagHint` is `{ key, flag, takes_value }` and exists only for a key the
 generated parser can spell. `RouteHints` is `{ prefix, cli_flags }`, collected
-once per configuration type; `RequiredConfigSchema::required_route_hints()`
-defaults to empty, so a handwritten type advertises no routes until it supplies
-them.
+once per configuration type. `RequiredConfigSchema::required_route_hints()`
+defaults to empty, which suppresses only the command-line route: the collector
+always adds the configuration-file route, and it adds an unprefixed environment
+route whenever the path is expressible, because `prefix` is then `None` rather
+than absent.
 
 `RequiredConfigSchema::declares_nested_object()` defaults to `true`, and a
 `#[serde(transparent)]` container answers `false`, so a parent reports it as an
