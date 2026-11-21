@@ -1225,9 +1225,12 @@ stopping and reporting.
       131.55s, and the Python suite at 128 passed and 5 skipped. A standalone
       `make boundary` on the same tree passed with 44 passed, 0 failed and 10
       ignored in 40.32s. The first attempt at this certificate failed the
-      spelling sub-gate on three `-ise` spellings introduced by the new prose;
-      they were corrected to `-ize` before the tree was committed, so the
-      certified tree is the committed one.
+      spelling sub-gate on one `-ise` word form in the design document; a sweep
+      for the same class then found five more occurrences across the two new
+      support files and the new `cfg_attr` fixture, and one `-our` form in a
+      module comment. All were rewritten to their en-GB-oxendict `-ize` and
+      `-or` spellings and `make fmt` was re-run before the tree was committed,
+      so the certified tree is the committed one.
 
 ## Surprises & discoveries
 
