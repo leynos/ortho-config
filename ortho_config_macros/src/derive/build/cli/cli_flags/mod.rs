@@ -154,6 +154,7 @@ fn process_cli_field(
     let ty = option_type_tokens(&field.ty);
     let long_lit = syn::LitStr::new(&resolved.long, proc_macro2::Span::call_site());
     let short_lit = syn::LitChar::new(resolved.short, proc_macro2::Span::call_site());
+    let key_lit = syn::LitStr::new(&attrs.serialized_key, resolved.name.span());
     let span = resolved.name.span();
     let replay_attributes = replay::clap_replay_attributes(attrs, resolved.is_bool);
 
@@ -191,11 +192,17 @@ fn process_cli_field(
         }
     };
 
+    // The CLI struct serialises to the CLI merge layer, so it must use the key the
+    // final configuration type reads when the composed layers are deserialised.
+    // A field with `#[serde(rename)]` or a container `rename_all` rule would
+    // otherwise be layered under its Rust identifier and silently ignored.
     let serde_attr = if resolved.is_bool {
-        proc_macro2::TokenStream::new()
+        quote_spanned! { span =>
+            #[serde(rename = #key_lit)]
+        }
     } else {
         quote_spanned! { span =>
-            #[serde(skip_serializing_if = "Option::is_none")]
+            #[serde(rename = #key_lit, skip_serializing_if = "Option::is_none")]
         }
     };
 

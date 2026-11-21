@@ -46,7 +46,7 @@ pub(crate) use doc_types::{
     RendererRecordAttrs,
 };
 pub(crate) use field_attrs::parse_field_attrs;
-pub(crate) use input::parse_input;
+pub(crate) use input::{parse_input, reject_incompatible_flatten};
 #[cfg(any(test, doctest))]
 pub(crate) use literals::__doc_lit_str;
 /// Re-exported for the `lit` tests, which reach the helpers through this
@@ -158,6 +158,14 @@ impl CliFieldMode {
 ///   active and no explicit `#[ortho_config(default = ...)]` is provided.
 #[derive(Default, Clone)]
 pub(crate) struct FieldAttrs {
+    /// The key the final configuration type accepts for this field.
+    ///
+    /// Every generated struct that serializes a configuration layer writes the
+    /// field under this key, and the final type reads it back by the same name
+    /// when the composed layers are deserialized. It is computed once during
+    /// parsing from `#[serde(rename)]` and the container `#[serde(rename_all)]`
+    /// so the separate generators cannot disagree about the wire key.
+    pub serialized_key: String,
     /// Explicit long option spelling used by generated CLI metadata.
     pub cli_long: Option<String>,
     /// Explicit short option spelling used by generated CLI metadata.

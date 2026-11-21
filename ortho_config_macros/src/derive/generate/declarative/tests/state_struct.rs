@@ -47,6 +47,7 @@ fn generate_declarative_state_struct_emits_storage() -> Result<()> {
             (
                 parse_ident("rules")?,
                 parse_type("std::collections::BTreeMap<String, u32>")?,
+                String::from("rules"),
             ),
         ],
     },
@@ -54,11 +55,16 @@ fn generate_declarative_state_struct_emits_storage() -> Result<()> {
 )]
 #[case(
     CollectionStrategies {
-        append: vec![(parse_ident("items")?, parse_type("String")?)],
+        append: vec![(
+            parse_ident("items")?,
+            parse_type("String")?,
+            String::from("items"),
+        )],
         map_replace: vec![
             (
                 parse_ident("rules")?,
                 parse_type("std::collections::BTreeMap<String, u32>")?,
+                String::from("rules"),
             ),
         ],
     },

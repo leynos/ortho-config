@@ -34,6 +34,46 @@ fn skips_fields_marked_with_skip_cli() -> Result<()> {
     Ok(())
 }
 
+/// Generated CLI fields serialize under the configuration key.
+///
+/// The CLI layer is a serialized copy of this struct, so keeping the Rust
+/// identifier here would leave a renamed override where the final configuration
+/// type never looks.
+#[rstest]
+#[case::field_rename(
+    syn::parse_quote! {
+        struct Demo {
+            #[serde(rename = "retry-count")]
+            retry_count: u32,
+        }
+    },
+    "retry-count"
+)]
+#[case::container_rename_all(
+    syn::parse_quote! {
+        #[serde(rename_all = "kebab-case")]
+        struct Demo { retry_count: u32 }
+    },
+    "retry-count"
+)]
+fn cli_fields_serialize_under_the_config_key(
+    #[case] input: syn::DeriveInput,
+    #[case] expected_key: &str,
+) -> Result<()> {
+    let (_, fields, _, field_attrs) = crate::derive::parse::parse_input(&input)?;
+    let tokens = build_cli_struct_fields(&fields, &field_attrs)?;
+    let rendered = tokens
+        .fields
+        .first()
+        .map(std::string::ToString::to_string)
+        .ok_or_else(|| anyhow!("expected generated field tokens"))?;
+    ensure!(
+        rendered.contains(&format!("rename = \"{expected_key}\"")),
+        "expected the CLI field to serialize under {expected_key}: {rendered}"
+    );
+    Ok(())
+}
+
 /// Renders the generated `#[arg(...)]` attribute for a single-field struct.
 fn generated_attribute(ty: &str) -> Result<String> {
     let input: syn::DeriveInput =

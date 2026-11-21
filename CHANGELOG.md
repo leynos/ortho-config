@@ -330,6 +330,16 @@ _Applications upgrading from 0.9 should follow the
 
 ### Fixed
 
+- Honour Serde-visible field keys in generated CLI, defaults, and collection
+  merge layers. A field renamed with `#[serde(rename)]` or a container
+  `#[serde(rename_all)]` was serialized by the hidden CLI and defaults structs
+  under its Rust identifier, so command-line, default, and environment values
+  were silently dropped by the configuration type; declarative collection
+  append also looked up the identifier and fell through to whole-array or
+  whole-map replacement. All three paths now use the key the configuration type
+  deserializes. A `#[serde(flatten)]` field that would require a single
+  generated key is rejected with a compile error
+  ([#436](https://github.com/leynos/ortho-config/issues/436)).
 - **Breaking:** Keep the generated CLI layer when an explicit command-line
   value happens to equal the struct default. The layering guard compared the
   whole sanitized CLI object against the whole defaults object and skipped the

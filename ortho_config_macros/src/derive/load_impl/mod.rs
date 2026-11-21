@@ -95,13 +95,13 @@ pub(crate) struct LoadImplArgs<'a> {
     /// `profile` and `config_path` fields), used for value-source gating of
     /// the CLI layer push.
     pub cli_arg_ids: Vec<String>,
-    /// `(arg_id, serialized_key)` for every bool config field.
+    /// `(arg_id, layer_key)` for every bool config field.
     ///
     /// Ordinary boolean absence is `None` and its serialized `null` is stripped.
     /// Actual clap defaults can survive sanitization, however, and must not
     /// mask the lower-precedence profile layer. Pruning checks `value_source`
-    /// through the argument ID, then removes the matching serialized JSON key;
-    /// an explicit command-line `false` is retained.
+    /// through the argument ID, then removes the matching layer key; an
+    /// explicit command-line `false` is retained.
     pub cli_bool_fields: Vec<(String, String)>,
 }
 

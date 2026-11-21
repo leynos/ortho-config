@@ -26,7 +26,7 @@ pub(super) fn build_cli_parse_tokens(krate: &proc_macro2::TokenStream) -> proc_m
 /// Generate CLI layering that omits defaults which clap did not receive explicitly.
 pub(super) fn build_cli_layer_tokens(
     krate: &proc_macro2::TokenStream,
-    cli_default_as_absent_fields: &[syn::LitStr],
+    cli_default_as_absent_fields: &[(syn::LitStr, syn::LitStr)],
 ) -> proc_macro2::TokenStream {
     let sanitized_layer = build_sanitized_cli_layer_tokens(krate, cli_default_as_absent_fields);
     quote! {
@@ -39,7 +39,7 @@ pub(super) fn build_cli_layer_tokens(
 /// Generate sanitisation handling for the generated CLI layer.
 fn build_sanitized_cli_layer_tokens(
     krate: &proc_macro2::TokenStream,
-    cli_default_as_absent_fields: &[syn::LitStr],
+    cli_default_as_absent_fields: &[(syn::LitStr, syn::LitStr)],
 ) -> proc_macro2::TokenStream {
     let prune_defaults =
         build_default_as_absent_pruning_tokens(cli_default_as_absent_fields, false);
@@ -71,7 +71,7 @@ fn build_sanitized_cli_layer_tokens(
 /// than live. The declarative path passes `false`, keeping its long-standing
 /// command-line-only pruning.
 fn build_default_as_absent_pruning_tokens(
-    cli_default_as_absent_fields: &[syn::LitStr],
+    cli_default_as_absent_fields: &[(syn::LitStr, syn::LitStr)],
     retain_environment_values: bool,
 ) -> proc_macro2::TokenStream {
     let explicit_source = if retain_environment_values {
@@ -84,18 +84,20 @@ fn build_default_as_absent_pruning_tokens(
     } else {
         quote! { Some(clap::parser::ValueSource::CommandLine) }
     };
+    let explicit_checks = cli_default_as_absent_fields
+        .iter()
+        .map(|(arg_id, _)| quote! { matches!(matches.value_source(#arg_id), #explicit_source) });
+    let removals = cli_default_as_absent_fields.iter().map(|(arg_id, key)| {
+        quote! {
+            if !matches!(matches.value_source(#arg_id), #explicit_source) {
+                values.remove(#key);
+            }
+        }
+    });
     quote! {
-        let has_explicit_default_as_absent_value = false
-            #( || matches!(matches.value_source(#cli_default_as_absent_fields), #explicit_source) )*;
+        let has_explicit_default_as_absent_value = false #( || #explicit_checks )*;
         if let Some(values) = value.as_object_mut() {
-            #(
-                if !matches!(
-                    matches.value_source(#cli_default_as_absent_fields),
-                    #explicit_source
-                ) {
-                    values.remove(#cli_default_as_absent_fields);
-                }
-            )*
+            #( #removals )*
         }
     }
 }
@@ -177,7 +179,7 @@ pub(super) fn build_profile_cli_layer_tokens(
     krate: &proc_macro2::TokenStream,
     cli_arg_ids: &[String],
     cli_bool_fields: &[(String, String)],
-    cli_default_as_absent_fields: &[syn::LitStr],
+    cli_default_as_absent_fields: &[(syn::LitStr, syn::LitStr)],
 ) -> proc_macro2::TokenStream {
     let arg_id_lits: Vec<syn::LitStr> = cli_arg_ids
         .iter()
@@ -249,8 +251,14 @@ mod tests {
     const CLI: &str = "CommandLine";
 
     /// A single `cli_default_as_absent` field for the builders to prune.
-    fn pruned_field() -> Vec<syn::LitStr> {
-        vec![syn::LitStr::new("retries", proc_macro2::Span::call_site())]
+    ///
+    /// The layer key differs from the argument ID on purpose: pruning must
+    /// remove the key the serialized CLI object actually carries.
+    fn pruned_field() -> Vec<(syn::LitStr, syn::LitStr)> {
+        vec![(
+            syn::LitStr::new("retries", proc_macro2::Span::call_site()),
+            syn::LitStr::new("retry-count", proc_macro2::Span::call_site()),
+        )]
     }
 
     /// Counts how often a builder rendered a value source.
@@ -312,6 +320,27 @@ mod tests {
         assert!(
             occurrences(&rendered, CLI) >= 1,
             "the declarative path must still count an explicit value: {rendered}"
+        );
+    }
+
+    /// Pruning removes the member the serialized CLI object carries, which is
+    /// the configuration key rather than the clap argument ID.
+    ///
+    /// A field renamed with `#[serde(rename = "retry-count")]` serializes under
+    /// `retry-count`; removing `retries` instead would leave the clap default
+    /// in the CLI layer and mask a file or environment value.
+    #[test]
+    fn default_as_absent_pruning_uses_the_layer_key() {
+        let rendered =
+            build_cli_layer_tokens(&quote! { ::ortho_config }, &pruned_field()).to_string();
+        let normalised = rendered.replace(' ', "");
+        assert!(
+            normalised.contains("values.remove(\"retry-count\")"),
+            "pruning must remove the serialized layer key: {rendered}"
+        );
+        assert!(
+            normalised.contains("value_source(\"retries\")"),
+            "pruning must still ask clap about the argument ID: {rendered}"
         );
     }
 

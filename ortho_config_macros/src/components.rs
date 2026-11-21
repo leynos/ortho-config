@@ -118,12 +118,12 @@ struct LoadImplConfig<'a> {
     /// Config-field Clap IDs used to detect explicit inputs, excluding the
     /// generated `profile` and `config_path` selectors.
     cli_arg_ids: Vec<String>,
-    /// `(arg_id, serialized_key)` for every bool config field.
+    /// `(arg_id, layer_key)` for every bool config field.
     ///
     /// Both halves are needed: the arg ID is what `ArgMatches::value_source`
-    /// is keyed by, while the serialized key is what the sanitized CLI JSON
-    /// object is keyed by. A field with `#[serde(rename)]` differs between the
-    /// two, and removing the wrong key would leave the default in place.
+    /// is keyed by, while the layer key is what the sanitized CLI JSON object
+    /// is keyed by. A field with `#[serde(rename)]` differs between the two,
+    /// and removing the wrong key would leave the default in place.
     cli_bool_fields: Vec<(String, String)>,
 }
 
@@ -202,18 +202,18 @@ fn build_load_impl_args<'a>(
 ///
 /// The first element lists config-field argument IDs for the "was this supplied
 /// explicitly" test, excluding generated selectors. The second lists
-/// `(arg_id, serialized_key)` for bool
+/// `(arg_id, layer_key)` for bool
 /// fields alone, allowing the profile-enabled CLI layer to remove values that
 /// clap actually reports as `DefaultValue`. Ordinary absence is `None`, while
 /// an explicit `=false` is command-line input and must survive. Both keys are
-/// needed: the argument ID answers `value_source`, and the serialized key names
-/// the JSON member to remove.
+/// needed: the argument ID answers `value_source`, and the layer key names the
+/// JSON member to remove.
 fn build_cli_layer_keys(field_info: &[CliFieldInfo]) -> (Vec<String>, Vec<(String, String)>) {
     let cli_arg_ids = field_info.iter().map(|info| info.arg_id.clone()).collect();
     let cli_bool_fields = field_info
         .iter()
         .filter(|info| info.is_bool)
-        .map(|info| (info.arg_id.clone(), info.serialized_key.clone()))
+        .map(|info| (info.arg_id.clone(), info.layer_key.clone()))
         .collect();
     (cli_arg_ids, cli_bool_fields)
 }

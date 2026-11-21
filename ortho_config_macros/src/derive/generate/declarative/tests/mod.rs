@@ -19,27 +19,43 @@ mod merge_impl;
 mod state_struct;
 
 use helpers::{
-    TokenGenerator, append_strategies, default_krate, merge_impl_tokens, parse_ident, parse_type,
-    state_struct_tokens,
+    TokenGenerator, append_strategies_with_keys, default_krate, merge_impl_tokens, parse_ident,
+    parse_type, state_struct_tokens,
 };
 
 #[rstest]
 fn unique_append_fields_filters_duplicates() -> Result<()> {
     let append_fields = vec![
-        (parse_ident("items")?, parse_type("String")?),
-        (parse_ident("items")?, parse_type("String")?),
-        (parse_ident("tags")?, parse_type("String")?),
+        (
+            parse_ident("items")?,
+            parse_type("String")?,
+            String::from("items"),
+        ),
+        (
+            parse_ident("items")?,
+            parse_type("String")?,
+            String::from("items"),
+        ),
+        (
+            parse_ident("tags")?,
+            parse_type("String")?,
+            String::from("labels"),
+        ),
     ];
 
     let filtered = unique_append_fields(&append_fields);
     ensure!(filtered.len() == 2, "expected two unique append fields");
     ensure!(
-        filtered.first().map(|(ident, _)| ident.to_string()) == Some("items".to_owned()),
+        filtered.first().map(|(ident, _, _)| ident.to_string()) == Some("items".to_owned()),
         "expected items as first append field"
     );
     ensure!(
-        filtered.get(1).map(|(ident, _)| ident.to_string()) == Some("tags".to_owned()),
+        filtered.get(1).map(|(ident, _, _)| ident.to_string()) == Some("tags".to_owned()),
         "expected tags as second append field"
+    );
+    ensure!(
+        filtered.get(1).map(|(_, _, key)| key.as_str()) == Some("labels"),
+        "expected the renamed configuration key to be retained"
     );
     Ok(())
 }
@@ -47,14 +63,26 @@ fn unique_append_fields_filters_duplicates() -> Result<()> {
 #[rstest(generator => [state_struct_tokens as TokenGenerator, merge_impl_tokens as TokenGenerator])]
 fn collection_generators_deduplicate_append_fields(generator: TokenGenerator) -> Result<()> {
     let duplicate_fields = vec![
-        (parse_ident("items")?, parse_type("String")?),
-        (parse_ident("items")?, parse_type("String")?),
+        (
+            parse_ident("items")?,
+            parse_type("String")?,
+            String::from("items"),
+        ),
+        (
+            parse_ident("items")?,
+            parse_type("String")?,
+            String::from("items"),
+        ),
     ];
-    let duplicate_strategies = append_strategies(duplicate_fields);
+    let duplicate_strategies = append_strategies_with_keys(duplicate_fields);
     let duplicate_tokens = generator(&duplicate_strategies)?;
 
-    let deduplicated_fields = vec![(parse_ident("items")?, parse_type("String")?)];
-    let deduplicated_strategies = append_strategies(deduplicated_fields);
+    let deduplicated_fields = vec![(
+        parse_ident("items")?,
+        parse_type("String")?,
+        String::from("items"),
+    )];
+    let deduplicated_strategies = append_strategies_with_keys(deduplicated_fields);
     let deduplicated_tokens = generator(&deduplicated_strategies)?;
 
     ensure!(

@@ -10,4 +10,5 @@ mod ortho_attrs_unknown_keys;
 mod output_attrs;
 mod renderer_attrs;
 mod renderer_fields;
+mod serde_keys;
 mod type_utils;

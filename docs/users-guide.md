@@ -255,6 +255,20 @@ policy deliberately when operators may combine file, environment, and CLI
 values; an unsupported pairing, such as `keyed` on a `Vec`, is a compile-time
 error.
 
+Serde renames follow a field into every layer. When a field carries
+`#[serde(rename = "...")]`, or its container applies
+`#[serde(rename_all = "...")]`, generated CLI overrides, defaults, and
+collection merges use the key Serde reads. Files and environment variables must
+therefore spell the renamed key, and a `Vec` with the default `append` strategy
+accumulates items under it instead of falling back to whole-array replacement.
+A directional rename is read on its deserialization side, which is the spelling
+a configuration source supplies.
+
+A `#[serde(flatten)]` field has no single configuration key. The derive accepts
+it only when the field is excluded from generated layers (`skip_cli`, no
+declared default or merge strategy, and not a `Vec`); other shapes are a
+compile-time error.
+
 ## Switch a boolean off from the command line
 
 A boolean field has three meaningful states: absent, explicitly `true`, and
