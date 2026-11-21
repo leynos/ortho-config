@@ -945,10 +945,25 @@ exclusion as it stood at that milestone; it no longer applies.
   selector-group passes). The direct-entry localization fixture gained a
   non-empty protected field example, so its assertion can detect a retained
   one, with an explicit precondition that the raw fixture carries it. The
-  "preorder" wording in ADR-0024 and the developers' guide now describes the
-  parent-before-child encoding the invariant actually admits. The M2 pre-change
+  "preorder" wording in ADR-0024, the design documents, and the developers'
+  guide now describes the parent-before-child encoding the invariant actually
+  admits or names it as production's one permitted order. The M2 pre-change
   cache evidence is settled by the 2026-11-21 decision entry, and the
   behavioural scenario is renamed to the property it proves.
+
+- [x] (2026-11-21) Close the second assessment round's proof and plan
+  findings. The property corpus now carries populated `windows`, `behaviour`,
+  `renderer`, and `output` records on every generated node instead of absent
+  ones, and the slot assertions compare all five document-level record slots
+  including `output`; clearing `output` in the traversal fails both the model
+  comparison and the integrity assertion with "document records must survive
+  projection". The Verus entry point and the `cargo-orthohelp` design now say
+  the differential tests are bounded evidence for the model-to-production
+  correspondence rather than a discharge of it, and the developers' guide
+  records the corpus bounds and the populated records alongside the residual
+  boundary. The remaining plan and design prose that described the model
+  encoding as preorder now names it as parent-before-child, with production's
+  preorder linearization given as one permitted order.
 
 ## Surprises & discoveries
 
@@ -992,11 +1007,11 @@ M2 discoveries, 2026-11-16:
   discharges its termination check, a mutual pair of spec functions is rejected
   with an ill-typed AIR panic, and an explicit `decreases` measure computed
   from a child sequence crashes the verifier the same way. The model therefore
-  encodes the command tree as a preorder sequence whose `parent` index carries
-  the edge, and `is_tree_like` asserts a single root plus every parent strictly
-  earlier than its child. Depth stays unbounded and the parent index is what
-  the topology obligation quantifies over; the recursive traversal this
-  replaces remains covered by the differential property tests.
+  encodes the command tree as a parent-before-child sequence whose `parent`
+  index carries the edge, and `is_tree_like` asserts a single root plus every
+  parent strictly earlier than its child. Depth stays unbounded and the parent
+  index is what the topology obligation quantifies over; the recursive
+  traversal this replaces remains covered by the differential property tests.
 - The first focused run of the new property suite exposed three existing unit
   tests: two encoded wrong expectations (changing `ValueType::String` to
   `ValueType::Enum` is a public shape change, not a protected-slot change; an
@@ -1211,11 +1226,11 @@ shape against a live bridge call, so neither can drift silently. The
 architecture documents now state the wire additions, the structural limit
 (prose is published verbatim), and what the Verus model does and does not
 certify. The developers' guide's production-proof inventory is no longer empty:
-it names the registered entry point, the three modules, the preorder encoding,
-the negative controls, and the residual boundary. Roadmap 9.1.2 and its three
-subitems are ticked with evidence; 9.1.3 remains untouched. The eight ordinary
-gates passed on the pre-commit documentation candidate, and the Markdown gates
-were re-run after the final plan-status lines.
+it names the registered entry point, the three modules, the parent-before-child
+encoding, the negative controls, and the residual boundary. Roadmap 9.1.2 and
+its three subitems are ticked with evidence; 9.1.3 remains untouched. The eight
+ordinary gates passed on the pre-commit documentation candidate, and the
+Markdown gates were re-run after the final plan-status lines.
 
 After M3, publication required a rebase onto `main` at `d11a0797`, seventeen
 commits ahead of the branch base. The rebase exposed two collisions that no

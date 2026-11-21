@@ -20,9 +20,10 @@ use proptest::prelude::*;
 use proptest::strategy::BoxedStrategy;
 
 use crate::docs::{
-    CliMetadata, DefaultValue, Deprecation, DocMetadata, DocProfilesMeta, EnvMetadata, Example,
-    FieldMetadata, FileMetadata, HeadingIds, Link, Note, ProfileFieldExposure, SectionsMetadata,
-    ValueType,
+    BehaviourMetadata, CliMetadata, DefaultValue, Deprecation, DocMetadata, DocProfilesMeta,
+    EnvMetadata, Example, ExitClass, FieldMetadata, FileMetadata, HeadingIds, InteractionKind,
+    Link, MutationKind, Note, OutputMetadata, ProfileFieldExposure, RendererMetadata,
+    RendererRecord, SectionsMetadata, StdoutPurpose, TtyPolicy, ValueType, WindowsMetadata,
 };
 
 /// Maximum generated command nesting.
@@ -68,6 +69,7 @@ fn doc_with_budget(depth: usize, nodes: usize, fields: usize) -> BoxedStrategy<D
                         doc_with_budget(depth - 1, node_budget, field_budget)
                     })
                     .collect();
+                let records = record_block(&app_name);
                 sequence(children).prop_map(move |subcommands| DocMetadata {
                     ir_version: "2.0".to_owned(),
                     app_name: app_name.clone(),
@@ -77,10 +79,10 @@ fn doc_with_budget(depth: usize, nodes: usize, fields: usize) -> BoxedStrategy<D
                     sections: sections(examples.clone()),
                     fields: own_fields.clone(),
                     subcommands,
-                    windows: None,
-                    behaviour: None,
-                    renderer: None,
-                    output: None,
+                    windows: records.windows.clone(),
+                    behaviour: records.behaviour.clone(),
+                    renderer: records.renderer.clone(),
+                    output: records.output.clone(),
                     profiles: profiles.clone(),
                 })
             },
@@ -284,6 +286,56 @@ fn any_link() -> impl Strategy<Value = Link> {
 /// Generates profile selection metadata.
 fn any_profiles() -> impl Strategy<Value = DocProfilesMeta> {
     (public_text(), public_text()).prop_map(|(flag, env_var)| DocProfilesMeta { flag, env_var })
+}
+
+/// The declaration records every generated node carries.
+///
+/// These are populated rather than left absent: if every node carried `None`,
+/// a projection that silently dropped one of the records would be invisible to
+/// the slot assertions. Only the scalar fields vary with the node, which keeps
+/// the corpus adversarial for the value slots without adding four more
+/// strategy dimensions to every node.
+struct RecordBlock {
+    windows: Option<WindowsMetadata>,
+    behaviour: Option<BehaviourMetadata>,
+    renderer: Option<RendererMetadata>,
+    output: Option<OutputMetadata>,
+}
+
+/// Builds the populated declaration records for one node.
+fn record_block(app_name: &str) -> RecordBlock {
+    RecordBlock {
+        windows: Some(WindowsMetadata {
+            module_name: Some(format!("{app_name}-module")),
+            export_aliases: vec![app_name.to_owned()],
+            include_common_parameters: true,
+            split_subcommands_into_functions: true,
+            help_info_uri: Some(format!("https://example.test/{app_name}")),
+        }),
+        behaviour: Some(BehaviourMetadata {
+            interaction: Some(InteractionKind::NonInteractive),
+            mutation: Some(MutationKind::ReadOnly),
+            bypass: Some(format!("{app_name}-bypass")),
+            dry_run: Some(format!("{app_name}-dry-run")),
+        }),
+        renderer: Some(RendererMetadata {
+            human: Some(RendererRecord {
+                supported: Some(true),
+                tty: Some(TtyPolicy::Adapts),
+                ..RendererRecord::default()
+            }),
+            machine: None,
+        }),
+        output: Some(OutputMetadata {
+            supports_json: Some(true),
+            stdout: Some(StdoutPurpose::Data),
+            stderr_diagnostics: Some(true),
+            exit_classes: vec![ExitClass {
+                name: format!("{app_name}_ok"),
+                meaning: format!("the {app_name} command succeeded"),
+            }],
+        }),
+    }
 }
 
 /// Public literal strategy.

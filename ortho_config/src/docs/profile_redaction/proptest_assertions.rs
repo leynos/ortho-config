@@ -91,19 +91,25 @@ fn assert_example_integrity(original: &DocMetadata, projected: &DocMetadata, has
     }
 }
 
-/// Asserts the remaining document-level records survive unchanged.
+/// Asserts every document-level declaration record survives unchanged.
+///
+/// `output` is compared here too: it carries capabilities and exit classes
+/// rather than field values, so the projection must copy it verbatim. Leaving
+/// it out of the tuple would let a traversal that dropped it pass.
 fn assert_node_records(original: &DocMetadata, projected: &DocMetadata) {
     assert_eq!(
         (
             &original.windows,
             &original.behaviour,
             &original.renderer,
+            &original.output,
             &original.profiles,
         ),
         (
             &projected.windows,
             &projected.behaviour,
             &projected.renderer,
+            &projected.output,
             &projected.profiles,
         ),
         "document records must survive projection"
