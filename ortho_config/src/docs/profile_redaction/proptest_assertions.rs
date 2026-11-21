@@ -4,7 +4,9 @@
 //! they state, group by group, which slots must survive a projection and which
 //! must be cleared, so a production traversal and this model that agreed on the
 //! same mistake would still fail here. Each group compares one tuple, which
-//! keeps every slot in a single comparison that a later edit cannot narrow.
+//! keeps every slot in a single comparison that a later edit cannot narrow, and
+//! `assert_slots_survive!` expands every group's slot list into that comparison
+//! so the check itself has one implementation.
 
 use crate::docs::{CliMetadata, DocMetadata, Example, FieldMetadata, ValueType};
 
@@ -32,49 +34,42 @@ fn assert_same_node(original: &DocMetadata, projected: &DocMetadata, has_protect
     }
 }
 
+/// Compares one group of borrowed slots between a before and an after value.
+///
+/// Each caller lists its slot paths once; the macro expands them into a single
+/// `assert_eq!`, so a later edit cannot narrow a group without changing its
+/// list, and the comparison itself has one implementation. Names may be dotted
+/// field paths (`sections.discovery`); the two operands must be bindings
+/// holding the compared values, not expressions.
+macro_rules! assert_slots_survive {
+    ($before:expr, $after:expr, $expectation:literal; $($($slot:ident).+),+ $(,)?) => {
+        assert_eq!(
+            ($( &$before $(.$slot)+, )+),
+            ($( &$after $(.$slot)+, )+),
+            $expectation
+        );
+    };
+}
+
 /// Asserts the scalar document identity fields survive unchanged.
 ///
-/// The five scalars are compared as one tuple: a mismatch still names the
-/// original and projected identities, and there is no way for a later edit to
-/// drop one comparison without changing the tuple.
+/// The five scalars are compared as one tuple, so there is no way for a later
+/// edit to drop one comparison without changing the tuple.
 fn assert_node_identity(original: &DocMetadata, projected: &DocMetadata) {
-    assert_eq!(
-        (
-            &original.ir_version,
-            &original.app_name,
-            &original.bin_name,
-            &original.about_id,
-            &original.synopsis_id,
-        ),
-        (
-            &projected.ir_version,
-            &projected.app_name,
-            &projected.bin_name,
-            &projected.about_id,
-            &projected.synopsis_id,
-        ),
-        "document identity must survive projection"
+    assert_slots_survive!(
+        original, projected,
+        "document identity must survive projection";
+        ir_version, app_name, bin_name, about_id, synopsis_id
     );
 }
 
 /// Asserts the section metadata survives and examples follow the global rule.
 fn assert_node_sections(original: &DocMetadata, projected: &DocMetadata, has_protected: bool) {
-    assert_eq!(
-        (
-            &original.sections.headings_ids,
-            &original.sections.discovery,
-            &original.sections.precedence,
-            &original.sections.links,
-            &original.sections.notes,
-        ),
-        (
-            &projected.sections.headings_ids,
-            &projected.sections.discovery,
-            &projected.sections.precedence,
-            &projected.sections.links,
-            &projected.sections.notes,
-        ),
-        "section metadata must survive projection"
+    assert_slots_survive!(
+        original, projected,
+        "section metadata must survive projection";
+        sections.headings_ids, sections.discovery, sections.precedence,
+        sections.links, sections.notes
     );
     assert_example_integrity(original, projected, has_protected);
 }
@@ -97,22 +92,10 @@ fn assert_example_integrity(original: &DocMetadata, projected: &DocMetadata, has
 /// rather than field values, so the projection must copy it verbatim. Leaving
 /// it out of the tuple would let a traversal that dropped it pass.
 fn assert_node_records(original: &DocMetadata, projected: &DocMetadata) {
-    assert_eq!(
-        (
-            &original.windows,
-            &original.behaviour,
-            &original.renderer,
-            &original.output,
-            &original.profiles,
-        ),
-        (
-            &projected.windows,
-            &projected.behaviour,
-            &projected.renderer,
-            &projected.output,
-            &projected.profiles,
-        ),
-        "document records must survive projection"
+    assert_slots_survive!(
+        original, projected,
+        "document records must survive projection";
+        windows, behaviour, renderer, output, profiles
     );
 }
 
@@ -130,22 +113,9 @@ fn assert_field_integrity(before: &FieldMetadata, after: &FieldMetadata) {
 
 /// Asserts a field's public descriptor survives unchanged.
 fn assert_field_identity(before: &FieldMetadata, after: &FieldMetadata) {
-    assert_eq!(
-        (
-            &before.name,
-            &before.help_id,
-            &before.long_help_id,
-            before.required,
-            &before.profile_field,
-        ),
-        (
-            &after.name,
-            &after.help_id,
-            &after.long_help_id,
-            after.required,
-            &after.profile_field,
-        ),
-        "public descriptor must survive projection"
+    assert_slots_survive!(
+        before, after, "public descriptor must survive projection";
+        name, help_id, long_help_id, required, profile_field
     );
 }
 
@@ -154,24 +124,14 @@ fn assert_field_identity(before: &FieldMetadata, after: &FieldMetadata) {
 /// The value type is compared through [`value_shape`] rather than by equality:
 /// a protected enum's *members* may be cleared, but its shape must not change.
 fn assert_field_records(before: &FieldMetadata, after: &FieldMetadata) {
+    assert_slots_survive!(
+        before, after, "auxiliary records must survive projection";
+        deprecated, env, file, links, notes
+    );
     assert_eq!(
-        (
-            &before.deprecated,
-            &before.env,
-            &before.file,
-            &before.links,
-            &before.notes,
-            before.value.as_ref().map(value_shape),
-        ),
-        (
-            &after.deprecated,
-            &after.env,
-            &after.file,
-            &after.links,
-            &after.notes,
-            after.value.as_ref().map(value_shape),
-        ),
-        "auxiliary records and value shape must survive projection"
+        before.value.as_ref().map(value_shape),
+        after.value.as_ref().map(value_shape),
+        "value shape must survive projection"
     );
 }
 
@@ -205,26 +165,9 @@ fn assert_cli_integrity(before: &FieldMetadata, after: &FieldMetadata, is_protec
 
 /// Asserts the public CLI spelling and switches survive.
 fn assert_cli_flags(before: &CliMetadata, after: &CliMetadata) {
-    assert_eq!(
-        (
-            &before.long,
-            before.short,
-            &before.value_name,
-            before.multiple,
-            before.takes_value,
-            before.value_optional,
-            before.hide_in_help,
-        ),
-        (
-            &after.long,
-            after.short,
-            &after.value_name,
-            after.multiple,
-            after.takes_value,
-            after.value_optional,
-            after.hide_in_help,
-        ),
-        "public CLI spelling must survive projection"
+    assert_slots_survive!(
+        before, after, "public CLI spelling must survive projection";
+        long, short, value_name, multiple, takes_value, value_optional, hide_in_help
     );
 }
 

@@ -978,6 +978,15 @@ exclusion as it stood at that milestone; it no longer applies.
   slots are collapsed; it now claims a counterpart only for slots the
   projection can change, matching the table and ADR-0024.
 
+- [x] (2026-11-21) Clear the CodeScene duplication advisory. The hosted
+  `CodeScene Code Health Review` failed on `Code Duplication` between
+  `assert_node_identity` and `assert_node_records` in `proptest_assertions.rs`
+  (code health 9.38); `cs delta` reproduced the same pair locally. The six
+  group comparisons now share one `assert_slots_survive!` expansion that takes
+  each group's slot paths once, so the check has a single implementation while
+  every group still compares one tuple under its own expectation. `cs delta` on
+  the repair reports `Code Health (9.38 -> 10.00)` and the duplication fixed.
+
 ## Surprises & discoveries
 
 The current context contains selector metadata, not profile bodies or names.
