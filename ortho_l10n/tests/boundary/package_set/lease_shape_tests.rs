@@ -232,55 +232,57 @@ fn count_in_roots(sources: &Utf8Path) -> Result<usize> {
 ///
 /// The callee is matched with an optional turbofish and then an opening
 /// parenthesis, so the argument spelling cannot hide a call: `(repository`,
-/// `( &repository`, `(\n        repository` and `::<Budget>(repository` all
-/// count. An earlier version pinned the first argument's spelling, so a
+/// `( &repository`, a newline before the argument and `::<Budget>(repository`
+/// all count. An earlier version pinned the first argument's spelling, so a
 /// refactor that borrowed it silently dropped the call from the count while
 /// the assertion still passed.
 ///
-/// Declarations and imports are excluded, because they are not calls: a
-/// `fn package_sources(` definition and a `use ... package_sources;` would
-/// otherwise inflate a tree-wide count by one per file that mentions it.
+/// Declarations, imports and comments are excluded, because they are not
+/// calls: a `fn package_sources(` definition, a `use ... package_sources;` and
+/// a doc comment naming either would otherwise inflate a tree-wide count.
 fn count_calls(source: &str, name: &str) -> usize {
-    // Comments and string literals are not calls. Without this the scanner's
-    // own needle literal and the doc comment naming a declaration would each
-    // count, so a tree-wide scan would report the test as a packaging site.
-    let source: String = source
+    without_comments(source)
+        .lines()
+        .filter(|line| is_call_line(line, name))
+        .count()
+}
+
+/// Whether `line` contains a call to `name` rather than a declaration or an
+/// import of it.
+///
+/// Line-granular on purpose: a definition, an import and a call each occupy
+/// their own line in this codebase, and a line-level rule is one a reader can
+/// check by eye. A turbofish is stripped from the callee before the
+/// parenthesis is looked for, so `name::<Budget>(` counts.
+fn is_call_line(line: &str, name: &str) -> bool {
+    let trimmed = line.trim_start();
+    if trimmed.starts_with("//") || trimmed.starts_with('*') {
+        return false;
+    }
+    if trimmed.starts_with("use ") || trimmed.split_whitespace().any(|word| word == "fn") {
+        return false;
+    }
+    let Some(at) = line.find(name) else {
+        return false;
+    };
+    let after = &line[at + name.len()..];
+    let after_callee = match after.strip_prefix("::<") {
+        Some(tail) => tail.split_once('>').map_or("", |(_generics, rest)| rest),
+        None => after,
+    };
+    after_callee.starts_with('(')
+}
+
+/// `source` with comment lines removed.
+fn without_comments(source: &str) -> String {
+    source
         .lines()
         .filter(|line| {
             let trimmed = line.trim_start();
-            !(trimmed.starts_with("//") || trimmed.starts_with("*"))
+            !(trimmed.starts_with("//") || trimmed.starts_with('*'))
         })
         .collect::<Vec<_>>()
-        .join("\n");
-    let source = source.as_str();
-    let mut count = 0;
-    let mut rest = source;
-    while let Some(at) = rest.find(name) {
-        let after_name = &rest[at + name.len()..];
-        let after_turbofish = after_name
-            .strip_prefix("::<")
-            .and_then(|tail| tail.find('>').map(|end| &tail[end + 1..]))
-            .unwrap_or(after_name);
-        let before = &rest[..at];
-        // A definition may be prefixed by visibility and other modifiers, so
-        // look for the `fn` keyword in the last few words rather than requiring
-        // it to be immediately before the name.
-        let is_declaration = before
-            .split_whitespace()
-            .rev()
-            .take(4)
-            .any(|word| word == "fn");
-        // Only a `use` line is an import. A preceding comma or `::` is not
-        // evidence of one: a call can follow either on the same line, and
-        // treating them as imports made the scan count zero real calls.
-        let line_start = before.rfind('\n').map_or(0, |at| at + 1);
-        let is_import = before[line_start..].trim_start().starts_with("use ");
-        if after_turbofish.starts_with('(') && !is_declaration && !is_import {
-            count += 1;
-        }
-        rest = &rest[at + name.len()..];
-    }
-    count
+        .join("\n")
 }
 
 /// How many call expressions to `name` appear in the `.rs` files under `root`.
