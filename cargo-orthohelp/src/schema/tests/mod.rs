@@ -73,7 +73,10 @@ fn legacy_ir_without_profile_field_stays_ordinary() {
     let field: FieldMetadata =
         serde_json::from_str(legacy).expect("legacy field should read as ordinary");
 
-    assert_eq!(field.profile_field, None);
+    assert_eq!(
+        field.profile_field, None,
+        "a field without the key must read as an ordinary, unclassified field"
+    );
 }
 
 /// A recognised classification string that is not a real label is rejected.
