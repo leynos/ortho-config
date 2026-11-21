@@ -4,7 +4,8 @@ use std::collections::BTreeSet;
 
 use pretty_assertions::assert_eq;
 use proptest::prelude::*;
-use serde_json::json;
+use rstest::rstest;
+use serde_json::{Value, json};
 
 use super::{ProfileFieldRedaction, ProfileSelectionContract, ProfilesDeclaration};
 use crate::docs::ProfileFieldExposure;
@@ -226,53 +227,29 @@ fn deserialization_canonicalises_the_metadata() {
     );
 }
 
-#[test]
-fn deserialization_rejects_invalid_names() {
-    let wire = json!({
-        "supported": true,
-        "available_names": ["not a name"]
-    });
-
-    assert!(
-        serde_json::from_value::<ProfilesDeclaration>(wire).is_err(),
-        "the invalid profile name must be rejected during deserialization"
-    );
-}
-
-#[test]
-fn deserialization_rejects_metadata_on_an_unsupported_declaration() {
-    let wire = json!({
-        "supported": false,
-        "available_names": ["alpha"]
-    });
-
-    assert!(
-        serde_json::from_value::<ProfilesDeclaration>(wire).is_err(),
-        "metadata on an unsupported declaration must be rejected during deserialization"
-    );
-}
-
-#[test]
-fn deserialization_rejects_a_duplicate_redaction_identity() {
-    let wire = json!({
+#[rstest]
+#[case::invalid_name(
+    "the invalid profile name must be rejected during deserialization",
+    json!({"supported": true, "available_names": ["not a name"]})
+)]
+#[case::metadata_on_unsupported(
+    "metadata on an unsupported declaration must be rejected during deserialization",
+    json!({"supported": false, "available_names": ["alpha"]})
+)]
+#[case::duplicate_identity(
+    "a duplicate redaction identity must be rejected during deserialization",
+    json!({
         "supported": true,
         "redaction": [
-            {
-                "command_path": ["tool"],
-                "field_name": "token",
-                "exposure": "secret"
-            },
-            {
-                "command_path": ["tool"],
-                "field_name": "token",
-                "exposure": "reference_only"
-            }
+            {"command_path": ["tool"], "field_name": "token", "exposure": "secret"},
+            {"command_path": ["tool"], "field_name": "token", "exposure": "reference_only"}
         ]
-    });
-
+    })
+)]
+fn deserialization_rejects_inconsistent_documents(#[case] expectation: &str, #[case] wire: Value) {
     assert!(
         serde_json::from_value::<ProfilesDeclaration>(wire).is_err(),
-        "a duplicate redaction identity must be rejected during deserialization"
+        "{expectation}"
     );
 }
 
