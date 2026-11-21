@@ -1913,11 +1913,18 @@ own subtree or group, and a parent embeds the projected children. That costs
 one decision-and-projection pass per boundary rather than per node, which
 `derived_deep_chain_projects_once_per_boundary` in
 `ortho_config/src/docs/profile_redaction/derive_tests.rs` pins. The selector's
-group pass over an already-projected child repeats that work over the child's
-nodes: it re-walks each member and re-applies the projection, which changes
-nothing there because the projection is idempotent. What the group pass adds is
-the whole-group decision, so a protected member suppresses every member's
-command examples.
+group pass then re-walks every member of the group it returns: the scan that
+decides the command-example rule stops at the first protected member, but the
+projection pass visits all of them, clearing protected value slots and applying
+the group decision. A member a child boundary already projected keeps its own
+projected slots, because the projection is idempotent, but it is **not** exempt
+from the group decision: a clean member keeps its command examples under its
+own single-document projection and loses them here when any sibling is
+protected. `protected_sibling_suppresses_the_plain_command_examples` in
+`ortho_config/tests/subcommand_docs.rs` pins exactly that case. The re-walk is
+therefore deliberate rather than redundant: a selector member produced by a
+child boundary is traversed twice in the composed tree, and the traversal-count
+regression counts both passes.
 
 ### Agent context
 
