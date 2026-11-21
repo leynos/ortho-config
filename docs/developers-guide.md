@@ -3775,9 +3775,10 @@ not vacuous: the lint must still fire on a deliberately bumpy function.
 
 Findings are refactored, not suppressed. Split each flagged function into named
 helpers with declared inputs and outputs, preserving its observable behaviour,
-its error variants, and its diagnostic spans. Do not lower the threshold or
-exclude a crate without a maintainer decision; the lint's strictness is
-repository policy, and the shared suite already tunes its weighting upstream.
+its error variants, and its diagnostic spans. Do not change the threshold in
+either direction, or exclude a crate, without a maintainer decision; the lint's
+strictness is repository policy, and the shared suite already tunes its
+weighting upstream.
 
 The derive parsing entry points are the worked example. A top-level matcher
 routes each attribute family, and each recognized key delegates the actual
