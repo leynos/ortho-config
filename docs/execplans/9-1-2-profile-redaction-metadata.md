@@ -1071,10 +1071,25 @@ exclusion as it stood at that milestone; it no longer applies.
   witnessed separately, by two identical ordinary one-root documents and by a
   protected pair with equal public descriptors and differing protected
   defaults. The developers' guide now records that distinction, and bounds the
-  differential assertion's reach: it compares production against the oracle's
-  output and consumes the oracle's `model_has_protected` decision for command
-  examples, so a defect shared by both is invisible to it and the assertions
-  reduce that risk rather than remove it.
+  tests' reach: `projection_matches_independent_model` compares production with
+  the oracle's output, while the integrity assertions compare each original
+  node with its projected counterpart and take the command-example expectation
+  from the oracle's `model_has_protected` decision, so a defect shared by both
+  is not caught and the evidence reduces that risk rather than removing it.
+- [x] (2026-11-21) Close the proof assessment's second round. It accepted the
+  two qualifications and found three prose conflations to correct. The witness
+  sentence had run the two branches of `low_equiv` together: the protected pair
+  cannot satisfy `low_equiv_ordinary_equality`'s premise at all, so the plan
+  and the developers' guide now name it as a witness for the suppressed branch,
+  with the ordinary pair as the premise witness. The remaining two corrections
+  came from treating the integrity assertions and
+  `projection_matches_independent_model` as one test: the assertions compare
+  each original node with its projected counterpart and only borrow the oracle's
+  `model_has_protected` decision for command examples, while the separate
+  property is what compares production with the oracle's output. The plan entry
+  and the assertions module documentation now say which test does what, and
+  drop the claim that a shared production-and-model mistake would still fail
+  the assertions.
 
 ## Surprises & discoveries
 
@@ -1348,12 +1363,14 @@ split into a crate root plus three modules under the 400-line cap and verifies
 model faults each break a named obligation, so the obligations can fail rather
 than holding vacuously. That control is not an inhabitance argument for V1:
 `low_equiv_ordinary_equality` proves an implication, and the satisfiability of
-its premises is a separate fact, witnessed instead by two identical ordinary
-one-root documents and by a protected pair with equal public descriptors and
-differing protected defaults. The external workflow lane, the behavioural
-contract, and the sentinel suites are delivered; the first gate run had exposed
-six Clippy diagnostics in the new test files and a saturation timeout of the
-nested-Cargo probe, both repaired before the green run.
+its premises is a separate fact: two identical ordinary one-root documents
+witness it, because no field is protected and every slot agrees. A protected
+pair with equal public descriptors and differing protected defaults witnesses
+the other branch of `low_equiv` instead, which the lemma says nothing about.
+The external workflow lane, the behavioural contract, and the sentinel suites
+are delivered; the first gate run had exposed six Clippy diagnostics in the new
+test files and a saturation timeout of the nested-Cargo probe, both repaired
+before the green run.
 
 M1 retrospectively: the largest surprises were the deleted proof lane and the
 hand-maintained schema mirror, both addressed above. The differential model and

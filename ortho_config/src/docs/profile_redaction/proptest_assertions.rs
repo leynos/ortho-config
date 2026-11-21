@@ -1,12 +1,17 @@
 //! Slot-by-slot integrity assertions over the generated corpus.
 //!
 //! These assertions hold the half of V2 that equality with the model cannot:
-//! they state, group by group, which slots must survive a projection and which
-//! must be cleared, so a production traversal and this model that agreed on the
-//! same mistake would still fail here. Each group compares one tuple, which
-//! keeps every slot in a single comparison that a later edit cannot narrow, and
-//! `assert_slots_survive!` expands every group's slot list into that comparison
-//! so the check itself has one implementation.
+//! they compare each node's original and projected records, so a slot that
+//! must survive or must be cleared is checked against the input rather than
+//! against the model's output, and a traversal that dropped it while agreeing
+//! with the model would still fail here. The comparison is not independent of
+//! the model everywhere: whether command examples must be suppressed comes
+//! from `model_has_protected`, so a protected-field decision shared by the
+//! projection and the model is outside what these assertions can catch. Each
+//! group compares one tuple, which keeps every slot in a single comparison
+//! that a later edit cannot narrow, and `assert_slots_survive!` expands every
+//! group's slot list into that comparison so the check itself has one
+//! implementation.
 
 use crate::docs::{CliMetadata, DocMetadata, Example, FieldMetadata, ValueType};
 
