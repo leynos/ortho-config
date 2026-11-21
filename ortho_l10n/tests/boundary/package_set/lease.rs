@@ -95,6 +95,10 @@ mod contention_tests;
 #[path = "lease_shape_tests.rs"]
 mod lease_shape_tests;
 
+#[cfg(test)]
+#[path = "lease_shape_scan.rs"]
+mod lease_shape_scan;
+
 use super::record::{read_under_lease, read_unlocked};
 use super::run_guard::RunGuard;
 use anyhow::{Context, Result, ensure};
