@@ -249,19 +249,26 @@ fn serialization_only_rename_keeps_the_deserialization_key() -> Result<()> {
 }
 
 /// A renamed boolean whose clap default must be pruned from the CLI layer.
+///
+/// The sibling `--note` value forces the CLI layer to be pushed, so an
+/// unpruned default on the boolean would mask the file value. The string
+/// `default_value` form is replayed onto the generated argument, which is the
+/// shape the pruning exists for.
 #[derive(Debug, Deserialize, Serialize, clap::Parser, OrthoConfig)]
 #[command(name = "renamed-bool")]
 #[ortho_config(prefix = "SVB_")]
 struct RenamedBool {
     #[serde(rename = "is-enabled")]
-    #[arg(long = "enabled", default_value_t = false)]
-    #[ortho_config(cli_default_as_absent)]
+    #[arg(long = "enabled", default_value = "false")]
+    #[ortho_config(cli_long = "enabled", cli_default_as_absent)]
     flag_state: bool,
+    #[arg(long)]
+    note: Option<String>,
 }
 
 #[rstest]
-#[case::file_survives_pruned_default(&["prog"], true)]
-#[case::explicit_false_wins(&["prog", "--enabled=false"], false)]
+#[case::file_survives_pruned_default(&["prog", "--note", "x"], true)]
+#[case::explicit_false_wins(&["prog", "--note", "x", "--enabled=false"], false)]
 fn renamed_bool_default_does_not_mask_lower_layers(
     #[case] cli_args: &[&str],
     #[case] expected: bool,

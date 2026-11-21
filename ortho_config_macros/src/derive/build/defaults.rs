@@ -36,7 +36,7 @@ pub(crate) fn build_default_struct_fields(
                 Err(err) => return err,
             };
             let ty = option_type_tokens(&f.ty);
-            // The defaults struct serialises to the lowest-precedence layer, so
+            // The defaults struct serializes to the lowest-precedence layer, so
             // it must use the configuration key rather than the Rust field
             // name; otherwise a renamed default is never read by the final type.
             let key_lit = syn::LitStr::new(&attrs.serialized_key, name.span());

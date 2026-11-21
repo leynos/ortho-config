@@ -264,3 +264,28 @@ fn collect_collection_strategies_uses_serde_key(
     );
     Ok(())
 }
+
+/// A renamed replace-strategy map records the configuration key too.
+///
+/// Map replacement extracts the whole map from each layer by that key, so the
+/// identifier would leave a renamed map out of the replacement accumulator.
+#[test]
+fn collect_collection_strategies_uses_serde_key_for_replaced_maps() -> Result<()> {
+    let input: syn::DeriveInput = syn::parse_quote! {
+        struct DemoRenamedMap {
+            #[serde(rename = "settings")]
+            #[ortho_config(merge_strategy = "replace")]
+            rules: std::collections::BTreeMap<String, u32>,
+        }
+    };
+    let strategies = collect_strategies(&input)?;
+    let (_, _, key) = strategies
+        .map_replace
+        .first()
+        .ok_or_else(|| anyhow!("the replace strategy should contain an entry"))?;
+    ensure!(
+        key == "settings",
+        "expected the configuration key settings, found {key}"
+    );
+    Ok(())
+}

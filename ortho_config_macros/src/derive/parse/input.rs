@@ -3,7 +3,7 @@
 //! This module gathers the struct identifier, fields, and relevant attribute
 //! metadata in one pass so macro expansion can fail fast with useful errors.
 
-use syn::{Data, DeriveInput, Fields};
+use syn::{Attribute, Data, DeriveInput, Fields};
 
 use super::{
     FieldAttrs, StructAttrs, option_inner, parse_field_attrs, parse_struct_attrs,
@@ -35,17 +35,28 @@ pub(crate) fn parse_input(
     let ident = input.ident.clone();
     let struct_attrs = parse_struct_attrs(&input.attrs)?;
     let fields = named_fields(input)?;
-    let rename_all = serde_rename_rules(&input.attrs)?.deserialize;
-    let field_attrs = fields
+    let field_attrs = parse_field_attrs_with_keys(&fields, &input.attrs)?;
+    validate_project_root_field(&fields, &field_attrs, &struct_attrs)?;
+    Ok((ident, fields, struct_attrs, field_attrs))
+}
+
+/// Parses every field and caches the key the configuration type reads.
+///
+/// The container `rename_all` rule is resolved once, so per-field renames and
+/// container rules produce the same key model for every generator.
+fn parse_field_attrs_with_keys(
+    fields: &[syn::Field],
+    container_attrs: &[Attribute],
+) -> Result<Vec<FieldAttrs>, syn::Error> {
+    let rename_all = serde_rename_rules(container_attrs)?.deserialize;
+    fields
         .iter()
         .map(|field| {
             let mut attrs = parse_field_attrs(field)?;
             attrs.serialized_key = serde_deserialized_field_key(field, rename_all)?;
             Ok(attrs)
         })
-        .collect::<Result<Vec<_>, syn::Error>>()?;
-    validate_project_root_field(&fields, &field_attrs, &struct_attrs)?;
-    Ok((ident, fields, struct_attrs, field_attrs))
+        .collect()
 }
 
 /// Rejects `#[serde(flatten)]` where the derive would generate a layer key.

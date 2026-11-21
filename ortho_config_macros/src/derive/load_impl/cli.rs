@@ -333,13 +333,13 @@ mod tests {
     fn default_as_absent_pruning_uses_the_layer_key() {
         let rendered =
             build_cli_layer_tokens(&quote! { ::ortho_config }, &pruned_field()).to_string();
-        let normalised = rendered.replace(' ', "");
+        let normalized = rendered.replace(' ', "");
         assert!(
-            normalised.contains("values.remove(\"retry-count\")"),
+            normalized.contains("values.remove(\"retry-count\")"),
             "pruning must remove the serialized layer key: {rendered}"
         );
         assert!(
-            normalised.contains("value_source(\"retries\")"),
+            normalized.contains("value_source(\"retries\")"),
             "pruning must still ask clap about the argument ID: {rendered}"
         );
     }

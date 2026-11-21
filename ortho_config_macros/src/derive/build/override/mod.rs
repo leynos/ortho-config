@@ -20,7 +20,7 @@ use crate::derive::parse::{FieldAttrs, MergeStrategy, btree_map_inner, vec_inner
 ///
 /// Each entry carries the Rust identifier (used for generated state field
 /// names), the collection type, and the configuration key the field is
-/// serialised under. The key is what layer JSON is keyed by; the identifier is
+/// serialized under. The key is what layer JSON is keyed by; the identifier is
 /// only an implementation detail of the generated merge state.
 #[derive(Default)]
 pub(crate) struct CollectionStrategies {

@@ -192,8 +192,8 @@ fn process_cli_field(
         }
     };
 
-    // The CLI struct serialises to the CLI merge layer, so it must use the key the
-    // final configuration type reads when the composed layers are deserialised.
+    // The CLI struct serializes to the CLI merge layer, so it must use the key the
+    // final configuration type reads when the composed layers are deserialized.
     // A field with `#[serde(rename)]` or a container `rename_all` rule would
     // otherwise be layered under its Rust identifier and silently ignored.
     let serde_attr = if resolved.is_bool {

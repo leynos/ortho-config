@@ -49,6 +49,13 @@ CLI ledger is keyed by the identifier.
       renamed-key case.
 - [x] (2026-11-21) Phase 4: add layered end-to-end tests, a directional-rename
       extraction test, and two trybuild compile-fail fixtures.
+- [x] (2026-11-21) Focused suites green: `serde_visible_keys` 9/9,
+      `merge_strategy` 6/6, `cli_default_as_absent` 19/19, and the directional
+      extraction case 1/1.
+- [x] (2026-11-21) Red probe: temporarily reverting the rename emission and the
+      collection key made 5 of the 9 `serde_visible_keys` cases fail (renamed
+      scalar defaults and CLI override, both vector append cases, and the
+      explicit-false case). The fix was restored byte-for-byte afterwards.
 - [ ] Run the deterministic gates (`check-fmt`, `lint`, `test`,
       `markdownlint`, `nixie`) and clear CodeRabbit findings.
 - [ ] Push the branch and open the draft pull request.
@@ -72,6 +79,10 @@ CLI ledger is keyed by the identifier.
 - `serde_rename_rules` parses both directions even when only one is requested,
   so `parse_input` continues to reject an unsupported `rename_all` value in
   either direction, matching the existing diagnostics.
+- The hidden CLI builder does not replay a user `#[arg(long = "...")]`; the
+  generated flag comes from the Rust identifier or `ortho_config(cli_long)`.
+  The renamed-boolean fixture therefore sets `cli_long = "enabled"` so the
+  hidden parser and the manual parser agree.
 
 ## Decision log
 
@@ -150,8 +161,11 @@ Pending completion of the gates and review.
   identifier; the unit cases include a serialize-only rename whose
   serialization and deserialization keys differ.
 - Invariant: a renamed collection reaches its declared strategy. Verified by
-  `collect_collection_strategies_uses_serde_key` and the two append cases,
-  which would observe only `["env"]` if extraction looked up the identifier.
+  the strategy unit cases and the two append cases, which fail if extraction
+  looks up the identifier. The red probe observed 5 failures with the defect
+  reintroduced, including both append cases; 4 cases passed because they do not
+  depend on the generated layer key (file or environment supplies the value, or
+  the case pins the deserialization-side semantics).
 - Invariant: incompatible flatten is rejected while schema-only flatten remains
   accepted. Verified by the parse unit table, the two trybuild fixtures, and
   the existing flatten integration suites.
@@ -176,4 +190,5 @@ Pending completion of the gates and review.
 
 Initial draft written during implementation on 2026-11-21. It records the
 conditional-flatten and deserialization-key decisions after reconnaissance
-falsified two plan assumptions.
+falsified two plan assumptions. Revised after the focused suites passed, adding
+the red-probe evidence, the map-strategy unit case, and the `cli_long` finding.
