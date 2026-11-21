@@ -777,8 +777,11 @@ with a compatibility probe rather than an assumption.
   registered, compiled, and run documentation example:
   `guide-nested-requirements` is listed in `EXPECTED_EXAMPLE_IDS`,
   `STANDARD_RUST_EXAMPLES`, and `SIMPLE_RUNS`, with the asserted stdout
-  `missing=database.host`. That pins both the claim that a marked child reports
-  leaf paths and the claim that an unmarked child cannot. The Domain
+  `missing=database.host`. That pins the claim that a marked child reports its
+  leaf paths and that the parent's own key is not reported beside them. The
+  unmarked-child boundary stays prose: `composes_children` returns false, the
+  field keeps `SchemaChildren::Leaf`, and `report_absent_node` therefore pushes
+  one leaf entry for the parent key instead of descending. The Domain
   Architecture row repeated the same six demands without new evidence after the
   previous round's source-backed rebuttal; `env_route.rs` is still a pure
   function of a path and a prefix importing only `ConfigPath`, and

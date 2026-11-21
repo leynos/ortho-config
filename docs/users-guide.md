@@ -1243,8 +1243,8 @@ A child type takes part in requirement reporting only when both halves of the
 opt-in are present: derive `RequiredConfigSchema` on the child, and mark the
 parent field with `#[ortho_config(nested)]`. Add `skip_cli` when the object
 type has no clap value parser for the generated argument, because the CLI
-builder emits a flag for every field it does not skip. The marker describes the
-parent field, never the child type.
+builder emits an argument for every field it does not skip. The marker
+describes the parent field, never the child type.
 
 <!-- tested-example: guide-nested-requirements -->
 ```rust
@@ -1284,10 +1284,11 @@ fn main() {
 Run against an empty configuration, this prints `missing=database.host`.
 
 Only a marked child contributes requirements. An unmarked child contributes no
-internal keys: the parent reports the field itself as one object-shaped value,
-rendered as a file table. An absent optional parent deactivates its whole
-subtree, because no value can reach a child the parent does not have, while a
-required parent still reports its required descendants.
+internal keys, so the report names the parent field as a single value and the
+child's leaves stay invisible to it; a leaf-level absence inside a value that
+is present then surfaces through Serde's own error. An absent optional parent
+deactivates its whole subtree, because no value can reach a child the parent
+does not have, while a required parent still reports its required descendants.
 
 `RequiredConfigSchema` is the derive for nested types. It records the type's
 own field keys and requiredness and does nothing else: it creates no CLI, no
