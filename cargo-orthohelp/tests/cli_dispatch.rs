@@ -169,20 +169,25 @@ fn version_reports_success_and_the_built_version(
     &["--format", "ir"],
     "direct invocation without subcommand should fail",
     "unexpected argument '--format'",
-    Some("Usage: cargo <COMMAND>")
+    Some("Usage: cargo <COMMAND>"),
+    EXIT_USAGE
 )]
 #[case::unknown_subcommand(
     &["unknown"],
     "unknown subcommand should fail",
     "unrecognized subcommand 'unknown'",
-    Some("Usage: cargo <COMMAND>")
+    Some("Usage: cargo <COMMAND>"),
+    EXIT_USAGE
 )]
 #[case::invalid_subcommand_option(
     &["orthohelp", "--man-section", "9"],
     "invalid man section should fail",
     "invalid value '9'",
-    None
+    None,
+    EXIT_USAGE
 )]
+// The root type is validated after the arguments have parsed, so a rejected
+// value is an ordinary runtime failure rather than a usage error.
 #[case::injection_shaped_root_type(
     &[
         "orthohelp",
@@ -196,20 +201,22 @@ fn version_reports_success_and_the_built_version(
     ],
     "injection-shaped root type should fail",
     "InvalidRootType",
-    None
+    None,
+    EXIT_FAILURE
 )]
 fn command_failure_cases(
     #[case] args: &[&str],
     #[case] failure_message: &str,
     #[case] expected_error: &str,
     #[case] expected_usage: Option<&str>,
+    #[case] expected_status: i32,
 ) {
     let output = run_direct(args).expect("direct orthohelp invocation should run");
 
     assert_eq!(
         output.status.code(),
-        Some(EXIT_USAGE),
-        "{failure_message}: expected Clap's usage status"
+        Some(expected_status),
+        "{failure_message}: expected the documented status for its failure class"
     );
     let stderr = stderr(&output);
     assert!(
