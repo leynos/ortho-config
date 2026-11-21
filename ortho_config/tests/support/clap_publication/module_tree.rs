@@ -170,6 +170,13 @@ fn unconditional_module_chain_is_counted() -> Result<()> {
 // A derive macro appends its output to the item's scope, so a name outside the
 // compiler's built-in set is an item-producing expansion too.
 #[case::derive_macro("derive_macro", "which is not one of the compiler's built-in derives")]
+// A built-in derive name is not proof of the built-in derive: an explicit
+// `use` can rebind it to an imported procedural macro that appends its own
+// items to the annotated item's scope.
+#[case::imported_derive("imported_derive", "binds a derive named")]
+// A `use` path rooted at `std` is only as trustworthy as the root itself, so a
+// local `mod std` makes the compiler-root exemption name the local module.
+#[case::poisoned_root("poisoned_root", "binds a derive named")]
 // A tree without a reported crate root is refused rather than guessed at.
 #[case::no_crate_root("no_crate_root", "expected a crate root lib.rs")]
 fn module_tree_is_refused(#[case] fixture: &str, #[case] expected: &str) -> Result<()> {

@@ -90,6 +90,14 @@ const ORIGIN: &str = "classes/error_kind.rs";
     "#[derive(EvilDerive)]\npub enum ErrorKind {\n    Alpha,\n}\n",
     Classification::Refused("not one of the compiler's built-in derives")
 )]
+#[case::rebound_derive(
+    "use inventory_macros::Inject as Debug;\n\n#[derive(Debug)]\npub struct Marker;\n\npub enum ErrorKind {\n    Alpha,\n}\n",
+    Classification::Refused("binds a derive named")
+)]
+#[case::rebound_root(
+    "extern crate inventory_macros as std;\nuse std::Inject as Debug;\n\n#[derive(Debug)]\npub struct Marker;\n\npub enum ErrorKind {\n    Alpha,\n}\n",
+    Classification::Refused("binds a derive named")
+)]
 #[case::macro_rules_definition(
     "macro_rules! declare {\n    () => {\n        pub enum ErrorKind {\n            Alpha,\n        }\n    };\n}\n\npub enum ErrorKind {\n    Alpha,\n    Beta,\n}\n",
     Classification::Counted(2)

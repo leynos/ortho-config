@@ -577,6 +577,20 @@ holds, so the audit recurses into it and judges the attributes it would apply.
 The lists are closed: refusing a compiler attribute they omit costs one review,
 while trusting a name the compiler does not own is the failure this bounds.
 
+A derive name needs one resolution step more than an attribute path, because
+the name alone does not decide what the compiler invokes. An explicit `use`
+binding shadows the prelude's built-in derive, so
+`use inventory_macros::Inject as Debug;` makes `#[derive(Debug)]` run the
+imported procedural macro and append its output to the annotated item's scope.
+A binding rooted at `std`, `core` or `alloc` cannot name a procedural derive,
+because the standard library exports none, so the reviewed
+`use std::fmt::Debug;` stays trusted; a module that rebinds the root itself,
+through `mod std` or `extern crate … as std`, voids that exemption. A glob is
+safe on the other side: a derive of the same name reaching a module through one
+is reported ambiguous (`E0659`) rather than chosen, and a `macro_rules!`
+definition of the name leaves the built-in derive in place, because bang macros
+are a separate macro kind.
+
 The count is the total declared variant count for that builder package, not
 only the raisable variants; classification as translated or `DisplayOnly`
 remains in `CLAP_ERROR_IDS`. The reviewed identity and its total are explicit

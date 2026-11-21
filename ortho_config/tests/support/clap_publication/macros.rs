@@ -138,7 +138,7 @@ pub(super) fn collect_crate_names(items: &[Item], names: &mut BTreeSet<String>) 
             }
             Item::Use(_) => {
                 let imports = Imports::of(std::slice::from_ref(item));
-                names.extend(imports.explicit_names().iter().cloned());
+                names.extend(imports.explicit_names().cloned());
             }
             Item::Mod(module) => {
                 if let Some((_, nested)) = &module.content {
