@@ -58,6 +58,9 @@ CLI ledger is keyed by the identifier.
       explicit-false case). The fix was restored byte-for-byte afterwards.
 - [x] (2026-11-21) `check-fmt` and `markdownlint` pass; the two
       `#[serde(flatten)]` compile-fail snapshots are generated and committed.
+- [x] (2026-11-21) Cleared the deterministic Clippy findings: an
+      `Option::map_or_else` rewrite for the documentation file key, a redundant
+      closure, and two `shadow_reuse` bindings in the new tests.
 - [ ] Run the remaining deterministic gates (`lint`, `test`, `nixie`) and
       clear CodeRabbit findings.
 - [ ] Push the branch and open the draft pull request.
