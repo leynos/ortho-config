@@ -1293,6 +1293,20 @@ while leaving it untouched. The behavioural scenario keeps its own, separately
 useful claim — an entry the current key does not name is neither read nor
 rewritten — under a title that states it.
 
+2026-11-21, amended for M1: `with_available_names` keeps silently ignoring a
+catalogue on an unsupported declaration, and says why rather than being made to
+match `with_redaction`. The asymmetry was raised as a pre-merge observation on
+the grounds that one builder fails where the other stays silent. The difference
+is what silence costs: dropping a redaction record would publish a protected
+value, whereas a dropped name catalogue has no surface on which to be observed,
+because an unsupported declaration carries no selection contract. Aligning them
+would either make the security-relevant builder lenient or force every caller
+that cannot yet know whether profiles are supported to branch. The behaviour is
+unchanged and both halves are already pinned by
+`available_names_do_not_opt_an_unsupported_declaration_in` and
+`redaction_on_an_unsupported_declaration_is_rejected`; the method's rustdoc now
+states the reason.
+
 ## Outcomes & retrospective
 
 M1 implemented on 2026-11-15 under the user's execution approval. No formal

@@ -153,6 +153,16 @@ impl ProfilesDeclaration {
     /// Names are sorted and deduplicated. An unsupported declaration is
     /// returned unchanged: supplying a catalogue does not opt an application
     /// into profiles.
+    ///
+    /// # Why a dropped catalogue is not an error
+    ///
+    /// [`Self::with_redaction`] rejects the same unsupported state instead,
+    /// and the difference is what silence would cost. Discarding a redaction
+    /// record would publish a protected value, so it must fail loudly. A
+    /// dropped name catalogue discloses nothing: an unsupported declaration
+    /// carries no selection contract, so it offers no surface on which a name
+    /// could be observed. Callers therefore need no branch to attach a
+    /// catalogue they could only have learned about later.
     #[must_use]
     pub fn with_available_names(mut self, names: impl IntoIterator<Item = ProfileName>) -> Self {
         if self.supported {
