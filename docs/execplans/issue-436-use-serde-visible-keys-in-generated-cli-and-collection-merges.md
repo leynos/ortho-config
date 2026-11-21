@@ -56,8 +56,10 @@ CLI ledger is keyed by the identifier.
       collection key made 5 of the 9 `serde_visible_keys` cases fail (renamed
       scalar defaults and CLI override, both vector append cases, and the
       explicit-false case). The fix was restored byte-for-byte afterwards.
-- [ ] Run the deterministic gates (`check-fmt`, `lint`, `test`,
-      `markdownlint`, `nixie`) and clear CodeRabbit findings.
+- [x] (2026-11-21) `check-fmt` and `markdownlint` pass; the two
+      `#[serde(flatten)]` compile-fail snapshots are generated and committed.
+- [ ] Run the remaining deterministic gates (`lint`, `test`, `nixie`) and
+      clear CodeRabbit findings.
 - [ ] Push the branch and open the draft pull request.
 
 ## Surprises & discoveries
