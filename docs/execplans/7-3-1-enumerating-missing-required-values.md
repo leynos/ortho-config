@@ -762,6 +762,30 @@ with a compatibility probe rather than an assumption.
   the requested migration step already exists as section 13 of
   `docs/v0-11-0-migration-guide.md`, so only the changelog pointer was missing.
 
+- [x] (2026-11-21) Dispositioned review `6001035675` on head `cee554e8`: one
+  inline finding, a User-Facing Documentation row, and a repeat of the Domain
+  Architecture row. The inline finding was valid. Both the changelog and the
+  developer's guide stated `skip_cli` as an unconditional requirement, but the
+  build only fails when the field type cannot supply a clap value parser; a
+  type that can parse keeps its generated argument. Both now read
+  `#[ortho_config(nested)]` plus `skip_cli` "when the object type has no clap
+  value parser for the generated argument", and keep the reason: the CLI
+  builder emits an argument for every field it does not skip. The documentation
+  row was valid and is actioned as a new users'-guide subsection, "Report
+  requirements inside nested types", covering the two-part opt-in, the effect
+  of marking a child, and the `RequiredConfigSchema` contract. Its example is a
+  registered, compiled, and run documentation example:
+  `guide-nested-requirements` is listed in `EXPECTED_EXAMPLE_IDS`,
+  `STANDARD_RUST_EXAMPLES`, and `SIMPLE_RUNS`, with the asserted stdout
+  `missing=database.host`. That pins both the claim that a marked child reports
+  leaf paths and the claim that an unmarked child cannot. The Domain
+  Architecture row repeated the same six demands without new evidence after the
+  previous round's source-backed rebuttal; `env_route.rs` is still a pure
+  function of a path and a prefix importing only `ConfigPath`, and
+  `serde_json::Value` is still the crate's canonical merge representation as
+  recorded in ADR-0024's 2026-11-20 amendment. It is answered once more with
+  that evidence rather than repaired.
+
 ## Surprises & discoveries
 
 The full local suite aborted once at round c7 on

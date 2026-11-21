@@ -478,13 +478,14 @@ the attribute grammar decides, and CLI hints for leaves the generated parser
 can actually populate. It never reads a configuration value, the environment,
 or the process arguments at macro time.
 
-Mark the parent field of a nested child type with `#[ortho_config(nested)]` and
-`skip_cli`. The CLI builder emits an argument for every field it does not skip,
-and clap needs a value parser for that argument's type, which an object type
-normally does not provide, so the build can fail without `skip_cli`. The
-generated schema strips one `Option` and any `Box` wrappers before composing
-the child, so an optional parent deactivates its subtree while a required
-parent still activates its required descendants.
+Mark the parent field of a nested child type with `#[ortho_config(nested)]`,
+and add `skip_cli` when that field's type has no clap value parser for the
+generated argument. The CLI builder emits an argument for every field it does
+not skip, and clap needs a value parser for the argument's type, which an
+object type normally does not provide, so the build fails without `skip_cli` in
+that case. The generated schema strips one `Option` and any `Box` wrappers
+before composing the child, so an optional parent deactivates its subtree while
+a required parent still activates its required descendants.
 
 `requiredness::activation` decides one field's activation, and the choice
 depends on which loader reads the type. A declared or inferred default is

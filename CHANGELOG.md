@@ -124,11 +124,11 @@ All notable changes to this project will be documented in this file.
   or an enum payload still fails through Serde's own error. Child types take
   part in nested composition through two complementary steps: derive
   `RequiredConfigSchema` on the child, and mark the parent field
-  `#[ortho_config(nested, skip_cli)]`. The marker describes the parent field,
-  and `skip_cli` is required because the CLI builder emits an argument for
-  every field it does not skip, and an object type normally has no value parser
-  for that argument. A selected subcommand is covered as well, and its report
-  names that command's `PREFIX_CMDS_<NAME>_<FIELD>` variables and
+  `#[ortho_config(nested)]`, adding `skip_cli` when the object type has no clap
+  value parser for the generated argument. The marker describes the parent
+  field, and `skip_cli` is needed because the CLI builder emits an argument for
+  every field it does not skip. A selected subcommand is covered as well, and
+  its report names that command's `PREFIX_CMDS_<NAME>_<FIELD>` variables and
   `[cmds.<name>]` file paths, so the advertised spellings are the ones the
   loader really reads; only the selected variant contributes requirements.
   These loaders never run the declaring type's generated defaults struct, so a

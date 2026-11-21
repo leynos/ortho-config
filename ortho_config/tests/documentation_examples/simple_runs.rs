@@ -63,6 +63,11 @@ const SIMPLE_RUNS: &[SimpleRun] = &[
         stdout: "format=Some(\"json\")\n",
     },
     SimpleRun {
+        id: "guide-nested-requirements",
+        args: &[],
+        stdout: "missing=database.host\n",
+    },
+    SimpleRun {
         id: "guide-localization",
         args: &[],
         stdout: "verbose=true\n",

@@ -68,6 +68,7 @@ const STANDARD_RUST_EXAMPLES: &[&str] = &[
     "guide-clap-only-parse",
     "guide-errors",
     "guide-missing-values",
+    "guide-nested-requirements",
     "guide-localization",
     "guide-localization-ids",
     "guide-tracing",

@@ -1237,6 +1237,67 @@ fn main() {
 The library never exits on its own. A consumer decides whether a missing value
 is fatal, retryable, or recoverable from a prompt.
 
+### Report requirements inside nested types
+
+A child type takes part in requirement reporting only when both halves of the
+opt-in are present: derive `RequiredConfigSchema` on the child, and mark the
+parent field with `#[ortho_config(nested)]`. Add `skip_cli` when the object
+type has no clap value parser for the generated argument, because the CLI
+builder emits a flag for every field it does not skip. The marker describes the
+parent field, never the child type.
+
+<!-- tested-example: guide-nested-requirements -->
+```rust
+use ortho_config::{OrthoConfig, OrthoError, RequiredConfigSchema};
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Deserialize, Serialize, RequiredConfigSchema)]
+struct Database {
+    host: String,
+}
+
+#[derive(Debug, Deserialize, Serialize, OrthoConfig)]
+#[ortho_config(prefix = "APP_")]
+struct AppConfig {
+    #[ortho_config(nested, skip_cli)]
+    database: Database,
+}
+
+fn main() {
+    match AppConfig::load_from_iter(["acme"]) {
+        Ok(config) => println!("host={}", config.database.host),
+        Err(error) => match error.as_ref() {
+            OrthoError::MissingRequiredValues(report) => {
+                let missing: Vec<String> = report
+                    .items()
+                    .iter()
+                    .map(|item| item.path().render())
+                    .collect();
+                println!("missing={}", missing.join(","));
+            }
+            other => eprintln!("configuration error: {other}"),
+        },
+    }
+}
+```
+
+Run against an empty configuration, this prints `missing=database.host`.
+
+Only a marked child contributes requirements. An unmarked child contributes no
+internal keys: the parent reports the field itself as one object-shaped value,
+rendered as a file table. An absent optional parent deactivates its whole
+subtree, because no value can reach a child the parent does not have, while a
+required parent still reports its required descendants.
+
+`RequiredConfigSchema` is the derive for nested types. It records the type's
+own field keys and requiredness and does nothing else: it creates no CLI, no
+loader, and no discovery policy, so a child never needs `OrthoConfig` merely to
+expose a schema. Do not combine it with `#[derive(OrthoConfig)]` on the same
+type, because the configuration root's derive already emits the implementation
+and adding both produces a duplicate-implementation error. See
+[nested requirement schemas](v0-11-0-migration-guide.md#13-adopt-nested-requirement-schemas-or-widen-your-own-helpers)
+for the migration steps that adopt either half.
+
 ## Localize help and parse failures together
 
 Localization is most reliable when the command metadata is translated before

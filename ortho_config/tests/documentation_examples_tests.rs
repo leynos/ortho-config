@@ -54,6 +54,7 @@ const EXPECTED_EXAMPLE_IDS: &[&str] = &[
     "guide-metrics-install",
     "guide-missing-values",
     "guide-missing-values-output",
+    "guide-nested-requirements",
     "guide-orthohelp-command",
     "guide-orthohelp-bridge-cache-metrics",
     "guide-orthohelp-format-all",
