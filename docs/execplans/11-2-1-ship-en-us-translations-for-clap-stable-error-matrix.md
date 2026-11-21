@@ -1451,6 +1451,28 @@ stopping and reporting.
         that describes an implementation delivered into an open review, with
         the narrative moved below it.
 
+- [x] (2026-11-21) Round-21 certificate on the frozen tree, which became
+      commit `a6a7d0d9`. `make check-fmt` (113 files unchanged),
+      `make typecheck`, `make lint` (rustdoc, Clippy and Whitaker clean;
+      docstring coverage 1044/1044, 100.0%), `make markdownlint` (0 issues in
+      113 files, spelling gate clean and `typos.toml` current), `make nixie`
+      (114 diagrams), `make test-workflow-contracts` (729 passed, 1 skipped),
+      `make test` and the standalone `make boundary` all pass, run sequentially
+      and each started once. `make test` ran 122 binaries with 3230 passed, 0
+      failed and 44 ignored, and the Python suite 128 passed with 5 skipped.
+      The standalone `make boundary` passed with 44 passed, 0 failed and 10
+      ignored in 39.25 s. The focused `clap_error_coverage` suite passes 87
+      tests, up from 83. The scrutineer bound the run to one candidate before
+      and after: HEAD `8055cee0`, eleven changed paths, changed-set hash
+      `78498069`.
+
+- [x] (2026-11-21) The first Round-21 certificate attempt was refused at
+      `lint-clippy` with three denied `clippy::uninlined_format_args` errors in
+      the new `bail!` calls of `expansion.rs`, so Whitaker and docstring
+      coverage never ran on that tree. The three format strings now capture
+      `origin` directly, the lint stays denied, and the re-taken certificate
+      covers all three lint stages.
+
 ## Surprises & discoveries
 
 The plan first incorporated merged PR #651 at
