@@ -1297,7 +1297,9 @@ expose a schema. Do not combine it with `#[derive(OrthoConfig)]` on the same
 type, because the configuration root's derive already emits the implementation
 and adding both produces a duplicate-implementation error. See
 [nested requirement schemas](v0-11-0-migration-guide.md#13-adopt-nested-requirement-schemas-or-widen-your-own-helpers)
-for the migration steps that adopt either half.
+for the migration steps that adopt either half. See the
+[requirement-schema contract](developers-guide.md#the-manual-requirement-schema-contract)
+when implementing the trait by hand.
 
 ## Localize help and parse failures together
 
