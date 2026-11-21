@@ -3107,10 +3107,16 @@ means adding its rejection message here and a case to the `rstest` table.
 
 `cargo-orthohelp/src/root_type_tests.rs` pins the named accepted and rejected
 forms with an `rstest` table. `cargo-orthohelp/src/root_type_proptests.rs`
-covers the remaining input space with two properties: whatever is accepted
-renders as identifier path syntax only, and a rendering re-parses unchanged
-under a different crate name. The second property is what proves the rendering
-is already qualified, so a later consumer cannot silently re-qualify it.
+covers the remaining input space with four properties in two pairs. Over
+arbitrary strings, whatever the parser accepts renders as identifier path
+syntax only, and a rendering re-parses unchanged under a different crate name;
+the second is what proves the rendering is already qualified, so a later
+consumer cannot silently re-qualify it. Over paths generated from the grammar's
+own building blocks — raw identifiers, combining marks, spacing variants, and a
+leading `crate` — the parser must accept the input, so a run cannot pass by
+accepting nothing. The oracle uses Rust's XID character classes rather than
+`char::is_alphanumeric`, because an identifier may continue with a combining
+mark that the alphanumeric test rejects.
 `cargo-orthohelp/tests/cli_dispatch.rs` exercises both input sources with
 injection-shaped values, asserting the diagnostic and the absence of the
 payload's marker file.

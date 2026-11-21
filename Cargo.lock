@@ -336,6 +336,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "trybuild",
+ "unicode-ident",
  "windows",
 ]
 
