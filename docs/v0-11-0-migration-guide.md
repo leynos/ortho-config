@@ -7,7 +7,7 @@ v0.10.0 to v0.11.0. Applications that derive their configuration and read agent
 context need no code changes: every new capability is opt-in, and the wire
 contract stays additive.
 
-Two areas deserve a review before release:
+Three areas deserve a review before release:
 
 - Rust code that builds documentation IR or an `AgentCommand` with a struct
   literal must name the new `renderer` and `output` fields;

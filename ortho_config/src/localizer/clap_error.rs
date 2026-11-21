@@ -8,12 +8,15 @@
 //! preserves the rendered usage tail, but it does not carry over the internal
 //! `clap` context beyond what is present in the original `Display` output.
 
+use super::clap_error_ids::{ClapErrorTranslation, translation_for};
 use crate::{LocalizationArgs, Localizer};
 use clap::{
     Command as ClapCommand,
     error::{ContextKind, ContextValue, Error as ClapError, ErrorKind},
 };
+use std::borrow::Cow;
 use std::collections::HashMap;
+use std::error::Error as _;
 use std::sync::Arc;
 
 /// Builds a formatter suitable for [`clap::Command::try_get_matches`] error
@@ -31,12 +34,18 @@ pub fn clap_error_formatter(
 
 /// Rewrites a `clap` error message using the provided localizer.
 ///
-/// - Maps the [`ErrorKind`] to a Fluent identifier of the form
-///   `clap-error-<kebab-kind>`.
+/// - Consults [`CLAP_ERROR_IDS`](super::CLAP_ERROR_IDS) for the kind's
+///   outcome: translated kinds name their Fluent identifier, display-only
+///   kinds are returned untouched, and a kind newer than the matrix derives a
+///   `clap-error-<kebab-kind>` identifier.
 /// - Includes relevant [`ContextKind`] values as Fluent arguments (for
-///   example, `argument`, `value`, `expected`, `actual`).
+///   example, `argument`, `value`, `expected`, `actual`), plus the details
+///   `clap` keeps outside its context map: a value parser's rejection reason
+///   as `reason`, and, for a conflict, the prior argument as `prior` and which
+///   of the two conflict shapes surfaced as `conflict_kind`.
 /// - Falls back to the original `clap` message when the localizer does not
-///   return a translation.
+///   return a translation, so a missing Fluent argument never replaces a
+///   usable diagnostic with an unresolved placeholder.
 /// - Intended for display-only scenarios: the returned [`ClapError`] carries
 ///   the translated text and original rendered tail but does not preserve the
 ///   internal `clap` context/command metadata.
@@ -66,14 +75,11 @@ pub fn localize_clap_error_with_command(
     localizer: &dyn Localizer,
     command: Option<&ClapCommand>,
 ) -> ClapError {
-    if matches!(
-        error.kind(),
-        ErrorKind::DisplayHelp | ErrorKind::DisplayVersion
-    ) {
-        return error;
-    }
-
-    let id = message_id(error.kind());
+    let id = match catalogue_id(error.kind()) {
+        CatalogueId::Skip => return error,
+        CatalogueId::Translate(identifier) => Cow::Borrowed(identifier),
+        CatalogueId::Derived(identifier) => Cow::Owned(identifier),
+    };
     let args = localization_args(&error, command);
     let args_ref = (!args.is_empty()).then_some(&args);
 
@@ -136,18 +142,25 @@ fn append_tail(translated: String, tail: &str) -> String {
     }
 }
 
-/// Maps `clap` error kinds to the stable `clap-error-<kind>` catalogue namespace.
+/// The catalogue decision for one clap error kind.
+enum CatalogueId {
+    /// The matrix names an embedded identifier to look up.
+    Translate(&'static str),
+    /// clap renders this surface itself, so the error is returned untouched.
+    Skip,
+    /// The matrix predates the kind, so derive the legacy identifier shape.
+    Derived(String),
+}
+
+/// Consults the published matrix before deriving an identifier.
 ///
-/// Common missing-argument and missing-subcommand cases use the established
-/// catalogue keys; remaining kinds derive their suffix from the enum variant.
-fn message_id(kind: ErrorKind) -> String {
-    match kind {
-        ErrorKind::MissingRequiredArgument => "clap-error-missing-argument".to_owned(),
-        ErrorKind::DisplayHelpOnMissingArgumentOrSubcommand | ErrorKind::MissingSubcommand => {
-            "clap-error-missing-subcommand".to_owned()
-        }
-        ErrorKind::UnknownArgument => "clap-error-unknown-argument".to_owned(),
-        _ => format!("clap-error-{}", to_kebab_case(kind)),
+/// A kind newer than the matrix keeps the pre-matrix derived identifier, so an
+/// unmapped kind still tries a translation instead of silently passing through.
+fn catalogue_id(kind: ErrorKind) -> CatalogueId {
+    match translation_for(kind) {
+        Some(ClapErrorTranslation::Translated(identifier)) => CatalogueId::Translate(identifier),
+        Some(ClapErrorTranslation::DisplayOnly) => CatalogueId::Skip,
+        None => CatalogueId::Derived(format!("clap-error-{}", to_kebab_case(kind))),
     }
 }
 
@@ -185,6 +198,11 @@ fn localization_args(
         "valid_subcommands",
         error.get(ContextKind::ValidSubcommand),
     );
+    // Only a conflict carries a prior argument, so the key is absent for every
+    // other kind rather than empty.
+    insert_context(&mut args, "prior", error.get(ContextKind::PriorArg));
+    insert_value_parser_reason(&mut args, error);
+    insert_conflict_kind(&mut args, error);
 
     // let-chains require edition 2024 (stabilised in Rust 1.88).
     if !args.contains_key("valid_subcommands")
@@ -201,6 +219,41 @@ fn localization_args(
     }
 
     args
+}
+
+/// Adds the rejection reason a value parser supplied for a rejected value.
+///
+/// clap keeps this reason on the error itself rather than in its context map,
+/// and renders it after the generic "invalid value" text. Without it, the
+/// translation would replace a diagnostic that names the actual problem with
+/// one that only says a parser declined the value.
+fn insert_value_parser_reason(args: &mut LocalizationArgs<'static>, error: &ClapError) {
+    let Some(reason) = error.source() else {
+        return;
+    };
+    let text = reason.to_string();
+    if !text.is_empty() {
+        args.insert("reason", text.into());
+    }
+}
+
+/// Names which conflict surfaced, so the message can describe it correctly.
+///
+/// clap reports both a repeated argument (`--debug --debug`) and a collision
+/// between distinct arguments as `ArgumentConflict`, and distinguishes them
+/// only by whether the offending argument is also the prior one. A message
+/// that always blamed "another argument" would misdescribe the repeated case,
+/// where there is no other argument involved.
+fn insert_conflict_kind(args: &mut LocalizationArgs<'static>, error: &ClapError) {
+    if error.kind() != ErrorKind::ArgumentConflict {
+        return;
+    }
+    let offending = error.get(ContextKind::InvalidArg);
+    let is_repeated = offending.is_some() && offending == error.get(ContextKind::PriorArg);
+    args.insert(
+        "conflict_kind",
+        if is_repeated { "repeated" } else { "conflict" }.into(),
+    );
 }
 
 /// Adds one non-empty context value, leaving absent and unsupported values out of the map.

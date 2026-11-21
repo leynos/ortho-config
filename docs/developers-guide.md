@@ -239,8 +239,12 @@ it audits to be a class member, because the raised allowance is written for the
 class and a serialized non-member would fall through to the base tier, while
 the class itself may be raised without being serialized. A binary can drive a
 child `cargo` without touching the shared caches the group protects, so the
-class can be the wider of the two. It is not wider today: the two sets
-coincide, and the contract does not require that they keep doing so.
+class can be the wider of the two. It is wider by two today: `clap_error_cli`
+builds its fixture into the shared target directory and `clap_error_coverage`
+runs `cargo metadata`, and neither clears `target/orthohelp` nor builds against
+`target/documentation-examples/v2`, so both take the class's raised allowance
+without joining the group. The contract does not require the two sets to keep
+coinciding.
 
 `cli_dispatch` is a member of both. Its `.config/nextest.toml` entry places it
 in `orthohelp_cache` and gives it the class's raised allowance, so neither
@@ -1171,15 +1175,16 @@ generation in `ortho_config_macros`; and aggregate translation reports in
   optional feature for this adapter and dependency. `cargo-orthohelp`
   translation tooling is an integration point: the bridge adapts an
   application-owned loader and neither creates nor owns it.
-- `ClapErrorCoverage` and the exhaustive error-kind count gate remain proposed.
-  The proposed `ortho_config/build.rs` emits
-  `ORTHO_CONFIG_CLAP_ERROR_KIND_COUNT` for the total variant count of the
-  supported resolved `clap_builder` identity and verifies the compiled `clap`
-  facade re-export. Only then is `const_assert_eq!` against the matrix length a
-  mechanical gate. `ClapErrorCoverage` reports translated identifiers the
-  supplied localizer cannot resolve. See
-  [design §6.1.1](cli-localization-design.md#611-proposed-coverage-gate) and
-  §6.2 for the contract.
+- `ClapErrorCoverage` remains proposed. The error-kind coverage gate is a
+  test-only pre-publication check, not a build script: it verifies this
+  workspace's resolved `clap` → `clap_builder` identity against the root
+  `Cargo.lock` and `cargo metadata --locked --offline`, counts the `ErrorKind`
+  variants with `syn`, and compares that count with a reviewed test constant
+  that `const_assert_eq!` also checks against the matrix length. It makes no
+  claim about consumer resolutions. `ClapErrorCoverage` reports translated
+  identifiers the supplied localizer cannot resolve. See
+  [design §6.1.1](cli-localization-design.md#611-pre-publication-coverage-gate)
+  and §6.2 for the contract.
 - `MissingTranslationReporter` / `MissingTranslationEvent` and
   `cargo-orthohelp` JSON translation coverage reports remain roadmap work; the
   proposed reporter aggregates events under
@@ -1389,6 +1394,224 @@ can be tracked.
 Run `coderabbit review --agent` after major milestones that change schemas,
 documentation contracts, or externally visible behaviour. Clear its concerns
 before moving to the next milestone.
+
+## The pre-publication clap coverage gate
+
+`clap::error::ErrorKind` is `#[non_exhaustive]`, so a `clap_builder` release
+can add a variant the shipped matrix does not classify. The workspace detects
+that before publication with a test-only gate, specified in
+[design §6.1.1](cli-localization-design.md#611-pre-publication-coverage-gate)
+and [ADR-0024](adrs/adr-0024-pre-publication-clap-coverage-gate.md). It adds no
+build script, writes no `rustc-env` value, and runs in no consumer build.
+
+### Ownership and pieces
+
+- `ortho_config/tests/clap_error_coverage.rs` is the gate. It wires the checks
+  in publication order: metadata, lock, identity, edge, count.
+- `ortho_config/tests/support/clap_publication/` holds the decisions as pure
+  functions, split by subject. `lock` parses `Cargo.lock` and selects entries,
+  `identity` holds the reviewed identities and the metadata cross-checks,
+  `library` selects the crate root Cargo reports, `source` locates and counts
+  `ErrorKind`, `audit` holds the attribute, declaration-shape, and item-macro
+  refusals, `symlinks` stages the trees that prove which symlinks the walk may
+  ignore and which it must refuse, and `files` confines reads to capability
+  handles. `controls`, `properties`, and `classes` are their unit, property,
+  and class-classification tests. `source` walks `mod` declarations from that
+  reported crate root and certifies the declaring file only when every hop is
+  unconditional: a `cfg`-gated module, an equivalent condition reached through
+  a nested `cfg_attr`, or a module file that gates its own contents, makes the
+  count describe a build the gate cannot see, so it refuses instead. A
+  `#[path]` declaration is refused for the same reason: the walk resolves
+  default file names, and the compiler may load a different file. The root is
+  the file metadata reports for the unique library target, not `src/lib.rs`: a
+  package may set `[lib] path` and keep an unused `src/lib.rs` beside the file
+  it really compiles. A package with no library target, or with more than one,
+  is refused rather than guessed at. A declaration nested inside an inline
+  module is refused too: the count is a file-level scan, so it cannot bind a
+  nested declaration to the inventory the crate exports, and a compiled
+  file-level decoy would otherwise let the count describe the wrong enum. A
+  condition on the module does not exempt it — the compiler decides whether the
+  module is present, and a condition can hold. Two further shapes are refused
+  rather than counted around. An item-level macro invocation is refused unless
+  the gate can read its transcription: Rust substitutes the items a macro
+  produces after parsing, so `include!` could splice the exported inventory
+  from a file the walk never reads while a decoy beside it is counted. Only a
+  macro this file defines with `macro_rules!` has tokens the gate can scan, and
+  it accepts one when neither the transcription nor the call's arguments can
+  spell `ErrorKind`; `compile_error!` is allowed because it produces no item. A
+  name a transcription invokes is resolved the same way, and an inert name is
+  trusted only where no import could have rebound it: an exact `use` binding,
+  an internal glob bounded by the crate's own names, or a `#[macro_use]` module
+  — including one applied through `cfg_attr` — makes it ambiguous. A raw
+  identifier such as `r#include` resolves as its plain spelling. A `mod`
+  declaration whose file the walk cannot read is refused as well: the walk
+  skips symlinks so an alias is not counted twice, which means a module file
+  that is a symlink leaves the compiler loading source the walk never parses.
+- `ortho_config/tests/support/clap_reviewed.rs` holds
+  `CLAP_ERROR_KIND_COUNT`, the reviewed total. The gate and
+  `tests/clap_error_matrix.rs` both read it, so the two cannot drift: the
+  matrix test's `const_assert_eq!` fails the build when the matrix length and
+  the reviewed total disagree.
+- `ortho_config/tests/fixtures/clap_publication/` holds the lock, target, and
+  source fixtures the controls consume. They are data, not compiled targets. Its
+  `module_tree/` trees each drive one refusal of the module walk,
+  `module_tree/custom_library_root/` pairs a moved crate root with an unused
+  default-root decoy, and `module_tree/nested_definition/` pairs a compiled
+  seventeen-variant decoy with an eighteen-variant inventory declared in an
+  inline module. Two more pair the same decoy with the inventory behind a
+  condition: `module_tree/conditional_nested_definition/` uses `#[cfg(all())]`,
+  which always holds, and `module_tree/cfg_attr_nested_definition/` applies it
+  through `#[cfg_attr(all(), cfg(all()))]`. Its `targets/` files are
+  `cargo metadata` target lists, so crate-root selection and both of its
+  refusals are proved against the shape metadata actually emits.
+  `module_tree/macro_generated_definition/` pairs a decoy with an inventory that
+  `include!` splices from a contained `inventory.inc`, which the Rust source
+  walk does not read. `module_tree/cfg_attr_macro_use/` and
+  `module_tree/raw_identifier_include/` stage the two further spellings of that
+  splice: a `#[macro_use]` applied through `cfg_attr(all(), …)`, and a
+  transcription that spells `include!` as `r#include!`. The symlink trees
+  cannot be committed — a symlink materializes as a text file on a Windows
+  checkout — so `symlinks` stages them in a temporary directory: one aliases
+  the declaring module and must stay uncounted, the other makes a declared
+  module file a symlink and must be refused.
+- `ortho_config/tests/fixtures/clap_matrix/drifted_rows.rs` holds the matrix
+  drift fixtures. It is a committed module rather than loose data because the
+  checks it exercises are typed over `ErrorKind` and `ClapErrorTranslation`;
+  `tests/clap_error_matrix.rs` includes it and runs the real invariants over
+  both tables.
+- `ortho_config/tests/ui/` pins the compile-time contracts of the public API.
+  `clap_error_translation_non_exhaustive.rs` relies on `ClapErrorTranslation`
+  being `#[non_exhaustive]`, so a downstream match without a wildcard must not
+  compile. `clap_error_matrix_length.rs` asserts `CLAP_ERROR_IDS` against a
+  drifted total, so the constant comparison the matrix suite depends on is
+  observed failing as `E0080` rather than assumed. `tests/compile_fail.rs`
+  builds both and compares the diagnostics.
+
+### Prerequisites
+
+- The root `Cargo.lock` must describe the resolution under review and be
+  committed. The gate runs `cargo metadata --locked --offline`, so a stale
+  lock, an unlocked change, or a missing registry source fails the gate rather
+  than silently checking a different identity. It also passes
+  `--filter-platform host-tuple`, so an offline resolve covers only the
+  platform under test and dependencies of other platforms are neither required
+  nor fetched. The facade declares `clap` without a target predicate, so the
+  filter cannot hide the edge the gate follows.
+- The test-only dev-dependencies `cargo_metadata`, `syn` (with `full`),
+  `toml`, and `static_assertions` must be available.
+- The gate reads `ortho_config`'s configured target and feature selection.
+  Keep the `clap` dependency unconditional: a target- or feature-conditional
+  edge makes the resolution ambiguous, and the gate refuses it.
+
+### Run the gate
+
+```bash
+cargo test -p ortho_config --test clap_error_coverage --locked --offline
+cargo test -p ortho_config --test clap_error_matrix --locked --offline
+cargo test -p ortho_config --test clap_error_translations --locked --offline
+```
+
+`make test` runs all three as part of the suite. Run them directly when
+changing the matrix, the reviewed identity, or the resolved `clap` version.
+`clap_error_matrix` proves which identifiers exist and which kinds are
+display-only; `clap_error_translations` proves the other half of the contract,
+that every `Translated` identifier has an embedded en-US message, that the
+message renders without Fluent errors for the arguments `clap` supplies, that a
+consumer catalogue takes precedence, and that the stock diagnostic survives
+when no translation is available. Run the translations suite when changing a
+catalogue entry or the fallback path.
+
+The gate's `cargo metadata` call and the CLI suite's one-time fixture build are
+nested Cargo invocations, so both run through
+`test_helpers::process::run_with_deadline` with an explicit deadline. A wedged
+Cargo call then fails the suite within a known budget instead of hanging it.
+The shared runner owns process-tree cleanup and stream draining, and it retains
+the complete output of each stream; the deadline bounds time, not bytes, so the
+captured memory grows with whatever the child writes.
+
+### The CLI suite's fixture build
+
+`ortho_config/tests/clap_error_cli.rs` (target `clap_error_cli`) drives the
+error paths through a built fixture binary rather than `clap`'s in-process API,
+so its assertions cover the process-visible contract: stdout, stderr, and exit
+status. Two details keep that build honest inside nextest:
+
+- nextest runs every case in its own process, so a process-local `OnceLock`
+  serializes nothing. Builds instead take an exclusive advisory `fs4` lock on
+  an empty file beside the test binary — the one path every process of a run
+  already shares — through
+  `ortho_config/tests/support/clap_error_fixture_lock.rs`. A second process
+  waits for the first build to finish instead of nesting Cargo beside it.
+- One 600-second budget covers both the wait for that lock and the build, and
+  the pair fits inside nextest's 960-second allowance for the binary. A lock
+  held by a stuck process therefore fails with a message naming the lock file,
+  rather than consuming the allowance the fixture runs still need.
+
+`fs4` locks a `std::fs::File` and `cap-std` exposes no locking API, so that one
+module steps outside the capability policy. The root `dylint.toml` records the
+exemption under `no_std_fs_operations` as a narrow path, with its rationale;
+the rest of the suite keeps capability-scoped file handling.
+
+### Troubleshooting a refusal
+
+Every refusal names the check that failed. The repair is always a review
+decision, never widening the gate.
+
+| Refusal                                                                  | Meaning                                                                                                               | Repair                                                                           |
+| ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| `clap_builder declares N ErrorKind variants but the reviewed total is M` | Upstream added, removed, or merged a variant                                                                          | Review the release, then follow "When clap adds a variant"                       |
+| `... but the reviewed version is ...`                                    | The lock moved to a new release                                                                                       | Review that release, then update `ReviewedPackage`                               |
+| `... but the reviewed checksum is ...`                                   | A different artefact for the same version                                                                             | Treat it as a new identity: review it, or restore the intended version           |
+| `... but the reviewed source is ...`                                     | A `[patch]`, path, or git override                                                                                    | Remove the override, or review it deliberately and record why                    |
+| `Cargo.lock has no package named ...`                                    | The lock lost an expected entry                                                                                       | Rebuild the lock; confirm the facade edge still resolves                         |
+| `Cargo.lock lists more than one package named ...`                       | Two versions are locked                                                                                               | Make one version apply, or the review must cover both                            |
+| `records no clap_builder dependency for clap`                            | The facade edge changed                                                                                               | Check the resolved `clap` features and the lock's dependency entries             |
+| `conditionally compiles ...`                                             | A `cfg`-gated enum or variant                                                                                         | The gate fails closed; redesign it for that shape, do not drop the audit         |
+| `does not unconditionally compile it from lib.rs ...`                    | The declaring file sits behind a conditional `mod` (directly, or through a nested `cfg_attr`), or no `mod` reaches it | Fail closed: a conditional chain proves nothing about the resolved build         |
+| `... carries a #[path] attribute`                                        | A `mod` declaration names the file it loads instead of the default name                                               | Fail closed, or extend the walk to resolve `#[path]` under review                |
+| `expected a crate root lib.rs ...`                                       | The resolved `src/` has no crate root to walk from                                                                    | Check the resolved package; a moved library entry point needs a reviewed locator |
+| `... should be valid Rust`                                               | `syn` could not parse the resolved source                                                                             | Inspect the file: a vendor patch or an unexpected `src/` file explains it        |
+| `declares more than one top-level ErrorKind enum`                        | The definition moved or split                                                                                         | Update the locator in `source` with a covered change                             |
+| `declares ErrorKind inside mod ...`                                      | The inventory sits in an inline module rather than at file level                                                      | Fail closed, or bind a nested declaration under a reviewed change                |
+| `declares no top-level ErrorKind enum to inventory`                      | The definition left the files the gate scans                                                                          | Update the locator in `source` with a covered change                             |
+
+The `conditionally compiles` refusal is deliberate. Counting a conditional
+variant would report an inventory that may not be compiled, so the gate stops
+instead.
+
+### When clap adds a variant
+
+1. Confirm the change upstream: read the release notes and the added source.
+   Do not update the total from the gate's failure message alone.
+2. Classify the variant as translated or display-only. A kind that produces
+   text `clap` renders itself is display-only.
+3. For a translated kind, add the row to `CLAP_ERROR_IDS` in
+   `ortho_config/src/localizer/clap_error_ids.rs`, add an en-US message to
+   `ortho_l10n/locales/en-US/messages.ftl`, add the matrix case in
+   `tests/clap_error_matrix.rs`, and add a rendering case in
+   `tests/clap_error_translations.rs`. Choose an identifier in the
+   `clap-error-` namespace that no row already uses; the four historical
+   spellings must not change.
+4. For a display-only kind, add the sentinel row and extend the expected
+   display-only set in `tests/clap_error_matrix.rs`.
+5. Update `CLAP_ERROR_KIND_COUNT` in `tests/support/clap_reviewed.rs` and the
+   matching fixture at
+   `tests/fixtures/clap_publication/sources/error_kind_reviewed.rs`. If the
+   resolved version, source, or checksum moved, update `REVIEWED_CLAP` and
+   `REVIEWED_CLAP_BUILDER` in `tests/support/clap_publication/identity.rs`.
+6. Update the reviewed date, identity, and total in
+   [design §6.1.1](cli-localization-design.md#611-pre-publication-coverage-gate)
+   and the table in the
+   [users' guide](users-guide.md#translate-or-override-clap-parse-errors).
+7. Run both targets, then the full gates.
+
+### Boundary
+
+The gate validates this workspace's publication graph only. A consumer that
+resolves a different `clap_builder` keeps the shipped matrix and relies on the
+runtime fallback for an unmapped kind; no consumer build runs or fails this
+check. The gate does not classify variants, does not verify the Fluent
+messages' wording, and does not replace the matrix or translation suites.
 
 ## Agent-native architecture boundary
 

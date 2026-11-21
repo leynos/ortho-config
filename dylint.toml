@@ -14,6 +14,15 @@ excluded_paths = [
     # mid-build. cap-std exposes no locking API; the locked file is the
     # fixture's own lease file inside its private target.
     "identifier_artefact_e2e::identifier_artefact_e2e_support::lease",
+    # Clap error fixture build lock: nextest runs every case of
+    # `clap_error_cli` in its own process, so the one fixture build is
+    # serialised by an exclusive operating-system file lock that all processes
+    # of a run can reach beside the test binary. cap-std exposes no locking
+    # API and fs4 locks a std::fs::File and nothing else, so this module steps
+    # outside the capability policy; the only file it touches is the empty lock
+    # file the suite creates for itself. The rest of the suite keeps its
+    # capability-scoped handling.
+    "clap_error_cli::fixture_build_lock",
 ]
 excluded_crates = [
     # Configuration discovery library: its contract is to resolve and read

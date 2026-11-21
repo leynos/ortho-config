@@ -455,6 +455,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "clap_error_matrix_fixture"
+version = "0.11.0"
+dependencies = [
+ "clap",
+ "ortho_config",
+]
+
+[[package]]
 name = "clap_lex"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1504,6 +1512,7 @@ dependencies = [
  "anyhow",
  "camino",
  "cap-std",
+ "cargo_metadata 0.23.1",
  "clap",
  "clap-dispatch",
  "directories",
@@ -1531,6 +1540,8 @@ dependencies = [
  "serde-saphyr",
  "serde_json",
  "serial_test",
+ "static_assertions",
+ "syn 2.0.119",
  "tempfile",
  "thiserror 2.0.21",
  "toml 1.2.1+spec-1.1.0",
@@ -2542,6 +2553,12 @@ name = "smawk"
 version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b7c388c1b5e93756d0c740965c41e8822f866621d41acbdf6336a6a168f8840c"
+
+[[package]]
+name = "static_assertions"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 
 [[package]]
 name = "strip-ansi-escapes"

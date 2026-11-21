@@ -130,6 +130,106 @@ fn passes_through_display_help_errors() {
     );
 }
 
+/// Asserts clap-owned surfaces are returned untouched without any lookup.
+///
+/// Help and version text is rendered by clap itself and is not catalogue
+/// content, so the pipeline must neither replace nor even consult it. The
+/// localizer returns conspicuous text to prove a lookup would have changed the
+/// output.
+#[rstest]
+#[case::display_help(clap::error::ErrorKind::DisplayHelp)]
+#[case::display_help_on_missing_argument_or_subcommand(
+    clap::error::ErrorKind::DisplayHelpOnMissingArgumentOrSubcommand
+)]
+#[case::display_version(clap::error::ErrorKind::DisplayVersion)]
+fn display_only_kinds_skip_the_localizer(#[case] kind: clap::error::ErrorKind) {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    struct ConspicuousLocalizer {
+        lookups: Arc<AtomicUsize>,
+    }
+
+    impl Localizer for ConspicuousLocalizer {
+        fn lookup(&self, _id: &str, _args: Option<&LocalizationArgs<'_>>) -> Option<String> {
+            self.lookups.fetch_add(1, Ordering::SeqCst);
+            Some(String::from("CONSPICUOUS REPLACEMENT"))
+        }
+    }
+
+    let lookups = Arc::new(AtomicUsize::new(0));
+    let localizer = ConspicuousLocalizer {
+        lookups: Arc::clone(&lookups),
+    };
+    let error = clap::Error::raw(kind, "stock surface\nUsage: demo [OPTIONS]");
+    let stock = error.to_string();
+
+    let localised = localize_clap_error(error, &localizer);
+
+    assert_eq!(localised.kind(), kind, "{kind:?} should keep its kind");
+    assert_eq!(
+        localised.to_string(),
+        stock,
+        "{kind:?} should keep clap's own surface"
+    );
+    assert_eq!(
+        lookups.load(Ordering::SeqCst),
+        0,
+        "{kind:?} must not consult the catalogue"
+    );
+}
+
+/// Asserts a missing subcommand translates from clap's own context.
+///
+/// The real parse supplies `valid_subcommands`, so the catalogue message can
+/// name the available choices; clap's rendered usage tail must survive.
+#[rstest]
+fn missing_subcommand_translates_from_clap_context() {
+    use clap::{Command, error::ErrorKind};
+
+    struct NamedLocalizer;
+
+    impl Localizer for NamedLocalizer {
+        fn lookup(&self, id: &str, args: Option<&LocalizationArgs<'_>>) -> Option<String> {
+            if id != "clap-error-missing-subcommand" {
+                return None;
+            }
+            let subcommands = match args.and_then(|values| values.get("valid_subcommands")) {
+                Some(FluentValue::String(text)) => text.to_string(),
+                _ => String::new(),
+            };
+            Some(format!("Choose a subcommand from: {subcommands}"))
+        }
+    }
+
+    let mut command = Command::new("demo")
+        .subcommand(Command::new("greet"))
+        .subcommand(Command::new("take-leave"))
+        .subcommand_required(true);
+    let error = command
+        .try_get_matches_from_mut(["demo"])
+        .expect_err("missing subcommand should produce a clap error");
+    assert_eq!(error.kind(), ErrorKind::MissingSubcommand);
+
+    let rendered = localize_clap_error(error, &NamedLocalizer).to_string();
+
+    assert!(
+        rendered.contains("Choose a subcommand from:"),
+        "expected the translated body, got: {rendered}"
+    );
+    assert!(
+        rendered.contains("greet") && rendered.contains("take-leave"),
+        "expected every available subcommand, got: {rendered}"
+    );
+    assert!(
+        rendered.contains("Usage: demo <COMMAND>"),
+        "expected the rendered usage tail to survive, got: {rendered}"
+    );
+    assert!(
+        !rendered.contains('{'),
+        "no placeholder should remain unresolved: {rendered}"
+    );
+}
+
 #[rstest]
 fn translated_error_preserves_tail() {
     use std::sync::atomic::{AtomicBool, Ordering};

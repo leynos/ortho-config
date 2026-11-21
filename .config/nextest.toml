@@ -210,6 +210,24 @@ filter = 'binary(powershell_windows) | binary(nested_subcommand_end_to_end) | bi
 test-group = 'orthohelp_cache'
 slow-timeout = { period = "120s", terminate-after = 8 }
 
+# The two clap error binaries drive a child `cargo` without touching either
+# cache the group above protects: `clap_error_cli` builds the workspace fixture
+# binary into the shared target directory before running it, and
+# `clap_error_coverage` runs `cargo metadata` to locate the resolved
+# `clap_builder` source. They are therefore in the class but not in the
+# `orthohelp_cache` group, which is the wider-class case the contract in
+# `tests/workflow_contracts/child_cargo_tier_test.py` allows for.
+#
+# The branch that added them did not name them here, and `build-test (linux)`
+# run 43668509266 failed its workflow contract step with both reported on the
+# 600 s base allowance -- the same omission that had earlier caught
+# `cli_dispatch`. The allowance is the class's 960 s, sized for the nested
+# build these binaries can reach rather than for the warm `cargo metadata`
+# path `clap_error_coverage` usually takes.
+[[profile.default.overrides]]
+filter = 'binary(clap_error_cli) | binary(clap_error_coverage)'
+slow-timeout = { period = "120s", terminate-after = 8 }
+
 # The boundary contracts materialize their packaged crates once per *process*,
 # and nextest runs each test in its own process. Several of them therefore run
 # `cargo package` and unpack the same target directory side by side. Cargo's

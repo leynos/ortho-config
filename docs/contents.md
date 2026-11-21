@@ -107,6 +107,9 @@
   review the accepted `output(...)` derive group, the refusal-versus-silence
   distinction, the omission rules for a declared block, and the deferred stream
   framing and numeric exit taxonomy.
+- [ADR-0024: Pre-publication clap coverage gate](adrs/adr-0024-pre-publication-clap-coverage-gate.md):
+  review the test-only workspace gate for `ErrorKind` growth, the build-time
+  identity mechanism it supersedes, and the limits of the guarantee.
 - [Archived v0.8.0 roadmap](archive/v0-8-0-roadmap.md): review completed
   phases, steps, and tasks from the roadmap that preceded the active
   agent-native plan.
@@ -156,6 +159,9 @@
   `renderer` field when building documentation IR or `AgentCommand` literals,
   optionally declare how a command renders, collect bridge-cache metrics from
   the CLI, and adopt the shared test subprocess helpers.
+- [v0.12.0 migration guide](v0-12-0-migration-guide.md): re-check a
+  `clap-error-missing-subcommand` override, and enumerate `CLAP_ERROR_IDS`
+  rather than hard-coding the translated error kinds.
 
 ## Testing and documentation references
 
@@ -200,6 +206,10 @@
   usage of the Whitaker lint suite
 
 ## Execution plans
+
+- [Ship the en-US clap error matrix](execplans/11-2-1-ship-en-us-translations-for-clap-stable-error-matrix.md):
+  approval-gated plan for roadmap task 11.2.1, exhaustive translation coverage,
+  and the mechanical clap variant-count gate.
 
 - [Import Kani and Verus tooling](execplans/import-prover-tools.md): review
   the proposed pinned prover integration and its feature-adoption boundary.

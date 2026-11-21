@@ -93,6 +93,34 @@ pub struct LocalizerContext {
     pub clap_error: Slot<clap::Error>,
     pub baseline_error: Slot<String>,
     pub argument_label: Slot<String>,
+    pub command: Slot<clap::Command>,
+    pub error_kind: Slot<String>,
+    pub lookup_count: Slot<Arc<std::sync::atomic::AtomicUsize>>,
+    pub stock_outcome: Slot<ClapOutcome>,
+    pub localized_outcome: Slot<ClapOutcome>,
+}
+
+/// The observable surface of a rendered clap error.
+///
+/// Pass-through scenarios compare all three properties, so a translation that
+/// silently changed the text, the exit code, or the stream would fail.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ClapOutcome {
+    pub text: String,
+    pub exit_code: i32,
+    pub uses_stderr: bool,
+}
+
+impl ClapOutcome {
+    /// Captures how `clap` would render and report `error`.
+    #[must_use]
+    pub fn from_error(error: &clap::Error) -> Self {
+        Self {
+            text: error.to_string(),
+            exit_code: error.exit_code(),
+            uses_stderr: error.use_stderr(),
+        }
+    }
 }
 
 /// Scenario state for documentation IR scenarios.

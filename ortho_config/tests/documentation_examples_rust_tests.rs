@@ -65,6 +65,7 @@ const STANDARD_RUST_EXAMPLES: &[&str] = &[
     "guide-subcommand-merge-sources",
     "guide-subcommand-sources",
     "guide-selected-subcommand-sources",
+    "guide-clap-error-matrix",
     "guide-clap-only-parse",
     "guide-errors",
     "guide-localization",

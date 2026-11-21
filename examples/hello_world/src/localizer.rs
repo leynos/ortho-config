@@ -275,9 +275,9 @@ mod tests {
         };
 
         let mut args: LocalizationArgs<'_> = HashMap::new();
-        args.insert("valid_subcommands", "greet, take-leave".into());
+        args.insert("subcommand", "unknown-workflow".into());
 
-        let Some(message) = localiser.lookup("clap-error-missing-subcommand", Some(&args)) else {
+        let Some(message) = localiser.lookup("clap-error-invalid-subcommand", Some(&args)) else {
             panic!("catalogue for {locale_str} should include clap error copy");
         };
 
@@ -289,8 +289,8 @@ mod tests {
 
     /// Confirms each bundled catalogue translates the clap error copy.
     #[rstest]
-    #[case::english(langid!("en-US"), "Pick a workflow")]
-    #[case::japanese(langid!("ja"), "ワークフロー")]
+    #[case::english(langid!("en-US"), "Pick one of the available workflows")]
+    #[case::japanese(langid!("ja"), "利用可能なワークフロー")]
     fn localiser_translates_clap_errors(
         #[case] locale: LanguageIdentifier,
         #[case] expected_substring: &str,

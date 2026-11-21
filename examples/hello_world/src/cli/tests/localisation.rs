@@ -79,18 +79,21 @@ fn assert_localized_error(demo_localizer: &DemoLocalizer) -> Result<()> {
     let command = CommandLine::command()
         .with_base(CommandLine::LOCALIZATION_BASE)
         .localize(demo_localizer);
-    let err =
-        parse_localized_command::<CommandLine, _, _>(command, ["hello-world"], demo_localizer)
-            .err()
-            .ok_or_else(|| anyhow!("missing subcommand should be reported"))?;
+    let err = parse_localized_command::<CommandLine, _, _>(
+        command,
+        ["hello-world", "unknown-workflow"],
+        demo_localizer,
+    )
+    .err()
+    .ok_or_else(|| anyhow!("unknown subcommand should be reported"))?;
     let rendered = err.to_string();
     ensure!(
-        rendered.contains("Pick a workflow"),
+        rendered.contains("Pick one of the available workflows"),
         "expected consumer translation in error output: {rendered}"
     );
     ensure!(
-        rendered.contains("greet") && rendered.contains("take-leave"),
-        "expected available subcommands to flow into translation: {rendered}"
+        rendered.contains("unknown-workflow"),
+        "expected the rejected subcommand to flow into translation: {rendered}"
     );
     Ok(())
 }
