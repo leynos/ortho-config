@@ -2,17 +2,11 @@
 //!
 //! These tests drive the real binary with `--cache` and read the exported
 //! counters from its standard error, which is the only evidence that the
-//! recorder `main` installs claims the `metrics` global slot. The helpers that
-//! clear and match cache entries live here because no other lane needs them.
+//! recorder `main` installs claims the `metrics` global slot.
 
+use super::cache_entries::clear_cached_ir;
 use super::{DOCUMENTED_RUN_MUTEX, build_state, run_documented_command};
 use anyhow::{Context, Result, ensure};
-use cap_std::{
-    ambient_authority,
-    fs::{Dir, DirEntry},
-};
-use serde_json::Value;
-use std::ffi::OsStr;
 use std::path::Path;
 use std::sync::PoisonError;
 use std::time::Duration;
@@ -80,72 +74,6 @@ fn cache_operation_count(stderr: &str, operation: CacheOperation) -> usize {
     cache_event_lines(stderr)
         .filter(|line| line.contains(&operation_label))
         .count()
-}
-
-/// Delete the bridge-cache entries generated for one application.
-///
-/// The cache directory is named from a hash of the package files, the schema,
-/// and the tool version, so a test cannot name the entry it wants. Every entry
-/// records the application name it was generated for, which identifies the
-/// fixture exactly. Other scenarios share this target and match a different
-/// name, so their entries must survive; a missing cache root simply means the
-/// next run is cold for every package.
-fn clear_cached_ir(target: &Path, app_name: &str) -> Result<()> {
-    let Some(cache) = open_cache_root(target)? else {
-        return Ok(());
-    };
-    for candidate in cache.entries()? {
-        remove_fixture_entry(&cache, &candidate?, app_name)?;
-    }
-    Ok(())
-}
-
-/// Open the cache root, treating an absent root as an already-cold cache.
-///
-/// Only absence means "nothing cached". Any other open failure is reported:
-/// folding it into an empty cache would let an unreadable target directory look
-/// like a cache this test had already cleared, and the cold-run assertions
-/// would then be checking a state nothing established.
-fn open_cache_root(target: &Path) -> Result<Option<Dir>> {
-    let cache_root = target.join("orthohelp");
-    let opened = Dir::open_ambient_dir(&cache_root, ambient_authority());
-    if opened.as_ref().err().map(std::io::Error::kind) == Some(std::io::ErrorKind::NotFound) {
-        return Ok(None);
-    }
-    let cache = opened.with_context(|| format!("open {}", cache_root.display()))?;
-    Ok(Some(cache))
-}
-
-/// Remove one cache entry when it holds IR generated for `app_name`.
-///
-/// Entries this repository did not write — another application's, a partial
-/// publish, unreadable IR — are not ours to delete, so they stay.
-fn remove_fixture_entry(cache: &Dir, entry: &DirEntry, app_name: &str) -> Result<()> {
-    let name = entry.file_name();
-    if entry.file_type()?.is_dir() && is_fixture_ir(cache, &name, app_name) {
-        cache
-            .remove_dir_all(&name)
-            .with_context(|| format!("remove cached IR entry {}", name.to_string_lossy()))?;
-    }
-    Ok(())
-}
-
-/// Report whether a cache entry records `app_name` as the application it was
-/// generated for.
-///
-/// An entry that cannot be read or parsed as JSON is not evidence about the
-/// fixture, so it counts as another application's and is left alone.
-fn is_fixture_ir(cache: &Dir, name: &OsStr, app_name: &str) -> bool {
-    let Ok(directory) = cache.open_dir(name) else {
-        return false;
-    };
-    let Ok(ir_text) = directory.read_to_string("ir.json") else {
-        return false;
-    };
-    let Ok(ir) = serde_json::from_str::<Value>(&ir_text) else {
-        return false;
-    };
-    ir.get("app_name").and_then(Value::as_str) == Some(app_name)
 }
 
 /// The recorder `main` installs exports bridge-cache counters to stderr.
