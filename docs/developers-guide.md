@@ -138,6 +138,12 @@ One production entry is registered:
   because the verifier only reaches the files that entry point includes.
 - Negative controls: retaining a protected default, retaining a nested enum
   member, or skipping a child each fails a corresponding obligation.
+- What those controls do and do not establish: they show the integrity
+  obligations reject a faulty projection, not that V1's premises are inhabited.
+  `low_equiv_ordinary_equality` proves an implication and so cannot evidence
+  its own satisfiability; that is a separate fact, witnessed by two identical
+  ordinary one-root documents, and by a protected pair whose public descriptors
+  agree while their protected defaults differ.
 - Modelled abstraction, and the residual boundary: the model carries no
   `String`, `Vec`, or serde attribute, and slots the policy preserves verbatim
   are collapsed into one model slot. Verus rejects structural recursion through
@@ -148,8 +154,11 @@ One production entry is registered:
   nodes and 64 fields, and it carries populated `windows`, `behaviour`,
   `renderer`, and `output` records rather than absent ones, so a traversal that
   dropped a record is visible both to the model comparison and to the slot
-  assertions. The proof covers the projection's semantics over the model; it
-  does not certify the running binary.
+  assertions. Those assertions compare production against the oracle's output
+  and, for command examples, consume the oracle's own `model_has_protected`
+  decision, so a defect shared by production and the oracle is invisible to
+  them; they reduce that risk and do not eliminate it. The proof covers the
+  projection's semantics over the model; it does not certify the running binary.
 
 ## Clap default inference
 
