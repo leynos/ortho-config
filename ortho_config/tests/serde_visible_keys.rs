@@ -19,8 +19,9 @@ use std::{
 /// Load `T` through both injected source capabilities.
 fn load_config<T: OrthoConfig>(args: &[&str], env: MapEnv) -> Result<T> {
     let source = Arc::new(env);
-    let args: Vec<OsString> = args.iter().map(OsString::from).collect();
-    T::load_from_iter_with_sources(args, source.clone(), source).map_err(|err| anyhow!(err))
+    let resolved_args: Vec<OsString> = args.iter().map(OsString::from).collect();
+    T::load_from_iter_with_sources(resolved_args, source.clone(), source)
+        .map_err(|err| anyhow!(err))
 }
 
 /// Write `contents` to `config.toml` beneath `dir`, returning its full path.
