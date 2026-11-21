@@ -209,13 +209,23 @@ impl DocMetadata {
     /// generated `OrthoConfigSubcommandDocs` methods return one document per
     /// enum variant — must decide the command-example rule over the group, not
     /// per document. When any member declares a protected field, every
-    /// member's command-level examples are suppressed; when none does, the
-    /// documents are returned unchanged apart from their own projection.
+    /// member's command-level examples are suppressed; when none does, every
+    /// command-level example is kept.
     ///
-    /// Each member goes through the decision and projection passes, so a
-    /// document a child boundary already projected keeps its result without a
-    /// special case: the projection is idempotent. Members are projected in
-    /// the caller's order.
+    /// The scan that decides the rule stops at the first member declaring a
+    /// protected field, so it may inspect only part of the group. The
+    /// projection pass that follows visits every member and every descendant,
+    /// clearing protected value slots and applying the group decision. It
+    /// cannot be limited to the members the scan inspected: an ordinary
+    /// member's examples must still go when a later sibling is protected.
+    ///
+    /// The projection is idempotent, so a document a child boundary already
+    /// projected keeps the result of its own slots. Its command examples are
+    /// not exempt: a single-document projection keeps them when that document
+    /// is clean, and this group decision removes them when any sibling is
+    /// protected. Members are projected in the caller's order, and the
+    /// projection pass costs one linear traversal of each member's subtree, so
+    /// members a child boundary already projected are walked again here.
     ///
     /// # Examples
     ///

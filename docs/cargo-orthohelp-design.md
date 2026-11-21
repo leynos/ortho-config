@@ -344,12 +344,15 @@ tree is protected. A boundary that returns several documents at once — the
 derived `OrthoConfigSubcommandDocs` selector returns one node per enum variant
 — uses `DocMetadata::redacted_group_for_output`, which applies the
 command-example rule across the group so a protected field in one member
-suppresses every member's command examples. `cargo-orthohelp` does not
-implement or vary that policy. Its schema module re-exports the
-`ortho_config::docs` types, its pipeline projects deserialized IR before
-rendering, its bridge projects before writing IR JSON, and its agent-context
-adapter projects at its public boundary and derives protected-field records
-from the projected tree.
+suppresses every member's command examples. The group form scans members only
+until it finds a protected field, but then projects every member, so a member a
+child boundary already projected is traversed again; only the group-wide
+command-example decision makes that pass necessary, and it is why a clean
+member's examples can still disappear. `cargo-orthohelp` does not implement or
+vary that policy. Its schema module re-exports the `ortho_config::docs` types,
+its pipeline projects deserialized IR before rendering, its bridge projects
+before writing IR JSON, and its agent-context adapter projects at its public
+boundary and derives protected-field records from the projected tree.
 
 `ir::localize_doc` is a public boundary in its own right, because a library
 caller may hand it unprojected metadata. It projects its argument once, before

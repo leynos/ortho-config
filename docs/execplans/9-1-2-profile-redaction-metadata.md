@@ -938,7 +938,7 @@ exclusion as it stood at that milestone; it no longer applies.
   method and returned the result untouched, so a handwritten child could hand a
   direct caller a protected default; both methods now pass the group through
   `DocMetadata::redacted_group_for_output`, which decides the command-example
-  rule over the group and projects each member once. Three integration
+  rule over the group and then projects every member. Three integration
   regressions in `ortho_config/tests/subcommand_docs.rs` cover both public
   methods and a protected sibling's effect on an ordinary sibling's examples;
   removing the group projection fails all three. The traversal-count regression
@@ -996,6 +996,18 @@ exclusion as it stood at that milestone; it no longer applies.
   idempotent. Both passages now say so, and the traversal-count test's
   arithmetic comment now reads `2 * 2` for a selector whose single member owns
   two nodes.
+
+- [x] (2026-11-21) Finish the group-pass description. The round-6 completeness
+  and proofs replies both found the corrected wording still overreaching: a
+  clean member does **not** keep its whole result, because the group decision
+  can remove command examples a single-document projection kept, and the
+  decision scan short-circuits on `any` rather than visiting every member. The
+  doc comment now separates the two passes, names the sibling rule and its
+  regression, and states the re-walk's cost. The developers' guide, the design
+  document's group paragraph, the traversal-count comment and this plan's M1
+  amendment now say the same. The Verus module prose records that the model
+  specifies one document, so the group boundary has sibling regressions as
+  evidence rather than a separate theorem.
 
 ## Surprises & discoveries
 

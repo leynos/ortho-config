@@ -86,6 +86,15 @@
 //! the corpus is adversarial — every protected literal is drawn from a
 //! `SECRET-` family — but no claim is made outside it. The division is recorded
 //! in ADR-0024 as a residual testing boundary.
+//!
+//! The model specifies one document, so the sibling-group boundary has no
+//! separate theorem here. `DocMetadata::redacted_group_for_output` does not add
+//! a second projection rule: it decides the command-example flag over the group
+//! and then projects each member with the same rule this file proves. What it
+//! adds beyond the model is that a member's examples can be removed by another
+//! member's field, which the group-wide flag expresses; the sibling regressions
+//! in `ortho_config/tests/subcommand_docs.rs` are the evidence for that
+//! boundary, not a refinement proof.
 
 use vstd::prelude::*;
 
