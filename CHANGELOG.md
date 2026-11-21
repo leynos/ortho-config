@@ -187,6 +187,24 @@ All notable changes to this project will be documented in this file.
   process-environment write. See
   [the users' guide](docs/users-guide.md#resolve-discovery-and-merging-without-process-state).
 
+### Fixed (roff escaping)
+
+- **Roff escaping (breaking for library callers):** Encode every untrusted
+  metadata value for the roff slot it lands in. A package name, localized
+  heading, link, or free-form `--man-date` value carrying a line break could
+  start a roff request line of its own in the generated man page, and the NAME
+  and SYNOPSIS command names were written without escaping. `.TH`, `.SH` and
+  `.SS` arguments now collapse CR and LF to a space, `.BR` cross-references,
+  `.UR` targets and the NAME and SYNOPSIS command names are encoded as single
+  escaped tokens, with a literal backslash written as the `\(rs` glyph because
+  a macro argument is interpreted once more than body text. Body text treats a
+  lone CR as a line break and neutralizes the first character of every line.
+  All three encoders also drop the control characters groff deletes while
+  reading, which would otherwise hide a leading `.` or `'` and let the request
+  run. The public `roff::escape::escape_macro_arg` helper is renamed to
+  `escape_quoted_arg`, and `escape_unquoted_arg` is added for bare macro tokens
+  ([#435](https://github.com/leynos/ortho-config/issues/435)).
+
 ## [0.10.0] - 2026-10-24
 
 _Applications upgrading from 0.9 should follow the

@@ -1190,6 +1190,39 @@ Rules mirror v1: CLI fields in OPTIONS; environment variables in ENVIRONMENT;
 config keys and discovery in FILES; precedence explained; examples rendered
 verbatim.
 
+Escaping is a rendering contract, not a formatting detail. Roff reads a page
+line by line, and a line whose first character is `.` or `'` is a request, so
+every untrusted value — package metadata, localized text, links, and the
+free-form `--man-date` value — is encoded for the slot it lands in. Three
+encoders in `roff::escape` own those slots:
+
+- `escape_quoted_arg` for a macro argument that may contain spaces. It
+  collapses CR and LF to a space, writes a literal backslash as the `\(rs`
+  glyph and a quote as `\(dq`, and drops the control characters groff discards.
+  It serves the `.TH` fields and the `.SH` and `.SS` headings, whose multi-word
+  labels must stay one argument.
+- `escape_unquoted_arg` for a single bare token. It encodes CR, LF, spaces and
+  tabs as an escaped space (a backslash followed by a space), writes a literal
+  backslash as `\(rs` and a quote as `\(dq`, drops the other control
+  characters, and prefixes a leading `.` or `'` with `\&`. It serves the NAME
+  and SYNOPSIS command names, `.BR` cross-references and `.UR` targets.
+- `escape_text` for body lines. It escapes `\`, neutralizes a leading `-`, `.`
+  or `'` on every line, drops the control characters groff discards, and treats
+  LF, CRLF and a lone CR as line breaks.
+
+The glyph form is required in both argument encoders: a macro argument is
+interpreted once more than body text, so the `\\` that suffices for
+`escape_text` would be re-read as the start of an escape and could switch fonts
+mid-name. Dropping the control characters is part of the guarantee, not
+tidiness: groff deletes an invalid input byte while reading and only then
+decides whether the line starts a request, so a leading NUL or vertical tab
+would hide the `.` or `'` behind it and let the request run.
+
+Adversarial renderer tests in `tests/golden/roff_adversarial_tests.rs`, and a
+`groff`/`mandoc` smoke test that runs when either processor is installed, hold
+the contract to a real processor's behaviour rather than to the encoder's own
+unit tests.
+
 ### 7.2 PowerShell help (MAML) and wrapper module
 
 Artefacts (per locale):

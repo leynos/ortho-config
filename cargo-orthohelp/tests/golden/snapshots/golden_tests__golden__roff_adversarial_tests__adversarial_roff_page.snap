@@ -1,0 +1,109 @@
+---
+source: cargo-orthohelp/tests/golden/roff_adversarial_tests.rs
+expression: rendered
+---
+.TH "VALUE .TM ROFF-INJECTION-MARKER .SO /NONEXISTENT-ROFF-INJECTION-MARKER" "1" "value .tm ROFF-INJECTION-MARKER .so /nonexistent-ROFF-INJECTION-MARKER" "value .tm ROFF-INJECTION-MARKER .so /nonexistent-ROFF-INJECTION-MARKER" "value .tm ROFF-INJECTION-MARKER .so /nonexistent-ROFF-INJECTION-MARKER"
+.SH value .tm ROFF-INJECTION-MARKER .so /nonexistent-ROFF-INJECTION-MARKER
+value\ .tm\ ROFF-INJECTION-MARKER\ .so\ /nonexistent-ROFF-INJECTION-MARKER \- value
+\&.tm ROFF-INJECTION-MARKER
+\&.so /nonexistent-ROFF-INJECTION-MARKER
+.SH value .tm ROFF-INJECTION-MARKER .so /nonexistent-ROFF-INJECTION-MARKER
+.B value\ .tm\ ROFF-INJECTION-MARKER\ .so\ /nonexistent-ROFF-INJECTION-MARKER
+value
+\&.tm ROFF-INJECTION-MARKER
+\&.so /nonexistent-ROFF-INJECTION-MARKER
+.SH value .tm ROFF-INJECTION-MARKER .so /nonexistent-ROFF-INJECTION-MARKER
+value
+\&.tm ROFF-INJECTION-MARKER
+\&.so /nonexistent-ROFF-INJECTION-MARKER
+.SH value .tm ROFF-INJECTION-MARKER .so /nonexistent-ROFF-INJECTION-MARKER
+.TP
+\fB\-\-value .tm ROFF-INJECTION-MARKER .so /nonexistent-ROFF-INJECTION-MARKER\fR \fIvalue
+\&.tm ROFF-INJECTION-MARKER
+\&.so /nonexistent-ROFF-INJECTION-MARKER\fR, \fB\-\(dq\fR \fIvalue
+\&.tm ROFF-INJECTION-MARKER
+\&.so /nonexistent-ROFF-INJECTION-MARKER\fR
+value
+\&.tm ROFF-INJECTION-MARKER
+\&.so /nonexistent-ROFF-INJECTION-MARKER
+.br
+Default: \fBvalue
+\&.tm ROFF-INJECTION-MARKER
+\&.so /nonexistent-ROFF-INJECTION-MARKER\fR
+.br
+Possible values: \fIvalue
+\&.tm ROFF-INJECTION-MARKER
+\&.so /nonexistent-ROFF-INJECTION-MARKER\fR
+.br
+DEPRECATED: value
+\&.tm ROFF-INJECTION-MARKER
+\&.so /nonexistent-ROFF-INJECTION-MARKER
+.SH value .tm ROFF-INJECTION-MARKER .so /nonexistent-ROFF-INJECTION-MARKER
+.TP
+\fBvalue
+\&.tm ROFF-INJECTION-MARKER
+\&.so /nonexistent-ROFF-INJECTION-MARKER\fR
+value
+\&.tm ROFF-INJECTION-MARKER
+\&.so /nonexistent-ROFF-INJECTION-MARKER Equivalent to \fB\--value
+\&.tm ROFF-INJECTION-MARKER
+\&.so /nonexistent-ROFF-INJECTION-MARKER\fR.
+.SH value .tm ROFF-INJECTION-MARKER .so /nonexistent-ROFF-INJECTION-MARKER
+.TP
+\fIvalue
+\&.tm ROFF-INJECTION-MARKER
+\&.so /nonexistent-ROFF-INJECTION-MARKER\fR
+value
+\&.tm ROFF-INJECTION-MARKER
+\&.so /nonexistent-ROFF-INJECTION-MARKER
+.PP
+Supported formats: TOML.
+.PP
+Configuration discovery follows the XDG Base Directory specification.
+.PP
+Configuration keys:
+.TP
+\fBvalue
+\&.tm ROFF-INJECTION-MARKER
+\&.so /nonexistent-ROFF-INJECTION-MARKER\fR
+value
+\&.tm ROFF-INJECTION-MARKER
+\&.so /nonexistent-ROFF-INJECTION-MARKER
+.SH value .tm ROFF-INJECTION-MARKER .so /nonexistent-ROFF-INJECTION-MARKER
+Configuration values are resolved in the following order (highest precedence last):
+.RS
+.IP 1. 4
+Built-in defaults
+.IP 2. 4
+Command-line arguments
+.RE
+.PP
+value
+\&.tm ROFF-INJECTION-MARKER
+\&.so /nonexistent-ROFF-INJECTION-MARKER
+.SH value .tm ROFF-INJECTION-MARKER .so /nonexistent-ROFF-INJECTION-MARKER
+.TP
+\fBvalue
+\&.tm ROFF-INJECTION-MARKER
+\&.so /nonexistent-ROFF-INJECTION-MARKER\fR
+.nf
+value
+\&.tm ROFF-INJECTION-MARKER
+\&.so /nonexistent-ROFF-INJECTION-MARKER
+.fi
+value
+\&.tm ROFF-INJECTION-MARKER
+\&.so /nonexistent-ROFF-INJECTION-MARKER
+.SH value .tm ROFF-INJECTION-MARKER .so /nonexistent-ROFF-INJECTION-MARKER
+.UR https://example.invalid/value\ .tm\ ROFF-INJECTION-MARKER\ .so\ /nonexistent-ROFF-INJECTION-MARKER
+value
+\&.tm ROFF-INJECTION-MARKER
+\&.so /nonexistent-ROFF-INJECTION-MARKER
+.UE ,
+.SH value .tm ROFF-INJECTION-MARKER .so /nonexistent-ROFF-INJECTION-MARKER
+.TP
+\fB0\fR
+Successful execution.
+.TP
+\fB1\fR
+General errors.

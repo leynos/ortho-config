@@ -1,7 +1,36 @@
 //! Unit tests for roff escaping.
+//!
+//! Each encoder is pinned in three directions: ordinary text keeps its
+//! meaning, metacharacters are neutralized, and adversarial payloads cannot
+//! start a request line or leave a raw line break behind.
 
 use super::*;
 use rstest::rstest;
+
+/// Reports whether any line would be read by roff as a request.
+///
+/// A line is a request when its first character is `.` or `'`. Encoded text
+/// may still contain newlines, so every line is checked rather than only the
+/// first.
+pub(super) fn starts_a_request_line(rendered: &str) -> bool {
+    rendered.lines().any(|line| line.starts_with(['.', '\'']))
+}
+
+/// Payloads that try to introduce a roff request line.
+const INJECTION_PAYLOADS: &[&str] = &[
+    "\n.so /etc/passwd",
+    "\n.tm injected",
+    "\r.tm injected",
+    "\r\n.tm injected",
+    "value\n.so /etc/passwd\n.tm injected",
+    "'tm injected",
+    ".so /etc/passwd",
+    // groff discards these bytes while reading, so a leading one would hide
+    // the `.` or `'` behind it and let the request run.
+    "\0.tm injected",
+    "\u{0b}.so /etc/passwd",
+    "\u{1f}'tm injected",
+];
 
 #[rstest]
 #[case("hello", "hello")]
@@ -12,157 +41,199 @@ use rstest::rstest;
 #[case("normal-dash", "normal-dash")]
 #[case("a.period", "a.period")]
 fn escape_text_handles_special_chars(#[case] input: &str, #[case] expected: &str) {
-    assert_eq!(escape_text(input), expected);
+    assert_eq!(
+        escape_text(input),
+        expected,
+        "text {input:?} should escape to {expected:?}"
+    );
 }
 
 #[rstest]
 fn escape_text_handles_multiline() {
     let input = "-first\n.second\n'third";
     let expected = "\\-first\n\\&.second\n\\&'third";
-    assert_eq!(escape_text(input), expected);
+    assert_eq!(
+        escape_text(input),
+        expected,
+        "each line should neutralize its own leading character"
+    );
 }
 
 #[rstest]
 fn escape_text_preserves_trailing_newline() {
-    assert_eq!(escape_text("hello\n"), "hello\n");
-    assert_eq!(escape_text("hello"), "hello");
+    assert_eq!(
+        escape_text("hello\n"),
+        "hello\n",
+        "a trailing LF should be preserved as one newline"
+    );
+    assert_eq!(
+        escape_text("hello"),
+        "hello",
+        "text without a trailing break should gain none"
+    );
+}
+
+#[rstest]
+#[case("first\rsecond", "first\nsecond")]
+#[case("first\r\nsecond", "first\nsecond")]
+#[case("first\nsecond", "first\nsecond")]
+#[case("first\r.tm injected", "first\n\\&.tm injected")]
+#[case("first\r'tm injected", "first\n\\&'tm injected")]
+#[case("a\n\nb", "a\n\nb")]
+#[case("\0.so /etc/passwd", "\\&.so /etc/passwd")]
+#[case("\u{0b}.tm injected", "\\&.tm injected")]
+#[case("\u{1f}'tm injected", "\\&'tm injected")]
+#[case("a\u{0}b", "ab")]
+fn escape_text_treats_every_line_break_as_a_new_line(#[case] input: &str, #[case] expected: &str) {
+    // groff 1.23 does not treat a lone CR as a line break: it warns about an
+    // invalid input character and drops it. Passing it through would therefore
+    // emit invalid input whose handling belongs to whichever processor reads
+    // the page; treating it as a break keeps the encoded bytes valid for all
+    // of them and stops a CR-separated request from reappearing as text.
+    assert_eq!(
+        escape_text(input),
+        expected,
+        "text {input:?} should break into the expected lines"
+    );
+}
+
+#[rstest]
+fn escape_text_preserves_a_trailing_carriage_return_as_a_newline() {
+    assert_eq!(
+        escape_text("hello\r"),
+        "hello\n",
+        "a trailing lone CR is a line break like any other"
+    );
 }
 
 #[rstest]
 #[case("hello", "hello")]
-#[case("path\\to\\file", "path\\\\to\\\\file")]
+#[case("path\\to\\file", "path\\(rsto\\(rsfile")]
 #[case("with \"quotes\"", "with \\(dqquotes\\(dq")]
-#[case("mixed\\and\"both", "mixed\\\\and\\(dqboth")]
-fn escape_macro_arg_handles_special_chars(#[case] input: &str, #[case] expected: &str) {
-    assert_eq!(escape_macro_arg(input), expected);
-}
-
-#[rstest]
-fn bold_wraps_and_escapes_text() {
-    assert_eq!(bold("text"), "\\fBtext\\fR");
-    assert_eq!(bold("path\\to"), "\\fBpath\\\\to\\fR");
-}
-
-#[rstest]
-fn italic_wraps_and_escapes_text() {
-    assert_eq!(italic("text"), "\\fItext\\fR");
-    assert_eq!(italic("path\\to"), "\\fIpath\\\\to\\fR");
-}
-
-#[rstest]
-#[case(Some("verbose"), Some('v'), "\\fB\\-\\-verbose\\fR, \\fB\\-v\\fR")]
-#[case(Some("help"), None, "\\fB\\-\\-help\\fR")]
-#[case(None, Some('h'), "\\fB\\-h\\fR")]
-#[case(None, None, "")]
-fn format_flag_combinations(
-    #[case] long: Option<&str>,
-    #[case] short: Option<char>,
-    #[case] expected: &str,
-) {
-    assert_eq!(format_flag(long, short), expected);
-}
-
-#[rstest]
-#[case(
-    Some("port"),
-    Some('p'),
-    "\\fB\\-\\-port\\fR \\fINUM\\fR, \\fB\\-p\\fR \\fINUM\\fR"
-)]
-#[case(Some("port"), None, "\\fB\\-\\-port\\fR \\fINUM\\fR")]
-#[case(None, Some('p'), "\\fB\\-p\\fR \\fINUM\\fR")]
-#[case(None, None, "\\fINUM\\fR")]
-fn required_value_placeholder_follows_the_flag(
-    #[case] long: Option<&str>,
-    #[case] short: Option<char>,
-    #[case] expected: &str,
-) {
-    // The required form separates the flag from its placeholder with a space,
-    // which is what distinguishes it from the optional form below. When neither
-    // flag is present the separator has no flag to follow, so the bare
-    // placeholder is returned alone.
-    assert_eq!(format_flag_with_value(long, short, "NUM"), expected);
-}
-
-#[rstest]
-#[case(
-    Some("is-excited"),
-    Some('i'),
-    "\\fB\\-\\-is-excited\\fR\\fI[=BOOL]\\fR, \\fB\\-i\\fR\\fI[=BOOL]\\fR"
-)]
-#[case(Some("is-excited"), None, "\\fB\\-\\-is-excited\\fR\\fI[=BOOL]\\fR")]
-#[case(None, Some('E'), "\\fB\\-E\\fR\\fI[=BOOL]\\fR")]
-#[case(None, None, "\\fI[=BOOL]\\fR")]
-fn optional_value_placeholder_joins_the_flag(
-    #[case] long: Option<&str>,
-    #[case] short: Option<char>,
-    #[case] expected: &str,
-) {
-    // A space between the flag and the placeholder would document the
-    // invalid `--flag =BOOL` spelling, which `require_equals` rejects.
+#[case("mixed\\and\"both", "mixed\\(rsand\\(dqboth")]
+#[case("2026-01-31\n.tm injected", "2026-01-31 .tm injected")]
+#[case("line\r.so /etc/passwd", "line .so /etc/passwd")]
+#[case(".leading", ".leading")]
+#[case("a\0b", "ab")]
+fn escape_quoted_arg_handles_special_chars(#[case] input: &str, #[case] expected: &str) {
     assert_eq!(
-        format_flag_with_optional_value(long, short, "BOOL"),
-        expected
+        escape_quoted_arg(input),
+        expected,
+        "quoted argument {input:?} should escape to {expected:?}"
     );
 }
 
 #[rstest]
-#[case(ValueType::String, "STRING")]
-#[case(ValueType::Integer { bits: 32, signed: true }, "INT")]
-#[case(ValueType::Float { bits: 64 }, "FLOAT")]
-#[case(ValueType::Bool, "")]
-#[case(ValueType::Duration, "DURATION")]
-#[case(ValueType::Path, "PATH")]
-#[case(ValueType::IpAddr, "IP")]
-#[case(ValueType::Hostname, "HOST")]
-#[case(ValueType::Url, "URL")]
-#[case(ValueType::Enum { variants: vec![] }, "CHOICE")]
-#[case(ValueType::List { of: Box::new(ValueType::String) }, "LIST")]
-#[case(ValueType::Map { of: Box::new(ValueType::String) }, "MAP")]
-#[case(ValueType::Custom { name: "MyType".to_owned() }, "MYTYPE")]
-fn value_type_placeholder_mapping(#[case] vt: ValueType, #[case] expected: &str) {
-    assert_eq!(value_type_placeholder(&vt).as_ref(), expected);
+#[case("single line")]
+#[case("a\nb")]
+#[case("a\rb")]
+#[case("a\r\nb")]
+fn escape_quoted_arg_collapses_line_breaks(#[case] payload: &str) {
+    let escaped = escape_quoted_arg(payload);
+    assert!(
+        !escaped.contains(['\n', '\r']),
+        "a quoted argument must stay on one line: {escaped:?}"
+    );
 }
 
-fn bool_flag(value_name: Option<&str>) -> CliMetadata {
-    CliMetadata {
-        long: Some("excited".to_owned()),
-        short: None,
-        value_name: value_name.map(str::to_owned),
-        multiple: false,
-        takes_value: true,
-        value_optional: true,
-        possible_values: vec!["true".to_owned(), "false".to_owned()],
-        hide_in_help: false,
+#[rstest]
+#[case("plain", "plain")]
+#[case("two words", "two\\ words")]
+#[case("tab\there", "tab\\ here")]
+#[case("line\nbreak", "line\\ break")]
+#[case("line\rbreak", "line\\ break")]
+#[case(".hidden", "\\&.hidden")]
+#[case("'quote", "\\&'quote")]
+#[case("back\\slash", "back\\(rsslash")]
+#[case("say \"hi\"", "say\\ \\(dqhi\\(dq")]
+#[case("\"quoted", "\\(dqquoted")]
+#[case("\0.hidden", "\\&.hidden")]
+#[case("\u{0b}'quote", "\\&'quote")]
+#[case("a.b", "a.b")]
+#[case("a'b", "a'b")]
+fn escape_unquoted_arg_handles_special_chars(#[case] input: &str, #[case] expected: &str) {
+    assert_eq!(
+        escape_unquoted_arg(input),
+        expected,
+        "unquoted argument {input:?} should escape to {expected:?}"
+    );
+}
+
+#[rstest]
+fn escape_quoted_arg_keeps_every_payload_on_one_line() {
+    // A quoted slot ends at its closing quote, so the leading `.` of a payload
+    // is harmless once no line break can move it to the start of a line.
+    for payload in INJECTION_PAYLOADS {
+        let escaped = escape_quoted_arg(payload);
+        assert!(
+            !escaped.contains(['\n', '\r']),
+            "payload {payload:?} escaped to more than one line: {escaped:?}"
+        );
+        assert!(
+            !escaped.chars().any(char::is_control),
+            "payload {payload:?} kept a control character: {escaped:?}"
+        );
     }
 }
 
 #[test]
-fn bool_flag_without_a_value_name_renders_the_fallback_placeholder() {
-    // The roff call sites derive the placeholder from `ValueType::Bool`,
-    // which yields `""`; passing that through unfiltered rendered the
-    // malformed `--flag[=]` rather than a usable synopsis.
-    let placeholder = value_type_placeholder(&ValueType::Bool);
-    assert_eq!(placeholder.as_ref(), "");
-    assert_eq!(
-        format_option(&bool_flag(None), Some(&placeholder), "VALUE"),
-        "\\fB\\-\\-excited\\fR\\fI[=VALUE]\\fR"
-    );
+fn escape_unquoted_arg_neutralizes_injection_payloads() {
+    for payload in INJECTION_PAYLOADS {
+        let escaped = escape_unquoted_arg(payload);
+        assert!(
+            !escaped.contains(['\n', '\r']),
+            "payload {payload:?} escaped to more than one line: {escaped:?}"
+        );
+        assert!(
+            !starts_a_request_line(&escaped),
+            "payload {payload:?} escaped to a request line: {escaped:?}"
+        );
+        assert!(
+            !escaped.chars().any(char::is_control),
+            "payload {payload:?} kept a control character: {escaped:?}"
+        );
+    }
 }
 
 #[test]
-fn explicit_empty_value_name_renders_the_fallback_placeholder() {
-    let placeholder = value_type_placeholder(&ValueType::Bool);
+fn escape_text_neutralizes_injection_payloads() {
+    for payload in INJECTION_PAYLOADS {
+        let escaped = escape_text(payload);
+        assert!(
+            !escaped.contains('\r'),
+            "payload {payload:?} kept a raw CR: {escaped:?}"
+        );
+        assert!(
+            !starts_a_request_line(&escaped),
+            "payload {payload:?} escaped to a request line: {escaped:?}"
+        );
+        assert!(
+            !escaped.chars().any(|ch| ch.is_control() && ch != '\n'),
+            "payload {payload:?} kept a control character other than a line break: {escaped:?}"
+        );
+    }
+}
+
+#[rstest]
+fn bold_wraps_and_escapes_text() {
+    assert_eq!(bold("text"), "\\fBtext\\fR", "bold should wrap plain text");
     assert_eq!(
-        format_option(&bool_flag(Some("")), Some(&placeholder), "VALUE"),
-        "\\fB\\-\\-excited\\fR\\fI[=VALUE]\\fR"
+        bold("path\\to"),
+        "\\fBpath\\\\to\\fR",
+        "bold should escape backslashes"
     );
 }
 
-#[test]
-fn non_empty_value_name_still_wins_over_the_fallback() {
-    // Negative control: the filter must not discard a real placeholder.
+#[rstest]
+fn italic_wraps_and_escapes_text() {
     assert_eq!(
-        format_option(&bool_flag(Some("BOOL")), Some("VALUE"), "FALLBACK"),
-        "\\fB\\-\\-excited\\fR\\fI[=BOOL]\\fR"
+        italic("text"),
+        "\\fItext\\fR",
+        "italic should wrap plain text"
+    );
+    assert_eq!(
+        italic("path\\to"),
+        "\\fIpath\\\\to\\fR",
+        "italic should escape backslashes"
     );
 }

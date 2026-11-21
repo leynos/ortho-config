@@ -197,7 +197,7 @@ fn append_inline_subcommands(
     }
 
     content.push_str(".SH ");
-    content.push_str(&escape::escape_macro_arg(
+    content.push_str(&escape::escape_quoted_arg(
         &metadata.sections.headings.commands,
     ));
     content.push('\n');
@@ -212,7 +212,7 @@ fn generate_subcommand_section(metadata: &LocalizedDocMetadata) -> String {
     let name = metadata.bin_name.as_deref().unwrap_or(&metadata.app_name);
 
     content.push_str(".SS ");
-    content.push_str(&escape::escape_macro_arg(name));
+    content.push_str(&escape::escape_quoted_arg(name));
     content.push('\n');
     content.push_str(&escape::escape_text(&metadata.about));
     content.push('\n');

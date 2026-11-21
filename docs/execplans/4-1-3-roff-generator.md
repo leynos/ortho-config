@@ -288,10 +288,36 @@ log capture. Fix any issues and re-run until all pass.
 
 ### Roff Escaping Rules
 
-- `\` -> `\\`
-- Leading `-` -> `\-`
-- Leading `.` -> `\.`
-- Leading `'` -> `\'`
+> Revised by [#435](https://github.com/leynos/ortho-config/issues/435). The
+> original sketch recorded four rules for one helper; the delivered renderer
+> needs one encoder per syntactic slot, because a value inside a quoted macro
+> argument, a value that must stay a single bare token, and a body line each
+> have different failure modes.
+
+Roff reads a page line by line, and a line whose first character is `.` or `'`
+is a request. Every untrusted value must therefore be unable to start a line,
+and each slot is encoded by the matching helper in `roff::escape`:
+
+- `escape_quoted_arg` (macro argument that may contain spaces): `\` -> `\(rs`,
+  `"` -> `\(dq`, each CR or LF -> one space, and other control characters
+  dropped. Used by the `.TH` fields and the `.SH`/`.SS` headings.
+- `escape_unquoted_arg` (single bare token): `\` -> `\(rs`, `"` -> `\(dq`, CR,
+  LF, spaces and tabs -> an escaped space (a backslash followed by a space),
+  other control characters dropped, and a leading `.` or `'` -> `\&.` or `\&'`.
+  Used by the NAME and SYNOPSIS command names, `.BR` cross-references and `.UR`
+  targets.
+
+Both argument encoders use the `\(rs` glyph rather than `\\` because a macro
+argument is interpreted once more than body text; `escape_text` keeps `\\`.
+
+- `escape_text` (body lines): `\` -> `\\`; a leading `-`, `.` or `'` becomes
+  `\-`, `\&.` or `\&'` on every line; control characters groff discards are
+  dropped; LF, CRLF and a lone CR each start a new output line, and one
+  trailing break is preserved.
+
+Dropping control characters is load-bearing: groff removes an invalid input
+byte before deciding whether the line starts a request, so `\0.so /etc/passwd`
+would otherwise execute once the NUL was discarded.
 
 ### ValueType to Placeholder Mapping
 

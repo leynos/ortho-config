@@ -5,4 +5,5 @@ mod nested_subcommand_snapshots;
 mod policy_report_tests;
 mod powershell_fixture;
 mod powershell_tests;
+mod roff_adversarial_tests;
 mod roff_tests;
