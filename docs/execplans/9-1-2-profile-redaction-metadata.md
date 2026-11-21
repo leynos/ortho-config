@@ -1064,6 +1064,17 @@ exclusion as it stood at that milestone; it no longer applies.
   `# Errors` correction already recorded above. The added assertion diagnostics
   pushed `ortho_config/src/docs/profile_redaction/tests.rs` past the 400-line
   file cap, so its fixture builders moved to `test_fixtures.rs`.
+- [x] (2026-11-21) Qualify the proof assessment's two remaining statements.
+  The seeded model faults show the integrity obligations can fail; they are not
+  an inhabitance argument for V1, because `low_equiv_ordinary_equality` proves
+  an implication and cannot evidence its own premises. Satisfiability is
+  witnessed separately, by two identical ordinary one-root documents and by a
+  protected pair with equal public descriptors and differing protected
+  defaults. The developers' guide now records that distinction, and bounds the
+  differential assertion's reach: it compares production against the oracle's
+  output and consumes the oracle's `model_has_protected` decision for command
+  examples, so a defect shared by both is invisible to it and the assertions
+  reduce that risk rather than remove it.
 
 ## Surprises & discoveries
 
@@ -1334,11 +1345,15 @@ catalogue) and `0a275bd2` (proof suites and plan evidence), gated by eight
 green targets on the exact candidate. V1 and V2 are discharged: the proof is
 split into a crate root plus three modules under the 400-line cap and verifies
 27 obligations with no `assume`, `admit`, or trusted proof body. Three seeded
-model faults each break a named obligation, so the obligations are not vacuous.
-The external workflow lane, the behavioural contract, and the sentinel suites
-are delivered; the first gate run had exposed six Clippy diagnostics in the new
-test files and a saturation timeout of the nested-Cargo probe, both repaired
-before the green run.
+model faults each break a named obligation, so the obligations can fail rather
+than holding vacuously. That control is not an inhabitance argument for V1:
+`low_equiv_ordinary_equality` proves an implication, and the satisfiability of
+its premises is a separate fact, witnessed instead by two identical ordinary
+one-root documents and by a protected pair with equal public descriptors and
+differing protected defaults. The external workflow lane, the behavioural
+contract, and the sentinel suites are delivered; the first gate run had exposed
+six Clippy diagnostics in the new test files and a saturation timeout of the
+nested-Cargo probe, both repaired before the green run.
 
 M1 retrospectively: the largest surprises were the deleted proof lane and the
 hand-maintained schema mirror, both addressed above. The differential model and
