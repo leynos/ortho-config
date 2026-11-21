@@ -516,6 +516,16 @@ representation and add a translation that carries no additional information, so
 the collector keeps the crate's value type and the figment projection stays in
 the adapter.
 
+### 2026-11-21 — which spelling routine is shared
+
+The 2026-11-20 amendment said `ConfigPath::render` is the routine both the
+report and the suggested file section call. They share `render_segment`, not
+`ConfigPath::render`. `ConfigPath::render` maps `render_segment` over the
+path's segments and joins them with `.`, while `FileSection` in the same module
+calls `render_segment` directly for each table header and each assignment. One
+key still has one spelling, because every caller quotes segments through the
+same function; the report only adds the joining.
+
 ## References
 
 - [Execplan: Enumerate missing required configuration values](../execplans/7-3-1-enumerating-missing-required-values.md).
