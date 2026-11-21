@@ -16,6 +16,7 @@ use ortho_config::{AgentContext, ProfileName, ProfileSelectionContract, Profiles
 use serde_json::Value;
 
 use super::steps::{OrthoHelpContext, StepResult, get_out_dir, run_orthohelp, scenario_target_dir};
+use super::steps_cache::{read_cache_file, write_cache_file};
 
 pub(super) use crate::fixtures::profile_redaction_sentinels::{
     ARTEFACT_LOCALES, COMMAND_EXAMPLE_SENTINELS, ORDINARY_ROOT_TYPE, REDACTION_ROOT_TYPE,
@@ -91,6 +92,76 @@ pub(super) fn run_checked(
         .into());
     }
     orthohelp_context.last_output.set(output);
+    Ok(())
+}
+
+/// Literal a scenario writes into a hand-edited cache entry.
+///
+/// It appears in no fixture source, so an artefact containing it proves the
+/// cache body reached a renderer without passing the projection.
+pub(super) const HAND_EDITED_SENTINEL: &str = "HAND-EDITED-IR-SENTINEL";
+
+/// Applies `edit` to the cached `ir.json` body and writes the result back.
+///
+/// The cache is the one input a released generator would never have written
+/// itself, so editing it is how a scenario reaches the projection `main` applies
+/// to whatever it loads.
+pub(super) fn edit_cached_ir(
+    orthohelp_context: &OrthoHelpContext,
+    edit: impl FnOnce(&mut Value) -> StepResult<()>,
+) -> StepResult<()> {
+    let path = orthohelp_context
+        .cache_ir_path
+        .with_ref(Clone::clone)
+        .ok_or("cached IR path should be recorded")?;
+    let mut body: Value = serde_json::from_str(&read_cache_file(&path)?)?;
+    edit(&mut body)?;
+    write_cache_file(&path, &serde_json::to_string(&body)?)
+}
+
+/// Marks the last ordinary root field protected and gives it a literal default.
+///
+/// Choosing the last one leaves an earlier ordinary default in place, so a
+/// scenario can also check that the renderer still emits defaults at all; a
+/// scan that finds neither would prove nothing about the projection.
+pub(super) fn retain_hand_edited_default(body: &mut Value) -> StepResult<()> {
+    let field = body
+        .get_mut("fields")
+        .and_then(Value::as_array_mut)
+        .and_then(|fields| {
+            fields
+                .iter_mut()
+                .rev()
+                .find(|field| field.get("profile_field").is_none())
+        })
+        .ok_or("the fixture must declare an ordinary root field")?;
+    field["profile_field"] = Value::from("secret");
+    field["default"] = serde_json::json!({ "display": HAND_EDITED_SENTINEL });
+    Ok(())
+}
+
+/// Returns the default literal of the first ordinary field in `body`.
+pub(super) fn surviving_ordinary_default(body: &Value) -> Option<&str> {
+    body.get("fields")?.as_array()?.iter().find_map(|field| {
+        if field.get("profile_field").is_some() {
+            return None;
+        }
+        field.get("default")?.get("display")?.as_str()
+    })
+}
+
+/// Repeats the first protected record so two records share one identity.
+pub(super) fn duplicate_protected_record(body: &mut Value) -> StepResult<()> {
+    let fields = body
+        .get_mut("fields")
+        .and_then(Value::as_array_mut)
+        .ok_or("the cached IR must declare a field list")?;
+    let protected = fields
+        .iter()
+        .find(|field| field.get("profile_field").is_some())
+        .cloned()
+        .ok_or("the fixture must declare a protected root field")?;
+    fields.push(protected);
     Ok(())
 }
 
@@ -180,17 +251,18 @@ pub(super) fn context_input<'a>(command: &'a Value, name: &str) -> Option<&'a Va
 pub(super) fn paired_named_contexts() -> StepResult<(AgentContext, AgentContext, Vec<&'static str>)>
 {
     let catalogue_a = CATALOGUE_A_BODIES.into_iter().collect::<BTreeMap<_, _>>();
-    // Reverse insertion order: the declaration, not the caller, canonicalises.
-    let catalogue_b = CATALOGUE_B_BODIES
-        .into_iter()
-        .rev()
-        .collect::<BTreeMap<_, _>>();
+    let catalogue_b = CATALOGUE_B_BODIES.into_iter().collect::<BTreeMap<_, _>>();
+    // A `BTreeMap` re-sorts on insertion, so its keys are ordered whatever the
+    // insertion order was. The second declaration is handed the reversed keys
+    // so a declaration that stopped canonicalising names would show through;
+    // feeding it `keys()` would let both callers agree by construction.
+    let reversed_b_names = catalogue_b.keys().rev().copied();
     let contract = ProfileSelectionContract {
         flag: "profile".to_owned(),
         env_var: "REDACTION_FIXTURE_PROFILE".to_owned(),
     };
     let first = context_with_names(&contract, catalogue_a.keys().copied())?;
-    let second = context_with_names(&contract, catalogue_b.keys().copied())?;
+    let second = context_with_names(&contract, reversed_b_names)?;
     let bodies = CATALOGUE_A_BODIES
         .into_iter()
         .chain(CATALOGUE_B_BODIES)

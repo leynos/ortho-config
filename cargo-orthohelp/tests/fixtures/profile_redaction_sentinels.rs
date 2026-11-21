@@ -63,47 +63,101 @@ pub(crate) fn all_protected_sentinels() -> Vec<&'static str> {
 
 #[cfg(test)]
 mod tests {
-    //! Checks the catalogue is internally consistent.
+    //! Checks the catalogue's own invariants.
     //!
     //! Each integration test target includes this module through
-    //! `tests::fixtures` but reads only the constants its own suite needs.
-    //! Reading all of them here keeps every target free of dead-code warnings
-    //! and proves the aggregate view has not drifted from the per-classification
-    //! lists.
+    //! `tests::fixtures` and reads only the entries its suite needs, so these
+    //! cross-references are the one place the catalogue is checked as a whole.
+    //! They test the asset rather than generated output: the suites reason
+    //! about membership and attribution across these lists, and a drifted list
+    //! would weaken a scan without failing it.
+
+    use std::collections::BTreeSet;
 
     use super::*;
 
+    /// A sentinel that reads like prose could match a public description, so a
+    /// scan reporting it absent would not prove the projection ran.
+    fn assert_reads_as_a_sentinel(sentinel: &str) {
+        assert!(
+            sentinel.contains("-SENTINEL") || sentinel.contains("-ENUM-"),
+            "{sentinel} does not follow the sentinel naming convention"
+        );
+    }
+
+    /// Every protected literal must be attributable to exactly one
+    /// classification.
+    fn assert_classifications_are_disjoint_and_distinct() {
+        let secret: BTreeSet<&str> = SECRET_SENTINELS.iter().copied().collect();
+        let reference: BTreeSet<&str> = REFERENCE_SENTINELS.iter().copied().collect();
+        assert_eq!(
+            secret.len(),
+            SECRET_SENTINELS.len(),
+            "the secret list repeats a literal, so a scan could miss one"
+        );
+        assert_eq!(
+            reference.len(),
+            REFERENCE_SENTINELS.len(),
+            "the reference-only list repeats a literal, so a scan could miss one"
+        );
+        assert!(
+            secret.is_disjoint(&reference),
+            "a literal cannot be both secret and reference-only"
+        );
+        for sentinel in SECRET_SENTINELS.iter().chain(REFERENCE_SENTINELS.iter()) {
+            assert_reads_as_a_sentinel(sentinel);
+        }
+        for sentinel in UNSUPPORTED_SENTINELS {
+            assert_reads_as_a_sentinel(sentinel);
+        }
+    }
+
     #[test]
-    fn catalogue_matches_its_aggregate_view() {
+    fn catalogue_is_internally_consistent() {
+        assert_classifications_are_disjoint_and_distinct();
+
         let protected = all_protected_sentinels();
         assert_eq!(
             protected.len(),
-            SECRET_SENTINELS.len() + REFERENCE_SENTINELS.len()
+            SECRET_SENTINELS.len() + REFERENCE_SENTINELS.len(),
+            "the aggregate view must hold every protected literal exactly once"
         );
-        for sentinel in SECRET_SENTINELS.iter().chain(REFERENCE_SENTINELS.iter()) {
-            assert!(protected.contains(sentinel), "{sentinel} missing from view");
+        for example in COMMAND_EXAMPLE_SENTINELS {
+            assert!(
+                protected.contains(example),
+                "{example} sits in command examples but is not a protected literal"
+            );
         }
+        for sentinel in UNSUPPORTED_SENTINELS {
+            assert!(
+                !protected.contains(sentinel),
+                "{sentinel} belongs to the unsupported document, which opts into no profiles"
+            );
+        }
+    }
 
-        for root in [
+    /// A scenario is selected by root type, so two roots sharing a name would
+    /// silently scan the same document twice.
+    #[test]
+    fn root_types_and_locales_identify_distinct_documents() {
+        let roots = [
             REDACTION_ROOT_TYPE,
             UNSUPPORTED_ROOT_TYPE,
             ORDINARY_ROOT_TYPE,
-        ] {
-            assert!(
-                root.starts_with("orthohelp_fixture::redaction::"),
-                "{root} should name the redaction fixture module"
-            );
-        }
-        assert_eq!(ARTEFACT_LOCALES, ["en-US", "fr-FR"]);
-        // Named membership reads better than an emptiness check and proves the
-        // lists hold the literal each scenario is about, not merely something.
-        assert!(
-            COMMAND_EXAMPLE_SENTINELS.contains(&"NESTED-SECRET-DEFAULT-SENTINEL"),
-            "the command-level example list should hold the nested sentinel"
+        ];
+        let distinct: BTreeSet<&str> = roots.into_iter().collect();
+        assert_eq!(
+            distinct.len(),
+            roots.len(),
+            "each scenario needs its own root type: {roots:?}"
         );
-        assert!(
-            UNSUPPORTED_SENTINELS.contains(&"UNSUPPORTED-DEFAULT-SENTINEL"),
-            "the unsupported list should hold the fixture's default"
+
+        let locales: BTreeSet<&str> = ARTEFACT_LOCALES.into_iter().collect();
+        assert!(locales.len() > 1, "the multi-locale scan needs two or more");
+        assert_eq!(
+            locales.len(),
+            ARTEFACT_LOCALES.len(),
+            "a repeated locale would scan the same artefact twice: {ARTEFACT_LOCALES:?}"
         );
     }
 }

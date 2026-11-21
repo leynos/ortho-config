@@ -900,9 +900,9 @@ help_info_uri = "https://example.com/help/MyApp"
    - `main.rs` invokes
      `<root_type as OrthoConfigDocs>::get_doc_metadata()` and serializes the
      IR JSON to stdout.
-   - `cargo-orthohelp` keeps a local copy of the IR schema (mirroring
-     `ortho_config::docs`) so publish checks can build against the latest
-     crates.io release while the workspace evolves.
+   - `cargo-orthohelp`'s schema module re-exports `ortho_config::docs`
+     rather than mirroring it, so the tool and the derive cannot drift, and
+     one redaction projection covers both.
    - The generated manifest, source, copied workspace `Cargo.lock` when
      present, and executable snapshot live in an invocation-owned temporary
      directory beneath the stable IR cache entry.

@@ -53,3 +53,19 @@ Feature: Profile metadata keeps sensitive values private
     When I run cargo-orthohelp with no-build for the profile-redaction fixture
     Then the command fails due to missing cache
     And the unrelated cache entry was not rewritten
+
+  Scenario: A hand-edited cache entry is projected before it is rendered
+    Given a temporary output directory
+    And the orthohelp cache is empty
+    When I run cargo-orthohelp with cache for the profile-redaction fixture
+    And I hand-edit the cached IR to retain a protected default
+    When I run cargo-orthohelp with no-build man output for the profile-redaction fixture
+    Then no rendered artefact carries the hand-edited sentinel
+
+  Scenario: Duplicate protected records stop the run with a diagnostic
+    Given a temporary output directory
+    And the orthohelp cache is empty
+    When I run cargo-orthohelp with cache for the profile-redaction fixture
+    And I hand-edit the cached IR to duplicate a protected record
+    When I run cargo-orthohelp with no-build context output for the profile-redaction fixture
+    Then the command fails naming the duplicate redaction

@@ -92,6 +92,38 @@ fn absent_annotation_leaves_the_field_ordinary() -> Result<()> {
     },
     "flattened container"
 )]
+#[case::serde_flatten_after_name_value(
+    quote! {
+        #[serde(rename = "common", flatten)]
+        #[ortho_config(profile_field = "secret")]
+        common: CommonArgs
+    },
+    "flattened container"
+)]
+#[case::serde_flatten_before_name_value(
+    quote! {
+        #[serde(flatten, rename = "common")]
+        #[ortho_config(profile_field = "secret")]
+        common: CommonArgs
+    },
+    "flattened container"
+)]
+#[case::serde_flatten_after_nested_name_value(
+    quote! {
+        #[serde(default = "CommonArgs::default", flatten)]
+        #[ortho_config(profile_field = "secret")]
+        common: CommonArgs
+    },
+    "flattened container"
+)]
+#[case::serde_flatten_after_group_value(
+    quote! {
+        #[serde(rename(serialize = "common"), flatten)]
+        #[ortho_config(profile_field = "secret")]
+        common: CommonArgs
+    },
+    "flattened container"
+)]
 fn invalid_annotations_are_rejected(
     #[case] field: TokenStream,
     #[case] expected: &str,
@@ -105,6 +137,35 @@ fn invalid_annotations_are_rejected(
     ensure!(
         message.contains(expected),
         "expected {expected:?} in diagnostic: {message}"
+    );
+    Ok(())
+}
+
+/// A discarded name-value item must leave the rest of the Serde list readable.
+///
+/// Without the item boundary the value parser consumes `"common", flatten`, so
+/// `flatten` never reaches the callback and the field is accepted as ordinary
+/// while claiming protection it cannot provide. These cases fail if the
+/// boundary moves back to a whole remaining stream.
+#[rstest]
+#[case::name_value_before_flatten(quote! { rename = "common", flatten })]
+#[case::flatten_before_name_value(quote! { flatten, rename = "common" })]
+#[case::nested_name_value_before_flatten(
+    quote! { rename(serialize = "common"), flatten }
+)]
+#[case::string_with_comma_before_flatten(quote! { rename = "a,b", flatten })]
+fn discard_unknown_leaves_following_serde_items(#[case] serde_body: TokenStream) -> Result<()> {
+    let message = parse_error(quote! {
+        struct Demo {
+            #[serde(#serde_body)]
+            #[ortho_config(profile_field = "secret")]
+            common: CommonArgs,
+        }
+    })?;
+
+    ensure!(
+        message.contains("flattened container"),
+        "a trailing `flatten` must still be seen: {message}"
     );
     Ok(())
 }

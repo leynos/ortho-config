@@ -120,7 +120,7 @@ const SIMPLE_RUNS: &[SimpleRun] = &[
     SimpleRun {
         id: "guide-profile-redaction",
         args: &["--token", "live-token"],
-        stdout: "loaded token=live-token\npublished token default=None\n",
+        stdout: "loaded region=eu-west\npublished token default=None\n",
     },
     SimpleRun {
         id: "guide-behaviour-metadata",

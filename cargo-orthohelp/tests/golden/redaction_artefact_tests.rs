@@ -11,6 +11,7 @@ use cap_std::{ambient_authority, fs_utf8::Dir};
 use insta::assert_snapshot;
 use std::error::Error;
 use std::process::{Command, Output};
+use std::time::Duration;
 use tempfile::TempDir;
 
 use crate::fixtures;
@@ -22,6 +23,13 @@ type TestResult = Result<(), Box<dyn Error + Send + Sync>>;
 
 /// Fixed header date, so the roff snapshot does not drift with the clock.
 const ARTEFACT_DATE: &str = "2026-11-16";
+
+/// Budget for one `--format all` run over both locales.
+///
+/// The run renders every artefact family, so it is given a wider allowance
+/// than a single-format dispatch test; a saturated host is the realistic case
+/// this bound has to survive rather than a tight upper limit.
+const ARTEFACT_RUN_DEADLINE: Duration = Duration::from_secs(600);
 
 #[test]
 fn rendered_artefacts_publish_no_protected_literal() -> TestResult {
@@ -71,7 +79,14 @@ fn run_all_formats(out_dir: &TempDir) -> Result<Output, Box<dyn Error + Send + S
     for locale in ARTEFACT_LOCALES {
         command.args(["--locale", locale]);
     }
-    Ok(command.output()?)
+    // The shared runner owns the deadline, both stream captures, and cleanup of
+    // any descendant the renderer leaves behind, so this test cannot leak a
+    // process tree or hang on a full pipe.
+    Ok(test_helpers::process::run_with_deadline(
+        command,
+        ARTEFACT_RUN_DEADLINE,
+        "cargo-orthohelp --format all",
+    )?)
 }
 
 /// Reads every artefact family `--format all` emits.

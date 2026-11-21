@@ -36,7 +36,11 @@ use crate::schema::{
 /// # fn demo(metadata: &ortho_config::docs::DocMetadata) {
 /// let locale: LanguageIdentifier = "en-US".parse().expect("valid locale");
 /// let localized = localize_doc(metadata, &locale, &NoOpLocalizer::new());
-/// assert_eq!(localized.app_name, metadata.app_name);
+/// assert_eq!(
+///     localized.app_name,
+///     metadata.app_name,
+///     "localization must preserve the application name"
+/// );
 /// # }
 /// ```
 pub fn localize_doc(

@@ -498,7 +498,8 @@ helpers, while downstream applications own domain behaviour.
     members, and suppresses command-level examples once any field in the tree
     is protected; the derive, the `cargo-orthohelp` pipeline, the generated
     bridge, and the agent-context boundary apply it, so IR, man pages, MAML,
-    agent context, and cached metadata carry no protected literal. Evidence:
+    agent context, and cached metadata carry no protected value-bearing
+    slot. Evidence:
     unit and differential property tests, eight behavioural scenarios, golden
     and sentinel suites over both locales, and the Verus model in
     `verus/profile_redaction.rs`.

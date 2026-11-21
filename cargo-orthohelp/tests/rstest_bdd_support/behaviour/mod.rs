@@ -53,5 +53,6 @@ mod steps_ir_renderer;
 mod steps_policy;
 mod steps_policy_report;
 mod steps_profile_redaction;
+mod steps_profile_redaction_cache;
 mod steps_profile_redaction_output;
 mod steps_renderer;

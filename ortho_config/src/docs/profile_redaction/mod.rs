@@ -66,8 +66,16 @@ impl ProfileFieldExposure {
     /// ```rust
     /// use ortho_config::docs::ProfileFieldExposure;
     ///
-    /// assert_eq!(ProfileFieldExposure::Secret.as_str(), "secret");
-    /// assert_eq!(ProfileFieldExposure::ReferenceOnly.as_str(), "reference_only");
+    /// assert_eq!(
+    ///     ProfileFieldExposure::Secret.as_str(),
+    ///     "secret",
+    ///     "secret must keep its canonical wire spelling"
+    /// );
+    /// assert_eq!(
+    ///     ProfileFieldExposure::ReferenceOnly.as_str(),
+    ///     "reference_only",
+    ///     "reference-only must keep its canonical wire spelling"
+    /// );
     /// ```
     #[must_use]
     pub const fn as_str(self) -> &'static str {
@@ -166,10 +174,15 @@ impl DocMetadata {
     /// };
     ///
     /// let redacted = metadata.redacted_for_output();
-    /// assert_eq!(redacted.fields[0].default, None);
+    /// assert_eq!(
+    ///     redacted.fields[0].default,
+    ///     None,
+    ///     "a protected field must not disclose its default"
+    /// );
     /// assert_eq!(
     ///     redacted.fields[0].profile_field,
-    ///     Some(ProfileFieldExposure::Secret)
+    ///     Some(ProfileFieldExposure::Secret),
+    ///     "the disclosure label must survive projection"
     /// );
     /// ```
     #[must_use]
@@ -192,8 +205,11 @@ impl DocMetadata {
     ///
     /// # fn demo(metadata: DocMetadata) {
     /// let projected = metadata.into_redacted_for_output();
-    /// assert!(projected.subcommands.iter().all(|child| child.fields.iter()
-    ///     .all(|field| field.profile_field.is_none() || field.default.is_none())));
+    /// assert!(
+    ///     projected.subcommands.iter().all(|child| child.fields.iter()
+    ///         .all(|field| field.profile_field.is_none() || field.default.is_none())),
+    ///     "projected children must not retain protected defaults"
+    /// );
     /// # }
     /// ```
     #[must_use]
@@ -234,10 +250,20 @@ impl DocMetadata {
     ///
     /// # fn demo(documents: Vec<DocMetadata>) {
     /// let projected = DocMetadata::redacted_group_for_output(documents);
-    /// assert!(projected.iter().all(|doc| doc.fields.iter()
-    ///     .all(|field| field.profile_field.is_none() || field.default.is_none())));
-    /// assert!(projected.iter().all(|doc| doc.sections.examples.is_empty()
-    ///     || doc.fields.iter().all(|field| field.profile_field.is_none())));
+    /// assert!(
+    ///     projected.iter().all(|doc| doc.fields.iter()
+    ///         .all(|field| field.profile_field.is_none() || field.default.is_none())),
+    ///     "every protected field in the group must lose its default"
+    /// );
+    /// // A protected field keeps its label, so a surviving label means the
+    /// // group decision applied: every member's command examples are gone,
+    /// // including those of a clean sibling that was projected alone earlier.
+    /// assert!(
+    ///     !projected.iter().any(|doc| doc.fields.iter()
+    ///         .any(|field| field.profile_field.is_some()))
+    ///         || projected.iter().all(|doc| doc.sections.examples.is_empty()),
+    ///     "a protected member removes every member's command examples"
+    /// );
     /// # }
     /// ```
     #[must_use]
@@ -308,6 +334,8 @@ fn redact_value_type(value: &mut ValueType) {
 mod derive_tests;
 #[cfg(test)]
 mod proptests;
+#[cfg(test)]
+mod test_fixtures;
 #[cfg(test)]
 mod tests;
 
