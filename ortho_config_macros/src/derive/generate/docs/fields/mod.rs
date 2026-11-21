@@ -285,11 +285,12 @@ impl<'a> FieldMetaBuilder<'a> {
     /// parsing. Duplicate resolved paths are rejected to keep file-source
     /// metadata unambiguous.
     fn build_file_tokens(&mut self, context: &FieldContext<'_>) -> syn::Result<TokenStream> {
-        let key_path = if let Some(key) = context.attrs.doc.file_key_path.clone() {
-            key
-        } else {
-            context.attrs.serialized_key.clone()
-        };
+        let key_path = context
+            .attrs
+            .doc
+            .file_key_path
+            .clone()
+            .unwrap_or_else(|| context.attrs.serialized_key.clone());
         validate_file_key(context.name, &key_path)?;
         ensure_unique("file", context.name, &key_path, &mut self.file_seen)?;
         let lit = syn::LitStr::new(&key_path, proc_macro2::Span::call_site());

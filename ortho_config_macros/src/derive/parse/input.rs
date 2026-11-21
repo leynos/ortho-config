@@ -88,7 +88,7 @@ pub(crate) fn reject_incompatible_flatten(
         let name = field
             .ident
             .as_ref()
-            .map_or_else(String::new, |ident| ident.to_string());
+            .map_or_else(String::new, ToString::to_string);
         return Err(syn::Error::new_spanned(
             field,
             format!(

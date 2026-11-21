@@ -11,7 +11,7 @@ fn single_key(input: &syn::DeriveInput) -> Result<String> {
     let (_, _, _, attrs) = parse_input(input).map_err(|err| anyhow!(err))?;
     attrs
         .first()
-        .map(|attrs| attrs.serialized_key.clone())
+        .map(|field_attrs| field_attrs.serialized_key.clone())
         .ok_or_else(|| anyhow!("expected the fixture to declare one field"))
 }
 
