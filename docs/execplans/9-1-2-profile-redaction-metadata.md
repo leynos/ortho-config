@@ -987,6 +987,16 @@ exclusion as it stood at that milestone; it no longer applies.
   every group still compares one tuple under its own expectation. `cs delta` on
   the repair reports `Code Health (9.38 -> 10.00)` and the duplication fixed.
 
+- [x] (2026-11-21) Correct the group-pass description. The
+  `redacted_group_for_output` doc comment and the developers' guide said the
+  selector's group pass "only takes the group decision" and "never re-projects
+  a child's values". That is wrong: the group form calls `redact_node` for
+  every member, which re-walks each subtree and re-applies the field
+  projection; the result is unchanged only because the projection is
+  idempotent. Both passages now say so, and the traversal-count test's
+  arithmetic comment now reads `2 * 2` for a selector whose single member owns
+  two nodes.
+
 ## Surprises & discoveries
 
 The current context contains selector metadata, not profile bodies or names.
