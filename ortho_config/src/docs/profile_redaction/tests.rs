@@ -106,13 +106,32 @@ fn group_projection_applies_a_sibling_decision_to_every_member() {
         0,
         "a protected later sibling suppresses an earlier member's examples"
     );
+    // Comparing labels on both sides of the call keeps this test from passing
+    // on an implementation that removes classifications instead of examples.
     let later_field = later
         .fields
         .first()
         .expect("the protected member keeps its field");
+    assert_eq!(
+        later_field.profile_field,
+        Some(ProfileFieldExposure::Secret),
+        "the group keeps the protected field's own label"
+    );
     assert!(
         later_field.default.is_none(),
         "the protected member loses its own default"
+    );
+    let earlier_field = earlier
+        .fields
+        .first()
+        .expect("the clean member keeps its field");
+    assert_eq!(
+        earlier_field.profile_field, None,
+        "the group does not invent a classification for a clean member"
+    );
+    assert!(
+        earlier_field.default.is_some(),
+        "the group keeps a clean member's ordinary default"
     );
 }
 

@@ -158,11 +158,16 @@ impl ProfilesDeclaration {
     ///
     /// [`Self::with_redaction`] rejects the same unsupported state instead,
     /// and the difference is what silence would cost. Discarding a redaction
-    /// record would publish a protected value, so it must fail loudly. A
-    /// dropped name catalogue discloses nothing: an unsupported declaration
-    /// carries no selection contract, so it offers no surface on which a name
-    /// could be observed. Callers therefore need no branch to attach a
-    /// catalogue they could only have learned about later.
+    /// record loses classification information: which fields are protected,
+    /// and at what exposure. Value projection does not depend on this list —
+    /// the metadata is projected before it reaches the bridge, whether or not
+    /// profiles are supported — so the loss is a missing classification, not
+    /// by itself a disclosure. It is still irreversible and unusable, so it
+    /// must fail loudly rather than leave a caller believing the record took
+    /// effect. A dropped name catalogue is different: an unsupported
+    /// declaration carries no selection contract, so it offers no surface on
+    /// which a name could be observed. Callers therefore need no branch to
+    /// attach a catalogue they could only have learned about later.
     #[must_use]
     pub fn with_available_names(mut self, names: impl IntoIterator<Item = ProfileName>) -> Self {
         if self.supported {

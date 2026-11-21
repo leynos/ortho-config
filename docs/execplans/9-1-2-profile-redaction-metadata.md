@@ -1042,18 +1042,28 @@ exclusion as it stood at that milestone; it no longer applies.
   accepted. The projection gained the group rule's own unit test: a clean
   member projected alone keeps its command example, and that same member loses
   it when a later sibling is protected, so the result cannot be explained by
-  per-document projection. The `redacted_group_for_output` doc example no
-  longer asserts a disjunction that every projection satisfies; it binds every
-  member to a surviving classification label. Two behavioural scenarios feed a
+  per-document projection. That test compares classifications and ordinary
+  defaults on both sides of the call, so it cannot pass on an implementation
+  that removes labels rather than examples. The `redacted_group_for_output` doc
+  example previously closed with a disjunction over classification labels that
+  also holds when every label vanishes; the disjunction is removed, and the
+  example now says that the example-side claim belongs to that executed test,
+  which builds the documents itself. Two behavioural scenarios feed a
   hand-edited cache entry through `--no-build`: one retains a protected default
   on the last ordinary root field, and the man renderer must still publish the
-  earlier ordinary default while omitting the hand-edited literal — that is the
-  projection `main` applies to whatever it loads; the other repeats a protected
-  record, and the agent-context run must fail naming the duplicate, which is
-  the first coverage of the bridge's error reaching the exit path. The fourth
-  gap was the `# Errors` correction already recorded above. The added assertion
-  diagnostics pushed `ortho_config/src/docs/profile_redaction/tests.rs` past
-  the 400-line file cap, so its fixture builders moved to `test_fixtures.rs`.
+  earlier ordinary default while omitting the hand-edited literal. The claim
+  that scenario proves is that the pipeline projects a loaded cache body
+  somewhere before rendering, not that `main`'s entry projection is the pass
+  that did it: `ir::localize_doc` projects again at its own boundary, and the
+  scenario cannot distinguish the two. Isolating the entry projection would
+  need a seam the binary does not have; it remains defence in depth, and the
+  cached-IR scenario keeps its own separately meaningful claim that no released
+  generator writes such a body. The other scenario repeats a protected record,
+  and the agent-context run must fail naming the duplicate, which is the first
+  coverage of the bridge's error reaching the exit path. The fourth gap was the
+  `# Errors` correction already recorded above. The added assertion diagnostics
+  pushed `ortho_config/src/docs/profile_redaction/tests.rs` past the 400-line
+  file cap, so its fixture builders moved to `test_fixtures.rs`.
 
 ## Surprises & discoveries
 
@@ -1297,12 +1307,16 @@ rewritten — under a title that states it.
 catalogue on an unsupported declaration, and says why rather than being made to
 match `with_redaction`. The asymmetry was raised as a pre-merge observation on
 the grounds that one builder fails where the other stays silent. The difference
-is what silence costs: dropping a redaction record would publish a protected
-value, whereas a dropped name catalogue has no surface on which to be observed,
+is what silence costs. Dropping a redaction record loses classification
+information — which fields are protected, and at what exposure — and does so
+irreversibly, leaving a caller believing the record took effect. It is not by
+itself a value disclosure: the metadata is projected before it reaches the
+bridge whether or not profiles are supported, so values do not depend on this
+list. A dropped name catalogue has no surface on which to be observed at all,
 because an unsupported declaration carries no selection contract. Aligning them
-would either make the security-relevant builder lenient or force every caller
-that cannot yet know whether profiles are supported to branch. The behaviour is
-unchanged and both halves are already pinned by
+would either leave the classification builder silently lossy or force every
+caller that cannot yet know whether profiles are supported to branch. The
+behaviour is unchanged and both halves are already pinned by
 `available_names_do_not_opt_an_unsupported_declaration_in` and
 `redaction_on_an_unsupported_declaration_is_rejected`; the method's rustdoc now
 states the reason.
