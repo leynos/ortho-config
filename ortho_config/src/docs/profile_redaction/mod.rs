@@ -255,17 +255,16 @@ impl DocMetadata {
     ///         .all(|field| field.profile_field.is_none() || field.default.is_none())),
     ///     "every protected field in the group must lose its default"
     /// );
-    /// // A protected field keeps its label, so a surviving label means the
-    /// // group decision applied: every member's command examples are gone,
-    /// // including those of a clean sibling that was projected alone earlier.
-    /// assert!(
-    ///     !projected.iter().any(|doc| doc.fields.iter()
-    ///         .any(|field| field.profile_field.is_some()))
-    ///         || projected.iter().all(|doc| doc.sections.examples.is_empty()),
-    ///     "a protected member removes every member's command examples"
-    /// );
     /// # }
     /// ```
+    ///
+    /// The effect on command examples — the removal reaching a clean sibling
+    /// — is asserted by
+    /// `docs::profile_redaction::tests::group_projection_applies_a_sibling_decision_to_every_member`
+    /// against documents it builds and inspects on both sides of the call,
+    /// because an example here cannot construct a protected document without
+    /// restating every slot, and an assertion phrased as a disjunction over
+    /// classification labels also holds when the labels themselves vanish.
     #[must_use]
     pub fn redacted_group_for_output(mut documents: Vec<Self>) -> Vec<Self> {
         let has_protected = documents.iter().any(Self::contains_protected_field);

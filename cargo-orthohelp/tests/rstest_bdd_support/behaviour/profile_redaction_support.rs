@@ -104,8 +104,11 @@ pub(super) const HAND_EDITED_SENTINEL: &str = "HAND-EDITED-IR-SENTINEL";
 /// Applies `edit` to the cached `ir.json` body and writes the result back.
 ///
 /// The cache is the one input a released generator would never have written
-/// itself, so editing it is how a scenario reaches the projection `main` applies
-/// to whatever it loads.
+/// itself, so editing it is how a scenario presents the pipeline with
+/// metadata that has not already been projected. The pipeline projects it
+/// before rendering, but a renderer scenario cannot tell whether the entry
+/// projection or `ir::localize_doc`'s re-projection did the work, so the
+/// scenario claims the former only as part of the whole pipeline.
 pub(super) fn edit_cached_ir(
     orthohelp_context: &OrthoHelpContext,
     edit: impl FnOnce(&mut Value) -> StepResult<()>,
