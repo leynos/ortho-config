@@ -126,6 +126,41 @@ fn unconditional_module_chain_is_counted() -> Result<()> {
     "raw_identifier_include",
     "its expansion can declare items this walk cannot read"
 )]
+// `r#compile_error` and `compile_error` are one identifier, so a local
+// definition under the raw spelling shadows the prelude macro of the plain
+// name. A definition recorded by its rendered spelling resolves no call, and
+// the splice it hides is accepted as the diagnostic-only macro.
+#[case::raw_macro_definition(
+    "raw_macro_definition",
+    "its expansion can declare items this walk cannot read"
+)]
+// `#[r#cfg(..)]` is `#[cfg(..)]`: the compiler applies the condition, so the
+// hop is not unconditional whatever the spelling.
+#[case::raw_cfg_hop("raw_cfg_hop", "does not unconditionally compile it")]
+// `#[r#path = "decoy.rs"]` redirects the compiler exactly as `#[path]` does,
+// so the default-name file beside the declaration is not the compiled one.
+#[case::raw_path_override("raw_path_override", "carries a `#[path]` attribute")]
+// `#[r#macro_use]` imports the same macros `#[macro_use]` does, so an inert
+// name in the modules below it may reach a transcription that splices.
+#[case::raw_macro_use(
+    "raw_macro_use",
+    "its expansion can declare items this walk cannot read"
+)]
+// `use crate::error_inject as r#compile_error;` binds the imported macro to
+// `compile_error`, so the rendered spelling is not the name the call resolves.
+#[case::raw_import_binding(
+    "raw_import_binding",
+    "its expansion can declare items this walk cannot read"
+)]
+// `use crate::helpers::r#compile_error;` names the re-exported macro, so a
+// binding recorded by its rendered spelling never matches the inert name.
+#[case::raw_import_name(
+    "raw_import_name",
+    "its expansion can declare items this walk cannot read"
+)]
+// `pub enum r#ErrorKind` inside an inline module is the same declaration as
+// the plain spelling, so the nested shape has to be refused either way.
+#[case::raw_nested_definition("raw_nested_definition", "inside `mod error`")]
 // A tree without a reported crate root is refused rather than guessed at.
 #[case::no_crate_root("no_crate_root", "expected a crate root lib.rs")]
 fn module_tree_is_refused(#[case] fixture: &str, #[case] expected: &str) -> Result<()> {
@@ -162,6 +197,61 @@ fn unrelated_imports_leave_inert_names_trusted() -> Result<()> {
     ensure!(
         count == 3,
         "the accepted-import fixture should count three variants, found {count}",
+    );
+    Ok(())
+}
+
+/// A raw spelling names the same declaration and the same module file.
+///
+/// `pub enum r#ErrorKind` declares `ErrorKind` and `mod r#helper;` loads
+/// `helper.rs`, because a raw identifier differs from its plain form only in
+/// spelling. Normalising the prefix must therefore accept these shapes: a gate
+/// that refused every raw spelling would fail here, so this fixture keeps the
+/// repair from becoming a blanket rejection.
+#[test]
+fn raw_spellings_name_the_same_declaration() -> Result<()> {
+    let root = fixture_root().join("module_tree/raw_file_level_definition");
+
+    let count = count_error_kinds_under(&root)?;
+    ensure!(
+        count == 3,
+        "the raw-spelling fixture should count three variants, found {count}",
+    );
+    Ok(())
+}
+
+/// A call under a raw spelling resolves the plain definition it names.
+///
+/// `r#note!` is the call `note!` makes, so the local definition is found and
+/// audited through its transcription. A lookup that compares rendered
+/// spellings finds nothing, and because `note` is no inert prelude name the
+/// crate is refused: this control keeps the invocation site normalized, not
+/// only the definition that happens to be spelled one way.
+#[test]
+fn raw_macro_invocation_resolves_the_plain_definition() -> Result<()> {
+    let root = fixture_root().join("module_tree/raw_macro_invocation");
+
+    let count = count_error_kinds_under(&root)?;
+    ensure!(
+        count == 3,
+        "the raw-invocation fixture should count three variants, found {count}",
+    );
+    Ok(())
+}
+
+/// An inline module spelled raw resolves its file modules below its own name.
+///
+/// `mod r#outer { mod inner; }` puts `inner` below `outer/`, so a walk that
+/// joins the rendered spelling looks in a directory the compiler never uses and
+/// refuses a tree it should follow.
+#[test]
+fn raw_inline_module_hop_resolves_the_plain_directory() -> Result<()> {
+    let root = fixture_root().join("module_tree/raw_inline_hop");
+
+    let count = count_error_kinds_under(&root)?;
+    ensure!(
+        count == 3,
+        "the raw inline-hop fixture should count three variants, found {count}",
     );
     Ok(())
 }

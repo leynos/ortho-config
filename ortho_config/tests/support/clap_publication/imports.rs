@@ -27,6 +27,7 @@ use std::collections::BTreeSet;
 use syn::{Attribute, Ident, Item, ItemMod, UseTree};
 
 use super::audit::applies_attribute;
+use super::tokens::identifier_name;
 
 /// What the `use` items of one item list can bind.
 #[derive(Debug, Default)]
@@ -75,12 +76,18 @@ impl Imports {
     fn add_tree(&mut self, tree: &UseTree, root: Option<&Ident>) {
         match tree {
             UseTree::Path(path) => self.add_tree(&path.tree, root.or(Some(&path.ident))),
+            // `use crate::error_inject as r#compile_error;` binds the imported
+            // macro to `compile_error`, so the binding is recorded under the name
+            // Rust resolves rather than the spelling the source renders.
             UseTree::Name(name) => {
-                self.explicit.insert(name.ident.to_string());
+                self.explicit.insert(identifier_name(&name.ident));
             }
             UseTree::Rename(rename) => {
-                self.explicit.insert(rename.rename.to_string());
+                self.explicit.insert(identifier_name(&rename.rename));
             }
+            // The glob's root needs no normalization: only `crate`, `self` and
+            // `super` are classified here, and Rust forbids a raw spelling of a
+            // path keyword, so no other name can become one.
             UseTree::Glob(_) => match root.map(ToString::to_string).as_deref() {
                 Some("crate" | "self" | "super") => self.has_internal_glob = true,
                 _ => self.has_external_glob = true,

@@ -42,7 +42,9 @@ use cap_std::fs_utf8::Dir;
 use cargo_metadata::Package;
 use syn::Item;
 
-use super::audit::{audit_definition, refuse_nested_error_kinds, reject_cfg_attributes};
+use super::audit::{
+    audit_definition, is_error_kind_name, refuse_nested_error_kinds, reject_cfg_attributes,
+};
 use super::imports::CrateScope;
 use super::library::library_crate_root;
 use super::macros::{collect_crate_names, refuse_item_macros};
@@ -209,7 +211,7 @@ fn analyze_error_kind(
     refuse_nested_error_kinds(&file.items, origin)?;
     refuse_item_macros(&file.items, origin, crate_scope)?;
     let mut definitions = file.items.iter().filter_map(|item| match item {
-        Item::Enum(definition) if definition.ident == "ErrorKind" => Some(definition),
+        Item::Enum(definition) if is_error_kind_name(&definition.ident) => Some(definition),
         _ => None,
     });
     let Some(definition) = definitions.next() else {

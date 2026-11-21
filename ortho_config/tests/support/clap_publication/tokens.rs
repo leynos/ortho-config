@@ -6,10 +6,14 @@
 //! diagnostic. Rendering separates tokens with spaces, which is what makes the
 //! identifier immediately before a `!` the invoked macro's name.
 //!
-//! A rendered name can carry `r#`: `proc-macro2` prints a raw identifier with
-//! its prefix, and Rust resolves `r#include` to the same macro as `include`.
-//! The prefix is removed before a name is resolved, so a transcription cannot
-//! hide a splice behind a spelling the scanner declines to recognize.
+//! A name can carry `r#`: `proc-macro2` prints a raw identifier with its
+//! prefix, and Rust resolves `r#include` to the same macro as `include`,
+//! `r#ErrorKind` to the same type as `ErrorKind`, and `#[r#cfg]` to the same
+//! attribute as `#[cfg]`. The prefix is removed before a name is resolved or
+//! compared, so a declaration cannot hide behind a spelling the audit declines
+//! to recognize. [`identifier_name`] is the one place that rule lives, because a
+//! spelling normalized in one module and compared raw in another is exactly the
+//! gap the fixtures beside it exist to catch.
 
 use syn::Path;
 
@@ -39,6 +43,22 @@ pub(super) fn invoked_macro_names(tokens: &str) -> Vec<String> {
     names
 }
 
+/// The name an identifier denotes, with a raw identifier normalized.
+///
+/// Rust treats `r#compile_error` and `compile_error` as one identifier, so a
+/// definition, a call, a `use` binding, a type name, and a module name all have
+/// to be recorded the same way. Comparing rendered spellings instead lets a
+/// definition under the raw prefix resolve no call, which is how a splice hides
+/// behind a name the audit trusts.
+pub(super) fn identifier_name(ident: &syn::Ident) -> String {
+    strip_raw_prefix(&ident.to_string()).to_owned()
+}
+
+/// The same normalization for a name already rendered as text.
+fn strip_raw_prefix(rendered: &str) -> &str {
+    rendered.strip_prefix("r#").unwrap_or(rendered)
+}
+
 /// The macro name a rendered word spells, with a raw identifier normalized.
 ///
 /// Rust treats `r#include` and `include` as one identifier, so dropping the
@@ -46,7 +66,7 @@ pub(super) fn invoked_macro_names(tokens: &str) -> Vec<String> {
 /// Leaving the raw spelling unrecognized would instead treat the invocation as
 /// naming no macro at all, which is how a wrapper can hide its splice.
 fn macro_name(word: &str) -> Option<&str> {
-    let plain = word.strip_prefix("r#").unwrap_or(word);
+    let plain = strip_raw_prefix(word);
     is_identifier(plain).then_some(plain)
 }
 
