@@ -1,13 +1,14 @@
 //! Attribute auditing for the `ErrorKind` source inventory.
 //!
 //! The inventory is trustworthy only when the declaration it counts is the
-//! declaration the compiler builds. Four questions decide that: whether an
+//! declaration the compiler builds. Five questions decide that: whether an
 //! item's compilation is conditional, whether a `mod` declaration redirects the
 //! compiler to a file a default-name walk would not open, whether the inventory
 //! type is declared somewhere a file-level scan cannot bind to the item the
-//! crate exports, and whether an item-level macro could declare it after this
-//! parse. The first three are answered here; [`super::macros`] answers the
-//! fourth.
+//! crate exports, whether an item-level macro could declare it after this
+//! parse, and whether an attribute path is a procedural macro whose expansion
+//! replaces the item it annotates. The first three are answered here;
+//! [`super::macros`] answers the fourth and [`super::expansion`] the fifth.
 //!
 //! The predicates here stay together because each of them fails closed, and a
 //! control that reverts one must fail for the reason it names, so they are
@@ -58,9 +59,19 @@ fn is_cfg_attribute(attribute: &Attribute) -> bool {
 /// the two as one attribute, and a check that missed the raw spelling would read
 /// a conditional item as unconditional and trust a shape the compiler may
 /// exclude — so every attribute comparison goes through here.
-fn path_names(path: &Path, name: &str) -> bool {
-    path.get_ident()
-        .is_some_and(|ident| identifier_name(ident) == name)
+pub(super) fn path_names(path: &Path, name: &str) -> bool {
+    sole_identifier(path).is_some_and(|spelled| spelled == name)
+}
+
+/// The single identifier `path` spells, with a raw identifier normalized.
+///
+/// Only a one-segment path can name an attribute the compiler defines; a
+/// multi-segment path names a procedural macro or a tool attribute.
+/// [`super::expansion`] therefore asks this question to decide whether a path is
+/// even a candidate for the compiler's own names, and relies on the same
+/// normalization `#[r#cfg]` needs.
+pub(super) fn sole_identifier(path: &Path) -> Option<String> {
+    path.get_ident().map(identifier_name)
 }
 
 /// Whether any attribute applies `name`, directly or through `cfg_attr`.

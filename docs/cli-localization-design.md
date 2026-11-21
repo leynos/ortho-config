@@ -559,6 +559,24 @@ walk never reads. So neither a conditional `mod error;` whose file is a
 symlink, nor a `mod` declaration nested inside a conditional inline module, can
 hide an inventory behind a condition that is true.
 
+A third shape is not recoverable from the parse at all. An attribute path is
+either one of the compiler's annotations or an invocation of a procedural
+macro, and a macro receives the annotated item and returns the items that
+replace it: `#[inject] mod error {}` parses as an empty module while the build
+contains whatever the macro returned, and a derive macro appends its output to
+the item's scope. A gate that must decide before publishing cannot expand one,
+so it bounds every path it cannot bind to the compiler's own names. A
+multi-segment path names a procedural macro or a tool attribute, and is
+refused. A single identifier is trusted only when the compiler owns that name:
+a macro of the same spelling makes the attribute ambiguous (`E0659`), so a
+crate that compiles has already resolved every one-segment attribute path to
+the compiler's meaning. `derive` is the compiler attribute whose arguments
+reach a procedural macro, so its list is read and only the nine built-in
+derives are trusted. `cfg_attr` applies its attributes when its condition
+holds, so the audit recurses into it and judges the attributes it would apply.
+The lists are closed: refusing a compiler attribute they omit costs one review,
+while trusting a name the compiler does not own is the failure this bounds.
+
 The count is the total declared variant count for that builder package, not
 only the raisable variants; classification as translated or `DisplayOnly`
 remains in `CLAP_ERROR_IDS`. The reviewed identity and its total are explicit
