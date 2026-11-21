@@ -2252,7 +2252,7 @@ fn main() -> OrthoResult<()> {
     // Loading is unaffected: redaction shapes published metadata, not how
     // configuration is read.
     let settings = Settings::load()?;
-    println!("loaded token={}", settings.token);
+    println!("loaded region={}", settings.region);
 
     let metadata = Settings::get_doc_metadata().redacted_for_output();
     let token = metadata
@@ -2265,9 +2265,12 @@ fn main() -> OrthoResult<()> {
 }
 ```
 
-Run with `--token live-token`, this prints `loaded token=live-token` and
+Run with `--token live-token`, this prints `loaded region=eu-west` and
 `published token default=None`: the command line still supplies the value,
-while the metadata that would have published the default is empty.
+while the metadata that would have published the default is empty. The example
+prints the region rather than the token so that copying it cannot write a real
+credential to the terminal, where it may reach a scrollback buffer or a shell
+log.
 
 Two labels are accepted:
 

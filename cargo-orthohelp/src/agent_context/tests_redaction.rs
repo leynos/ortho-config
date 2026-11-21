@@ -82,12 +82,31 @@ fn protected_field_is_published_by_identity_only() {
 
     let context = bridge_ir_to_agent_context(&metadata, "demo_pkg", None).expect("bridge succeeds");
 
-    assert_eq!(context.profiles.redaction().len(), 1);
+    assert_eq!(
+        context.profiles.redaction().len(),
+        1,
+        "a single protected field must yield one redaction record"
+    );
     let record = only_record(&context);
-    assert_eq!(record.command_path, ["demo-bin"]);
-    assert_eq!(record.field_name, "token");
-    assert_eq!(record.key_path.as_deref(), Some("auth.token"));
-    assert_eq!(record.exposure, ProfileFieldExposure::Secret);
+    assert_eq!(
+        record.command_path,
+        ["demo-bin"],
+        "the record must identify the command that owns the protected field"
+    );
+    assert_eq!(
+        record.field_name, "token",
+        "the record must carry the emitted metadata field name"
+    );
+    assert_eq!(
+        record.key_path.as_deref(),
+        Some("auth.token"),
+        "the record must retain the file key path verbatim"
+    );
+    assert_eq!(
+        record.exposure,
+        ProfileFieldExposure::Secret,
+        "the declared secret classification must survive into the record"
+    );
 
     let input = root_input(&context, "token").expect("the protected field is still invocable");
     assert!(
@@ -112,8 +131,16 @@ fn hidden_protected_field_is_recorded_without_becoming_an_input() {
 
     let context = bridge_ir_to_agent_context(&metadata, "demo_pkg", None).expect("bridge succeeds");
 
-    assert_eq!(context.profiles.redaction().len(), 1);
-    assert_eq!(only_record(&context).field_name, "api_key");
+    assert_eq!(
+        context.profiles.redaction().len(),
+        1,
+        "the hidden field must still yield one redaction record"
+    );
+    assert_eq!(
+        only_record(&context).field_name,
+        "api_key",
+        "the record must name the hidden protected field"
+    );
     assert!(
         root_input(&context, "api_key").is_none(),
         "a config-only field is not an invocable input"
@@ -126,17 +153,25 @@ fn unsupported_declaration_never_gains_redaction_metadata() {
 
     let context = bridge_ir_to_agent_context(&metadata, "demo_pkg", None).expect("bridge succeeds");
 
-    assert!(!context.profiles.supported);
+    assert!(
+        !context.profiles.supported,
+        "an undeclared profile surface must remain unsupported"
+    );
     assert_eq!(
         context.profiles.redaction(),
-        &[] as &[ortho_config::ProfileFieldRedaction]
+        &[] as &[ortho_config::ProfileFieldRedaction],
+        "an unsupported declaration must carry no redaction records"
     );
     let input = root_input(&context, "token").expect("the field is still invocable");
     assert!(
         input.default.is_none(),
         "projection still removes the default"
     );
-    assert_eq!(input.enum_values, [] as [String; 0]);
+    assert_eq!(
+        input.enum_values,
+        [] as [String; 0],
+        "an unsupported declaration must not project enumerated values"
+    );
 }
 
 #[test]
@@ -147,9 +182,12 @@ fn duplicate_identity_is_reported_rather_than_arbitrarily_chosen() {
     let error = bridge_ir_to_agent_context(&metadata, "demo_pkg", None)
         .expect_err("duplicate identities fail the bridge");
 
-    assert!(matches!(
-        error.as_ref(),
-        ortho_config::OrthoError::DuplicateProfileRedaction { field_name, .. }
-            if field_name == "token"
-    ));
+    assert!(
+        matches!(
+            error.as_ref(),
+            ortho_config::OrthoError::DuplicateProfileRedaction { field_name, .. }
+                if field_name == "token"
+        ),
+        "the duplicate identity must be reported with the colliding field name"
+    );
 }

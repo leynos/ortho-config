@@ -28,20 +28,31 @@ where
     Ok(())
 }
 
-/// Consumes an unrecognized key-value or list without recording it.
+/// Consumes an unrecognised key-value or list without recording it.
 ///
-/// The value is parsed as one expression rather than as a token stream: a
-/// token-stream parse runs to the end of the attribute, which would swallow
-/// every entry that follows. `#[serde(rename = "ref", alias = "reference")]`
-/// loses the alias that way, and the alias is what decides which merged keys
-/// the loader accepts.
+/// A name-value item must consume only its own value. Parsing a
+/// `TokenStream` from `meta.value()` would swallow the rest of the nested
+/// list, because that parser consumes everything it is given, so a later
+/// `flatten` in `#[serde(rename = "common", flatten)]` would never reach the
+/// enclosing callback. Reading one token tree at a time and stopping at a
+/// top-level comma leaves the enclosing `parse_nested_meta` loop positioned
+/// on the next item; a group token tree carries its own delimiters, so a
+/// comma nested inside parentheses or brackets cannot end the value early.
 pub(crate) fn discard_unknown(meta: &syn::meta::ParseNestedMeta) -> syn::Result<()> {
     if meta.input.peek(Token![=]) {
-        meta.value()?.parse::<Expr>()?;
+        skip_to_item_end(meta.value()?)?;
     } else if meta.input.peek(syn::token::Paren) {
         let content;
         parenthesized!(content in meta.input);
         content.parse::<proc_macro2::TokenStream>()?;
+    }
+    Ok(())
+}
+
+/// Consumes tokens up to the next top-level comma, leaving the comma unread.
+fn skip_to_item_end(input: syn::parse::ParseStream<'_>) -> syn::Result<()> {
+    while !input.is_empty() && !input.peek(Token![,]) {
+        input.parse::<proc_macro2::TokenTree>()?;
     }
     Ok(())
 }

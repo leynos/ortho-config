@@ -137,10 +137,12 @@ remaining contracts. The macro builds these in
 `ortho_config_macros/src/derive/generate/docs/mod.rs`.
 `ortho_config/src/docs/mod.rs` owns exports and IR version `2.0`.
 
-`cargo-orthohelp/src/schema/mod.rs` currently mirrors the library schema as
-separate Rust types; it does not re-export the library types. Its private
-`field`, `behaviour`, `content`, and `renderer` modules mirror the runtime
-layout. Preserve the upstream renderer declarations and optional-value CLI
+`cargo-orthohelp/src/schema/mod.rs` mirrored the library schema as separate
+Rust types when this plan was written; it did not re-export the library types,
+and its private `field`, `behaviour`, `content`, and `renderer` modules
+mirrored the runtime layout. M1 replaced that mirror with re-exports of
+`ortho_config::docs`, so one type identity and one projection now cover both
+crates. Preserve the upstream renderer declarations and optional-value CLI
 metadata when consolidating these types or projecting them. Renderer
 declarations are public descriptions with application-defined string
 identifiers; they are outside profile-value redaction and must remain unchanged.
@@ -1007,6 +1009,51 @@ exclusion as it stood at that milestone; it no longer applies.
   amendment now say the same. The Verus module prose records that the model
   specifies one document, so the group boundary has sibling regressions as
   evidence rather than a separate theorem.
+
+- [x] (2026-11-21) Close the formal review's defect findings. One is a real
+  parser bug: `discard_unknown` parsed an unrelated Serde value as a whole
+  `TokenStream`, which consumes the rest of the nested list, so
+  `#[serde(rename = "common", flatten)]` never reached the `flatten` callback
+  and a `profile_field` on a flattened container escaped the rejection the
+  boundary promises. It now reads one token tree at a time and stops at a
+  top-level comma, leaving the enclosing loop positioned on the next item; four
+  regression cases put `flatten` after a name-value item, after a parenthesized
+  group and after a literal containing a comma. The sentinel fixture's
+  self-check no longer manufactures uses of constants a target does not read:
+  it asserts the invariants the suites depend on — distinct root types,
+  distinct locales, disjoint classification lists, and command-example and
+  unsupported literals attributing correctly against the protected set. The new
+  golden test runs `cargo-orthohelp` through
+  `ortho_config_test_helpers::process::run_with_deadline`, as the process
+  ownership contract requires, and the paired-catalogue scenario now feeds the
+  second declaration reversed names, so canonicalization is observable rather
+  than tautological. The bridge's `# Errors` section no longer promises
+  `ProfileMetadataOnUnsupported` for a document that declares protected fields
+  without `profiles`: that case deliberately succeeds with an unsupported
+  declaration, because the values are projected out before the boundary and the
+  records belong to the profile surface. The tested users' guide example prints
+  the region instead of the secret, so a copied example cannot write a
+  credential to the terminal. Remaining assertion diagnostics and three
+  documentation overclaims (roadmap guarantee, migration-guide limits and
+  renderer premise, design-document schema mirror) are corrected in the same
+  repair.
+- [x] (2026-11-21) Close the testing review's residual gaps. The four
+  non-blocking gaps in the pre-merge testing row are covered rather than
+  accepted. The projection gained the group rule's own unit test: a clean
+  member projected alone keeps its command example, and that same member loses
+  it when a later sibling is protected, so the result cannot be explained by
+  per-document projection. The `redacted_group_for_output` doc example no
+  longer asserts a disjunction that every projection satisfies; it binds every
+  member to a surviving classification label. Two behavioural scenarios feed a
+  hand-edited cache entry through `--no-build`: one retains a protected default
+  on the last ordinary root field, and the man renderer must still publish the
+  earlier ordinary default while omitting the hand-edited literal — that is the
+  projection `main` applies to whatever it loads; the other repeats a protected
+  record, and the agent-context run must fail naming the duplicate, which is
+  the first coverage of the bridge's error reaching the exit path. The fourth
+  gap was the `# Errors` correction already recorded above. The added assertion
+  diagnostics pushed `ortho_config/src/docs/profile_redaction/tests.rs` past
+  the 400-line file cap, so its fixture builders moved to `test_fixtures.rs`.
 
 ## Surprises & discoveries
 

@@ -44,9 +44,10 @@ struct SelectorFlag<'a>(&'a str);
 ///
 /// Returns [`ortho_config::OrthoError::DuplicateProfileRedaction`] when the
 /// document declares two protected fields with the same command path and field
-/// name, and
-/// [`ortho_config::OrthoError::ProfileMetadataOnUnsupported`] when protected
-/// fields exist but the document does not opt into profiles.
+/// name.
+///
+/// Protected fields without a profile declaration are not an error: their
+/// values are still projected out, and the records have no surface to qualify.
 ///
 /// # Examples
 ///

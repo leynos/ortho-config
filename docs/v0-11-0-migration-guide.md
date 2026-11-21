@@ -472,9 +472,12 @@ value you have already merged yourself.
 Nothing is required. A field marked `profile_field = "secret"` or
 `profile_field = "reference_only"` keeps its public descriptor, but the
 value-bearing metadata that would publish it is removed before any artefact
-leaves the process. Adoption is opt-in per field, and loading is unaffected: a
-protected value still resolves from a flag, the environment, a file, or a
-profile.
+leaves the process. The projection removes only the named metadata slots and
+retains the public descriptor, so a protected value copied into help text, a
+custom type name, a link, or a note is still published; do not put protected
+values in retained prose. Adoption is opt-in per field, and loading is
+unaffected: a protected value still resolves from a flag, the environment, a
+file, or a profile.
 
 ```rust,ignore
 #[derive(Deserialize, OrthoConfig)]
@@ -503,8 +506,10 @@ Upgrading code that consumes the metadata:
   naming its tokenized command path, field name, optional file key, and
   exposure label, plus `profiles.available_names`, a sorted catalogue of
   validated profile names that carries no profile body. Both are omitted when
-  empty, so a document that supplies neither is byte-identical to v0.10.0
-  output.
+  empty, so this feature adds no keys to a document that supplies neither. A
+  document with a command still differs from v0.10.0 output, because
+  `AgentCommand::renderer` is always serialized; section 4 describes that
+  separate renderer and output wire difference.
 - `OrthoError` gained the `DuplicateProfileRedaction` and
   `ProfileMetadataOnUnsupported` variants. `OrthoError` is `#[non_exhaustive]`,
   so a match that already carries a wildcard arm needs no new arm.

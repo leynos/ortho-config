@@ -11,7 +11,8 @@ use rstest_bdd_macros::{given, when};
 use super::profile_redaction_support::{
     COMMAND_EXAMPLE_SENTINELS, ORDINARY_ROOT_TYPE, REDACTION_ROOT_TYPE, REFERENCE_SENTINELS,
     SECRET_SENTINELS, UNSUPPORTED_ROOT_TYPE, UNSUPPORTED_SENTINELS, all_protected_sentinels,
-    paired_named_contexts, require, run_agent_context, run_all_formats, run_checked,
+    duplicate_protected_record, edit_cached_ir, paired_named_contexts, require,
+    retain_hand_edited_default, run_agent_context, run_all_formats, run_checked,
     seed_unrelated_cache_entry, sentinel_categories,
 };
 use super::steps::{OrthoHelpContext, StepResult, run_orthohelp};
@@ -229,6 +230,49 @@ fn run_with_no_build(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()>
         orthohelp_context,
         &[
             "--no-build",
+            "--package",
+            "orthohelp_fixture",
+            "--root-type",
+            REDACTION_ROOT_TYPE,
+            "--locale",
+            "en-US",
+        ],
+    )?;
+    orthohelp_context.last_output.set(output);
+    Ok(())
+}
+
+#[when("I hand-edit the cached IR to retain a protected default")]
+fn hand_edit_cached_ir_default(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
+    edit_cached_ir(orthohelp_context, retain_hand_edited_default)
+}
+
+#[when("I hand-edit the cached IR to duplicate a protected record")]
+fn hand_edit_cached_ir_duplicate(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
+    edit_cached_ir(orthohelp_context, duplicate_protected_record)
+}
+
+#[when("I run cargo-orthohelp with no-build man output for the profile-redaction fixture")]
+fn run_with_no_build_man(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
+    run_no_build_with_format(orthohelp_context, "man")
+}
+
+#[when("I run cargo-orthohelp with no-build context output for the profile-redaction fixture")]
+fn run_with_no_build_context(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
+    run_no_build_with_format(orthohelp_context, "agent-context")
+}
+
+/// Runs the cached IR through `format` without rebuilding the fixture.
+fn run_no_build_with_format(
+    orthohelp_context: &mut OrthoHelpContext,
+    format: &str,
+) -> StepResult<()> {
+    let output = run_orthohelp(
+        orthohelp_context,
+        &[
+            "--no-build",
+            "--format",
+            format,
             "--package",
             "orthohelp_fixture",
             "--root-type",

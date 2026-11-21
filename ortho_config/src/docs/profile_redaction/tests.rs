@@ -4,148 +4,12 @@ use pretty_assertions::assert_eq;
 use rstest::rstest;
 use serde_json::json;
 
-use super::{ProfileFieldExposure, traversal_probe};
-use crate::docs::{
-    CliMetadata, DefaultValue, DocMetadata, DocProfilesMeta, Example, FieldMetadata, HeadingIds,
-    SectionsMetadata, ValueType,
+use super::test_fixtures::{
+    doc, example, field, first_subcommand, first_subcommand_mut, mixed_tree, only_field,
+    only_field_mut, second_subcommand,
 };
-
-fn heading_ids() -> HeadingIds {
-    HeadingIds {
-        name: "n".into(),
-        synopsis: "s".into(),
-        description: "d".into(),
-        options: "o".into(),
-        environment: "e".into(),
-        files: "f".into(),
-        precedence: "p".into(),
-        exit_status: "x".into(),
-        examples: "ex".into(),
-        see_also: "sa".into(),
-        commands: None,
-    }
-}
-
-fn sections(examples: Vec<Example>) -> SectionsMetadata {
-    SectionsMetadata {
-        headings_ids: heading_ids(),
-        discovery: None,
-        precedence: None,
-        examples,
-        links: Vec::new(),
-        notes: Vec::new(),
-    }
-}
-
-fn example(code: &str) -> Example {
-    Example {
-        title_id: None,
-        code: code.into(),
-        body_id: None,
-    }
-}
-
-fn cli(possible_values: &[&str]) -> CliMetadata {
-    CliMetadata {
-        long: Some("token".into()),
-        short: None,
-        value_name: None,
-        multiple: false,
-        takes_value: true,
-        value_optional: false,
-        possible_values: possible_values.iter().map(ToString::to_string).collect(),
-        hide_in_help: false,
-    }
-}
-
-fn field(name: &str, exposure: Option<ProfileFieldExposure>) -> FieldMetadata {
-    FieldMetadata {
-        name: name.into(),
-        help_id: format!("help.{name}"),
-        long_help_id: Some(format!("long.{name}")),
-        value: Some(ValueType::String),
-        default: Some(DefaultValue {
-            display: format!("{name}-sentinel"),
-        }),
-        required: false,
-        deprecated: None,
-        cli: Some(cli(&["one", "two"])),
-        env: None,
-        file: None,
-        examples: vec![example(&format!("{name}-sentinel-example"))],
-        links: Vec::new(),
-        notes: Vec::new(),
-        profile_field: exposure,
-    }
-}
-
-fn doc(app: &str, fields: Vec<FieldMetadata>, subcommands: Vec<DocMetadata>) -> DocMetadata {
-    DocMetadata {
-        ir_version: "2.0".into(),
-        app_name: app.into(),
-        bin_name: None,
-        about_id: format!("{app}.about"),
-        synopsis_id: None,
-        sections: sections(vec![example(&format!("{app}-example"))]),
-        fields,
-        subcommands,
-        windows: None,
-        behaviour: None,
-        renderer: None,
-        output: None,
-        profiles: None,
-    }
-}
-
-/// A root with command examples, an ordinary field, and a protected child.
-fn mixed_tree() -> DocMetadata {
-    let child = doc(
-        "child",
-        vec![field("secret", Some(ProfileFieldExposure::Secret))],
-        Vec::new(),
-    );
-    let sibling = doc("sibling", vec![field("plain", None)], Vec::new());
-    let mut root = doc("root", vec![field("ordinary", None)], vec![child, sibling]);
-    root.sections.examples = vec![example("root-example"), example("root-example-2")];
-    root
-}
-
-/// Returns the sole field of a document, which every fixture here declares.
-fn only_field(metadata: &DocMetadata) -> &FieldMetadata {
-    metadata.fields.first().expect("fixtures declare one field")
-}
-
-/// Mutable counterpart of [`only_field`].
-fn only_field_mut(metadata: &mut DocMetadata) -> &mut FieldMetadata {
-    metadata
-        .fields
-        .first_mut()
-        .expect("fixtures declare one field")
-}
-
-/// Returns the first subcommand, which every fixture tree declares.
-fn first_subcommand(metadata: &DocMetadata) -> &DocMetadata {
-    metadata
-        .subcommands
-        .first()
-        .expect("fixture trees declare two subcommands")
-}
-
-/// Mutable counterpart of [`first_subcommand`].
-fn first_subcommand_mut(metadata: &mut DocMetadata) -> &mut DocMetadata {
-    metadata
-        .subcommands
-        .first_mut()
-        .expect("fixture trees declare two subcommands")
-}
-
-/// Returns the second subcommand, which every fixture tree declares.
-fn second_subcommand(metadata: &DocMetadata) -> &DocMetadata {
-    metadata
-        .subcommands
-        .get(1)
-        .expect("fixture trees declare two subcommands")
-}
+use super::{ProfileFieldExposure, traversal_probe};
+use crate::docs::{DefaultValue, DocMetadata, DocProfilesMeta, FieldMetadata, ValueType};
 
 #[rstest]
 #[case(ProfileFieldExposure::Secret)]
@@ -181,7 +45,10 @@ fn protected_field_clears_every_literal_slot(#[case] exposure: ProfileFieldExpos
         }),
     });
 
-    assert_eq!(projected_field, &expected);
+    assert_eq!(
+        projected_field, &expected,
+        "protected fields keep public slots, clear values"
+    );
 }
 
 #[test]
@@ -189,8 +56,16 @@ fn ordinary_field_keeps_every_literal_slot() {
     let original = field("plain", None);
     let projected = doc("demo", vec![original.clone()], Vec::new()).redacted_for_output();
 
-    assert_eq!(projected.fields.len(), 1);
-    assert_eq!(only_field(&projected), &original);
+    assert_eq!(
+        projected.fields.len(),
+        1,
+        "ordinary projection preserves the field count"
+    );
+    assert_eq!(
+        only_field(&projected),
+        &original,
+        "ordinary fields must survive projection"
+    );
 }
 
 #[test]
@@ -198,7 +73,47 @@ fn projection_is_idempotent_on_a_mixed_tree() {
     let once = mixed_tree().redacted_for_output();
     let twice = once.redacted_for_output();
 
-    assert_eq!(once, twice);
+    assert_eq!(
+        once, twice,
+        "projection must be idempotent on an already-projected tree"
+    );
+}
+
+#[test]
+fn group_projection_applies_a_sibling_decision_to_every_member() {
+    let clean = doc("clean", vec![field("plain", None)], Vec::new());
+    let protected = doc(
+        "protected",
+        vec![field("token", Some(ProfileFieldExposure::Secret))],
+        Vec::new(),
+    );
+
+    // The clean member's own projection keeps its example, so a group result
+    // that removes it cannot be explained by projecting each member alone.
+    assert_eq!(
+        clean.clone().redacted_for_output().sections.examples.len(),
+        1,
+        "a clean document projected alone keeps its command examples"
+    );
+
+    let members = DocMetadata::redacted_group_for_output(vec![clean, protected]);
+
+    assert_eq!(members.len(), 2, "the group keeps every member");
+    let earlier = members.first().expect("the group keeps its first member");
+    let later = members.get(1).expect("the group keeps its second member");
+    assert_eq!(
+        earlier.sections.examples.len(),
+        0,
+        "a protected later sibling suppresses an earlier member's examples"
+    );
+    let later_field = later
+        .fields
+        .first()
+        .expect("the protected member keeps its field");
+    assert!(
+        later_field.default.is_none(),
+        "the protected member loses its own default"
+    );
 }
 
 #[test]
@@ -216,7 +131,11 @@ fn protected_field_suppresses_command_examples_throughout_the_tree() {
         only_field(second_subcommand(&projected)).examples.len(),
     );
 
-    assert_eq!(example_counts, (0, 0, 0, 1, 0, 1));
+    assert_eq!(
+        example_counts,
+        (0, 0, 0, 1, 0, 1),
+        "command examples are suppressed tree-wide; only the protected field loses its own"
+    );
 }
 
 #[test]
@@ -224,7 +143,11 @@ fn command_examples_survive_when_no_field_is_protected() {
     let ordinary = doc("demo", vec![field("plain", None)], Vec::new());
     let projected = ordinary.redacted_for_output();
 
-    assert_eq!(projected.sections.examples.len(), 1);
+    assert_eq!(
+        projected.sections.examples.len(),
+        1,
+        "clean trees keep their command examples"
+    );
 }
 
 #[test]
@@ -260,7 +183,11 @@ fn documents_differing_only_in_protected_slots_project_equal() {
         .examples
         .clear();
 
-    assert_eq!(first.redacted_for_output(), second.redacted_for_output());
+    assert_eq!(
+        first.redacted_for_output(),
+        second.redacted_for_output(),
+        "documents differing only in protected slots must project equal"
+    );
 }
 
 #[test]
@@ -302,11 +229,22 @@ fn labels_round_trip_through_their_wire_spelling(
     #[case] wire: &str,
 ) {
     let encoded = serde_json::to_value(exposure).expect("exposure serializes");
-    assert_eq!(encoded, json!(wire));
+    assert_eq!(
+        encoded,
+        json!(wire),
+        "serialization must use the snake_case wire spelling"
+    );
     let decoded: ProfileFieldExposure =
         serde_json::from_value(json!(wire)).expect("known label deserializes");
-    assert_eq!(decoded, exposure);
-    assert_eq!(exposure.as_str(), wire);
+    assert_eq!(
+        decoded, exposure,
+        "a wire label must deserialize to its classification"
+    );
+    assert_eq!(
+        exposure.as_str(),
+        wire,
+        "as_str must return the same wire spelling"
+    );
 }
 
 #[test]
@@ -318,9 +256,15 @@ fn unknown_label_fails_deserialization() {
 #[test]
 fn absent_label_is_omitted_from_the_wire() {
     let encoded = serde_json::to_value(field("plain", None)).expect("field serializes");
-    assert!(encoded.get("profile_field").is_none());
+    assert!(
+        encoded.get("profile_field").is_none(),
+        "an absent label is omitted from the wire"
+    );
     let decoded: FieldMetadata = serde_json::from_value(encoded).expect("field deserializes");
-    assert_eq!(decoded.profile_field, None);
+    assert_eq!(
+        decoded.profile_field, None,
+        "an absent label must decode as unclassified"
+    );
 }
 
 #[test]
@@ -351,7 +295,8 @@ fn redacted_wire_output_carries_the_label_but_no_literals() {
 
     assert_eq!(
         wire_facts,
-        (Some(&json!("secret")), true, true, Some(&json!([])))
+        (Some(&json!("secret")), true, true, Some(&json!([]))),
+        "the wire keeps the label and clears every literal"
     );
 }
 
@@ -367,6 +312,14 @@ fn projection_performs_two_linear_traversals() {
     let projected = node.redacted_for_output();
 
     // One pass decides whether any protected field exists; one pass projects.
-    assert_eq!(traversal_probe::visits(), 2 * DEPTH);
-    assert_eq!(projected.subcommands.len(), 1);
+    assert_eq!(
+        traversal_probe::visits(),
+        2 * DEPTH,
+        "one counting pass plus one projection pass"
+    );
+    assert_eq!(
+        projected.subcommands.len(),
+        1,
+        "projection must preserve the command tree shape"
+    );
 }

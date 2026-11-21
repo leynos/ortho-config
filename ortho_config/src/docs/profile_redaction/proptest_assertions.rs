@@ -24,11 +24,19 @@ fn assert_same_node(original: &DocMetadata, projected: &DocMetadata, has_protect
     assert_node_identity(original, projected);
     assert_node_sections(original, projected, has_protected);
     assert_node_records(original, projected);
-    assert_eq!(original.fields.len(), projected.fields.len());
+    assert_eq!(
+        original.fields.len(),
+        projected.fields.len(),
+        "field count must be preserved"
+    );
     for (before, after) in original.fields.iter().zip(&projected.fields) {
         assert_field_integrity(before, after);
     }
-    assert_eq!(original.subcommands.len(), projected.subcommands.len());
+    assert_eq!(
+        original.subcommands.len(),
+        projected.subcommands.len(),
+        "projection must preserve the subcommand count"
+    );
     for (before, after) in original.subcommands.iter().zip(&projected.subcommands) {
         assert_same_node(before, after, has_protected);
     }
@@ -82,7 +90,10 @@ fn assert_example_integrity(original: &DocMetadata, projected: &DocMetadata, has
             "command examples are suppressed globally"
         );
     } else {
-        assert_eq!(original.sections.examples, projected.sections.examples);
+        assert_eq!(
+            original.sections.examples, projected.sections.examples,
+            "clean-command examples must survive projection"
+        );
     }
 }
 
@@ -179,7 +190,10 @@ fn assert_possible_values(before: &CliMetadata, after: &CliMetadata, is_protecte
             "protected possible values are cleared"
         );
     } else {
-        assert_eq!(before.possible_values, after.possible_values);
+        assert_eq!(
+            before.possible_values, after.possible_values,
+            "ordinary possible values must survive projection"
+        );
     }
 }
 

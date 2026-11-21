@@ -39,7 +39,11 @@ fn unsupported_declaration_keeps_the_legacy_wire_shape() {
     let encoded = serde_json::to_value(ProfilesDeclaration::unsupported())
         .expect("unsupported declaration serializes");
 
-    assert_eq!(encoded, json!({ "supported": false }));
+    assert_eq!(
+        encoded,
+        json!({ "supported": false }),
+        "an unsupported declaration must serialize to the legacy shape"
+    );
 }
 
 #[test]
@@ -51,7 +55,8 @@ fn empty_metadata_is_omitted_from_the_wire() {
         json!({
             "supported": true,
             "selection": { "flag": "profile", "env_var": "DEMO_PROFILE" },
-        })
+        }),
+        "no redaction or names metadata may appear when both are empty"
     );
 }
 
@@ -78,7 +83,8 @@ fn redaction_records_are_canonicalised_by_identity() {
                 vec!["tool".to_owned(), "login".to_owned()],
                 "token".to_owned()
             ),
-        ]
+        ],
+        "the records must be canonicalised into identity order"
     );
 }
 
@@ -90,10 +96,13 @@ fn duplicate_redaction_identity_is_rejected() {
     ]);
 
     let error = result.expect_err("duplicate identities are rejected");
-    assert!(matches!(
-        error.as_ref(),
-        crate::OrthoError::DuplicateProfileRedaction { field_name, .. } if field_name == "token"
-    ));
+    assert!(
+        matches!(
+            error.as_ref(),
+            crate::OrthoError::DuplicateProfileRedaction { field_name, .. } if field_name == "token"
+        ),
+        "a repeated identity must be rejected naming the colliding field"
+    );
 }
 
 #[test]
@@ -104,12 +113,15 @@ fn redaction_on_an_unsupported_declaration_is_rejected() {
         ProfileFieldExposure::Secret,
     )]);
 
-    assert!(matches!(
-        result
-            .expect_err("unsupported declarations carry no redaction")
-            .as_ref(),
-        crate::OrthoError::ProfileMetadataOnUnsupported { .. }
-    ));
+    assert!(
+        matches!(
+            result
+                .expect_err("unsupported declarations carry no redaction")
+                .as_ref(),
+            crate::OrthoError::ProfileMetadataOnUnsupported { .. }
+        ),
+        "attaching redaction to an unsupported declaration must be refused"
+    );
 }
 
 #[test]
@@ -118,7 +130,11 @@ fn empty_redaction_is_accepted_on_an_unsupported_declaration() {
         .with_redaction(Vec::new())
         .expect("an empty list changes nothing");
 
-    assert_eq!(declaration, ProfilesDeclaration::unsupported());
+    assert_eq!(
+        declaration,
+        ProfilesDeclaration::unsupported(),
+        "an empty redaction list must leave the declaration unchanged"
+    );
 }
 
 #[test]
@@ -136,15 +152,26 @@ fn available_names_are_sorted_and_deduplicated() {
         .map(ProfileName::as_str)
         .collect::<Vec<_>>();
 
-    assert_eq!(names, vec!["alpha", "beta", "zeta"]);
+    assert_eq!(
+        names,
+        vec!["alpha", "beta", "zeta"],
+        "the catalogue must be sorted and deduplicated"
+    );
 }
 
 #[test]
 fn available_names_do_not_opt_an_unsupported_declaration_in() {
     let declaration = ProfilesDeclaration::unsupported().with_available_names([name("alpha")]);
 
-    assert_eq!(declaration.available_names(), &[] as &[ProfileName]);
-    assert!(!declaration.supported);
+    assert_eq!(
+        declaration.available_names(),
+        &[] as &[ProfileName],
+        "an unsupported declaration must discard the supplied names"
+    );
+    assert!(
+        !declaration.supported,
+        "supplying a catalogue must not opt the declaration into profiles"
+    );
 }
 
 #[test]
@@ -177,14 +204,16 @@ fn deserialization_canonicalises_the_metadata() {
             .first()
             .expect("two records were declared")
             .field_name,
-        "api_key"
+        "api_key",
+        "deserialization must canonicalise the shorter command path first"
     );
     assert_eq!(
         redaction
             .get(1)
             .expect("two records were declared")
             .field_name,
-        "token"
+        "token",
+        "deserialization must canonicalise the longer command path second"
     );
     assert_eq!(
         declaration
@@ -192,7 +221,8 @@ fn deserialization_canonicalises_the_metadata() {
             .iter()
             .map(ProfileName::as_str)
             .collect::<Vec<_>>(),
-        vec!["alpha", "zeta"]
+        vec!["alpha", "zeta"],
+        "deserialization must sort and deduplicate the names catalogue"
     );
 }
 
@@ -203,7 +233,10 @@ fn deserialization_rejects_invalid_names() {
         "available_names": ["not a name"]
     });
 
-    assert!(serde_json::from_value::<ProfilesDeclaration>(wire).is_err());
+    assert!(
+        serde_json::from_value::<ProfilesDeclaration>(wire).is_err(),
+        "the invalid profile name must be rejected during deserialization"
+    );
 }
 
 #[test]
@@ -213,7 +246,10 @@ fn deserialization_rejects_metadata_on_an_unsupported_declaration() {
         "available_names": ["alpha"]
     });
 
-    assert!(serde_json::from_value::<ProfilesDeclaration>(wire).is_err());
+    assert!(
+        serde_json::from_value::<ProfilesDeclaration>(wire).is_err(),
+        "metadata on an unsupported declaration must be rejected during deserialization"
+    );
 }
 
 #[test]
@@ -234,7 +270,10 @@ fn deserialization_rejects_a_duplicate_redaction_identity() {
         ]
     });
 
-    assert!(serde_json::from_value::<ProfilesDeclaration>(wire).is_err());
+    assert!(
+        serde_json::from_value::<ProfilesDeclaration>(wire).is_err(),
+        "a duplicate redaction identity must be rejected during deserialization"
+    );
 }
 
 proptest! {
@@ -263,13 +302,21 @@ proptest! {
         reordered.extend(parsed);
         let second = supported().with_available_names(reordered);
 
-        prop_assert_eq!(&first, &second);
+        prop_assert_eq!(
+            &first,
+            &second,
+            "reordering and repeating the input must not change the declaration"
+        );
         let observed = first
             .available_names()
             .iter()
             .map(|value| value.as_str().to_owned())
             .collect::<Vec<_>>();
-        prop_assert_eq!(observed, expected);
+        prop_assert_eq!(
+            observed,
+            expected,
+            "the catalogue must be the sorted distinct spellings of the input"
+        );
     }
 }
 

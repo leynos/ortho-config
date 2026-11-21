@@ -74,7 +74,11 @@ impl ProfileFieldRedaction {
     ///     Some("auth.token".to_owned()),
     ///     ProfileFieldExposure::Secret,
     /// );
-    /// assert_eq!(record.field_name, "token");
+    /// assert_eq!(
+    ///     record.field_name,
+    ///     "token",
+    ///     "the constructor must retain the supplied field name"
+    /// );
     /// ```
     #[must_use]
     pub fn new(
