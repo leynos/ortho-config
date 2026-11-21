@@ -680,6 +680,14 @@ mutation check is the thing to re-run if that ever happens.
 
 ## Decision log
 
+- 2026-11-21: **corrected the guard-wait diagnosis** after review. An earlier
+  entry named the packaging lease as the first wait a cross-process contract
+  meets. `build_packaged_set` calls `hold_run` before `prepare`, so the run
+  guard is the first wait and the lease is reached only once the guard is held.
+  The same review found the developers' guide claiming readers "do not block
+  once the roots exist", which is false for a second process; the guide now
+  says a reader does not hold the *lease* while it reads, and names the guard
+  wait separately.
 - 2026-11-13: designed a bespoke tar/gzip reader over `tar` + `flate2`
   dev-dependencies, on scope grounds (read one archive `cargo package` just
   wrote, no re-use).
