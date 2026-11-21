@@ -1,7 +1,7 @@
 //! Scenario registration for `cargo-orthohelp` behavioural tests.
 //!
 //! Wires each Gherkin feature file to the rstest-bdd step registry by calling
-//! `scenarios!` with the feature-file path and its fixture. Seven feature
+//! `scenarios!` with the feature-file path and its fixture. Eight feature
 //! files are registered:
 //!
 //! - `tests/features/orthohelp_ir.feature` — IR JSON generation and caching.
@@ -15,6 +15,8 @@
 //!   report generation.
 //! - `tests/features/structured_output.feature` — declared structured-output
 //!   lint, checked in process rather than through the CLI.
+//! - `tests/features/profile_redaction.feature` — profile-field disclosure
+//!   boundary.
 //!
 //! The `fixtures = [orthohelp_context: OrthoHelpContext]` binding tells the
 //! framework to call [`orthohelp_context`] once per scenario to produce the
@@ -55,4 +57,8 @@ scenarios!(
 scenarios!(
     "tests/features/structured_output.feature",
     fixtures = [output_policy_state: OutputPolicyState]
+);
+scenarios!(
+    "tests/features/profile_redaction.feature",
+    fixtures = [orthohelp_context: OrthoHelpContext]
 );

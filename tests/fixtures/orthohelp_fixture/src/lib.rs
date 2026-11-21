@@ -7,6 +7,8 @@ use clap::{Parser, Subcommand, ValueEnum};
 use ortho_config::{OrthoConfig, OrthoConfigSubcommandDocs};
 use serde::{Deserialize, Serialize};
 
+pub mod redaction;
+
 /// Log level for the fixture service.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize, Serialize, ValueEnum)]
 pub enum LogLevel {
@@ -217,6 +219,7 @@ pub struct NestedGreetCommand {
     #[ortho_config(default = false)]
     pub is_excited: bool,
 }
+
 /// Empty command proving leaf commands without options survive the bridge.
 ///
 /// Deliberately declares neither a `renderer(...)` nor an `output(...)` group:

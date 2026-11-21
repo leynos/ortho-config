@@ -33,6 +33,11 @@ use crate::fixtures;
     Some("orthohelp_fixture::ProfileFixtureConfig"),
     "agent_context__profile_fixture.json"
 )]
+#[case::profile_redaction(
+    "orthohelp_fixture",
+    Some(fixtures::profile_redaction_sentinels::REDACTION_ROOT_TYPE),
+    "agent_context__profile_redaction.json"
+)]
 fn fixture_agent_context_matches_snapshot(
     #[case] package_name: &str,
     #[case] root_type: Option<&str>,

@@ -45,7 +45,7 @@ pub(crate) use doc_types::{
     ExitClassAttr, HeadingOverrides, OutputAttrs, RenderWidthAttr, RendererFieldAttr,
     RendererRecordAttrs,
 };
-pub(crate) use field_attrs::parse_field_attrs;
+pub(crate) use field_attrs::{ProfileFieldAnnotation, ProfileFieldLabel, parse_field_attrs};
 pub(crate) use input::parse_input;
 #[cfg(any(test, doctest))]
 pub(crate) use literals::__doc_lit_str;
@@ -59,8 +59,8 @@ pub(crate) use literals::lit_crate_path;
 pub(crate) use output_attrs::parse_output_meta;
 pub(crate) use renderer_attrs::parse_renderer_meta;
 pub(crate) use serde_attrs::{
-    SerdeRenameAll, serde_field_rename, serde_has_default, serde_rename_all,
-    serde_serialized_field_key,
+    SerdeRenameAll, serde_field_is_flattened, serde_field_rename, serde_has_default,
+    serde_rename_all, serde_serialized_field_key,
 };
 pub(crate) use struct_attrs::{discard_unknown, parse_ortho_config, parse_struct_attrs};
 pub(crate) use type_utils::{
@@ -136,4 +136,6 @@ pub(crate) struct FieldAttrs {
     pub is_subcommand: bool,
     /// Field documentation metadata copied into generated API documentation.
     pub doc: DocFieldAttrs,
+    /// Disclosure classification declared by `profile_field = "..."`.
+    pub profile_field: Option<ProfileFieldAnnotation>,
 }

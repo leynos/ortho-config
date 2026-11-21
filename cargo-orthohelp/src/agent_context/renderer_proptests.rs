@@ -76,8 +76,8 @@ proptest! {
     /// genuinely move or the equality would be vacuous.
     #[test]
     fn localization_preserves_the_protocol_projection(tree in generated_tree()) {
-        let plain = bridge_ir_to_agent_context(&tree, "demo_pkg", None);
-        let localized = bridge_ir_to_agent_context(&tree, "demo_pkg", Some(&RenamingLocalizer));
+        let plain = bridge_ir_to_agent_context(&tree, "demo_pkg", None).expect("bridge succeeds");
+        let localized = bridge_ir_to_agent_context(&tree, "demo_pkg", Some(&RenamingLocalizer)).expect("bridge succeeds");
 
         let summaries_moved = plain
             .commands
@@ -91,7 +91,7 @@ proptest! {
     /// A projection survives serialization and re-reading without loss.
     #[test]
     fn projection_round_trips_through_the_wire(tree in generated_tree()) {
-        let context = bridge_ir_to_agent_context(&tree, "demo_pkg", None);
+        let context = bridge_ir_to_agent_context(&tree, "demo_pkg", None).expect("bridge succeeds");
         let encoded = serde_json::to_value(&context).expect("a context should serialize");
         let decoded: ortho_config::AgentContext =
             serde_json::from_value(encoded).expect("a context should round-trip");
@@ -133,7 +133,7 @@ fn named_projection_cases(
     #[case] expected_children: usize,
     #[case] expected_fields: usize,
 ) {
-    let context = bridge_ir_to_agent_context(&tree, "demo_pkg", None);
+    let context = bridge_ir_to_agent_context(&tree, "demo_pkg", None).expect("bridge succeeds");
     let root = root_command(&context);
 
     assert_eq!(
@@ -241,8 +241,9 @@ fn every_declared_leaf_reaches_the_projection() {
 #[test]
 fn projection_comparison_detects_a_localized_field_identifier() {
     let tree = populated_tree();
-    let plain = bridge_ir_to_agent_context(&tree, "demo_pkg", None);
-    let mut mutated = bridge_ir_to_agent_context(&tree, "demo_pkg", Some(&RenamingLocalizer));
+    let plain = bridge_ir_to_agent_context(&tree, "demo_pkg", None).expect("bridge succeeds");
+    let mut mutated = bridge_ir_to_agent_context(&tree, "demo_pkg", Some(&RenamingLocalizer))
+        .expect("bridge succeeds");
 
     let field = mutated
         .commands

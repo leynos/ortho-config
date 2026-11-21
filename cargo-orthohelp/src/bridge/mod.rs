@@ -14,15 +14,22 @@ use crate::error::OrthohelpError;
 use crate::metadata::{OrthoConfigDependency, PackageSelection};
 #[path = "../bridge_build.rs"]
 mod bridge_build;
+
 #[path = "../bridge_build_environment.rs"]
 mod bridge_build_environment;
+
 mod cache_lookup;
+
 #[path = "../bridge_execution.rs"]
 mod execution;
+
 mod ir_cache;
+
 mod telemetry;
+
 #[cfg(feature = "metrics")]
 mod telemetry_metrics;
+
 #[path = "../bridge_workspace.rs"]
 mod workspace;
 
@@ -288,7 +295,8 @@ fn write_bridge_main(config: &BridgeConfig, paths: &BridgePaths) -> Result<(), O
             "use ortho_config::docs::OrthoConfigDocs;\n",
             "\n",
             "fn main() -> Result<(), Box<dyn std::error::Error>> {{\n",
-            "    let metadata = <{} as OrthoConfigDocs>::get_doc_metadata();\n",
+            "    let metadata = <{} as OrthoConfigDocs>::get_doc_metadata()\n",
+            "        .into_redacted_for_output();\n",
             "    serde_json::to_writer(std::io::stdout(), &metadata)?;\n",
             "    Ok(())\n",
             "}}\n",

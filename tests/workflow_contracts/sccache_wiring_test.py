@@ -97,6 +97,9 @@ NO_BACKEND_EXPECTED: typ.Final[dict[tuple[str, str], str]] = {
     ("release.yml", "verify-published-assets"): (
         "dry-runs cargo binstall against published archives"
     ),
+    ("prover-tools.yml", "production-proofs"): (
+        "runs Verus, whose compiler driver sccache cannot cache"
+    ),
 }
 
 _SHA = re.compile(r"@([0-9a-f]{40})\b")

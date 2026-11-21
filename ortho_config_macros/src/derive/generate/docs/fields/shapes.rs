@@ -98,6 +98,8 @@ pub(super) struct MetaParts {
     pub(super) links: Vec<TokenStream>,
     /// One expression per documented note.
     pub(super) notes: Vec<TokenStream>,
+    /// Expression for the field's disclosure classification, or `None`.
+    pub(super) profile_field_tokens: TokenStream,
 }
 
 /// Bundles all components needed to render field metadata tokens.

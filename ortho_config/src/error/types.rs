@@ -98,6 +98,22 @@ pub enum OrthoError {
         key: String,
     },
 
+    /// A redaction record repeats an identity already present in the list.
+    #[error("duplicate profile redaction for field '{field_name}' at command [{command_path}]")]
+    DuplicateProfileRedaction {
+        /// Space-joined command path; a public identity, never field content.
+        command_path: String,
+        /// The emitted metadata field name.
+        field_name: String,
+    },
+
+    /// Profile-only metadata was attached to an unsupported declaration.
+    #[error("cannot declare profile {kind} on an unsupported profiles declaration")]
+    ProfileMetadataOnUnsupported {
+        /// The metadata kind, such as `redaction records`.
+        kind: &'static str,
+    },
+
     /// Multiple errors occurred while loading configuration.
     #[error("multiple configuration errors:\n{0}")]
     Aggregate(Box<AggregatedErrors>),

@@ -1,0 +1,110 @@
+---
+source: cargo-orthohelp/tests/golden/redaction_artefact_tests.rs
+expression: roff_en
+---
+.TH "REDACTION_FIXTURE" "1" "2026-11-16" "" ""
+.SH NAME
+redaction_fixture \- Redaction fixture command tree.
+.SH SYNOPSIS
+.B redaction_fixture
+Usage: redaction_fixture [OPTIONS] [COMMAND]
+.SH DESCRIPTION
+Redaction fixture command tree.
+.SH OPTIONS
+.TP
+\fB\-\-region\fR \fISTRING\fR, \fB\-r\fR \fISTRING\fR
+Region identifier served by the fixture.
+.br
+Default: \fBString :: from("eu-west")\fR
+.TP
+\fB\-\-mode\fR \fICHOICE\fR, \fB\-m\fR \fICHOICE\fR
+Public mode advertised by the fixture.
+.br
+Default: \fBString :: from("fast")\fR
+.br
+Possible values: \fIfast, safe\fR
+.TP
+\fB\-\-token\fR \fICHOICE\fR, \fB\-t\fR \fICHOICE\fR
+Confidential token used by the fixture service.
+.TP
+\fB\-\-locator\fR \fICHOICE\fR, \fB\-l\fR \fICHOICE\fR
+Locator the application resolves elsewhere.
+.SH ENVIRONMENT
+.TP
+\fBREDACTION_FIXTURE_API_KEY\fR
+Confidential API key. Equivalent to \fB\--api-key\fR.
+.TP
+\fBREDACTION_FIXTURE_CREDENTIAL_FILE\fR
+Credential file reference.
+.TP
+\fBREDACTION_FIXTURE_LOCATOR\fR
+Locator resolved elsewhere. Equivalent to \fB\--locator\fR.
+.TP
+\fBREDACTION_FIXTURE_MODE\fR
+Public mode. Equivalent to \fB\--mode\fR.
+.TP
+\fBREDACTION_FIXTURE_REGION\fR
+Region identifier. Equivalent to \fB\--region\fR.
+.TP
+\fBREDACTION_FIXTURE_TOKEN\fR
+Confidential token. Equivalent to \fB\--token\fR.
+.SH FILES
+.PP
+Configuration keys:
+.TP
+\fBregion\fR
+Region identifier.
+.TP
+\fBmode\fR
+Public mode.
+.TP
+\fBtoken\fR
+Confidential token.
+.TP
+\fBlocator\fR
+Locator resolved elsewhere.
+.TP
+\fBapi_key\fR
+Confidential API key.
+.TP
+\fBcredential_file\fR
+Credential file reference.
+.SH PRECEDENCE
+Configuration values are resolved in the following order (highest precedence last):
+.RS
+.IP 1. 4
+Built-in defaults
+.IP 2. 4
+Configuration files
+.IP 3. 4
+Profile overlays
+.IP 4. 4
+Environment variables
+.IP 5. 4
+Command-line arguments
+.RE
+.SH EXIT STATUS
+.TP
+\fB0\fR
+Successful execution.
+.TP
+\fB1\fR
+General errors.
+.SH COMMANDS
+.SS rotate
+Rotates the confidential token.
+.PP
+OPTIONS:
+.TP
+\fB\-\-replacement\fR \fICHOICE\fR, \fB\-r\fR \fICHOICE\fR
+Confidential replacement token.
+.TP
+\fB\-\-is-dry-run\fR\fI[=BOOL]\fR, \fB\-i\fR\fI[=BOOL]\fR
+Reports the rotation without applying it.
+.SS status
+Reports fixture status.
+.PP
+OPTIONS:
+.TP
+\fB\-\-detail-level\fR \fISTRING\fR, \fB\-d\fR \fISTRING\fR
+Detail level reported by the status command.

@@ -188,6 +188,26 @@ pub(crate) fn serde_has_default(attrs: &[Attribute]) -> syn::Result<bool> {
     Ok(has_default)
 }
 
+/// Returns true if the field has `#[serde(flatten)]`.
+///
+/// The docs builder cannot expand a flattened field into descendant metadata,
+/// so a `profile_field` annotation on such a field must be rejected rather
+/// than silently promising protection for values it cannot describe.
+pub(crate) fn serde_field_is_flattened(attrs: &[Attribute]) -> syn::Result<bool> {
+    let mut flattened = false;
+    for attr in attrs.iter().filter(|attr| attr.path().is_ident("serde")) {
+        attr.parse_nested_meta(|meta| {
+            if meta.path.is_ident("flatten") {
+                flattened = true;
+            } else {
+                super::discard_unknown(&meta)?;
+            }
+            Ok(())
+        })?;
+    }
+    Ok(flattened)
+}
+
 /// Recognizes `default`, consuming an optional expression so nested parsing
 /// remains positioned at the next Serde attribute.
 fn parse_default_meta(meta: &ParseNestedMeta) -> syn::Result<bool> {

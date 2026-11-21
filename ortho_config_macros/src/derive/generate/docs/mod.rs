@@ -4,11 +4,17 @@
 //! `DocMetadata` IR used by `cargo-orthohelp`.
 
 mod behaviour;
+
 mod discovery;
+
 mod fields;
+
 mod output;
+
 mod renderer;
+
 pub(crate) mod sections;
+
 mod types;
 
 pub(crate) use types::AppName;
@@ -104,6 +110,7 @@ pub(crate) fn generate_docs_impl(args: &DocsArgs<'_>) -> syn::Result<TokenStream
                     output: #output,
                     profiles: #profiles_tokens,
                 }
+                .into_redacted_for_output()
             }
         }
     })

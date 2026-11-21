@@ -1,0 +1,94 @@
+name: Production proofs
+
+# The pinned Verus release is a large binary download, so this lane runs only
+# when the proof, the projection it models, or the pinned tooling changes. The
+# weekly schedule catches an upstream release or runner-image change that no
+# pull request would otherwise exercise, and a manual dispatch lets a
+# maintainer validate a branch without opening a pull request.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - .github/workflows/prover-tools.yml
+      - Makefile
+      - tools/verus/VERSION
+      - tools/verus/SHA256SUMS
+      - verus/**
+      - ortho_config/src/docs/profile_redaction/**
+      - ortho_config/src/docs/ir/**
+      - tests/workflow_contracts/prover_tools_fakes.py
+      - tests/workflow_contracts/prover_tools_test.py
+      - tests/workflow_contracts/prover_tools_workflow_test.py
+      - tests/workflow_contracts/workflow_reading.py
+      - tests/workflow_contracts/makefile_support.py
+      - scripts/requirements-test.txt
+  workflow_dispatch:
+  schedule:
+    - cron: "23 4 * * 1" # Weekly, Monday 04:23 UTC
+
+# A superseded pull-request run has nothing left to teach, so cancel it. A
+# dispatch or scheduled run has no successor and always completes.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# Default the token to no scopes; the job opts in explicitly.
+permissions: {}
+
+jobs:
+  production-proofs:
+    name: production-proofs (linux-x86_64)
+    # The Verus release publishes Linux x86_64 binaries only. Other platforms
+    # stay unvalidated for this lane rather than silently skipped.
+    runs-on: ubuntu-24.04
+    # Installation plus the registered production proofs. A warm verification
+    # run takes under a minute; the ceiling covers a cold toolchain install and
+    # a slow download without letting a hung solver run for hours.
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    env:
+      CARGO_TERM_COLOR: always
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      # `verus` drives rustc itself to type-check a proof file, so an exported
+      # RUSTC_WRAPPER would hand that driver to sccache, which cannot cache it.
+      # Disable sccache rather than wrap a compiler it does not know.
+      - name: Setup Rust
+        uses: leynos/shared-actions/.github/actions/setup-rust@0eabb6bc07148981de5da395e30cd78d83f5c7c2
+        with:
+          install-mold: 'true'
+          use-sccache: 'false'
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e  # v10.3.2
+        with:
+          version: 'latest'
+
+      # Execution never installs: `make verus` passes `--no-install-missing`
+      # and `--no-ensure-toolchain`, so provisioning has to happen here.
+      - name: Install the pinned Verus release
+        run: make install-verus
+
+      # Keep the verifier's own transcript: it is the only record of how many
+      # obligations were discharged, and `make` alone reports only pass or fail.
+      # `pipefail` keeps a failed verification red: without it the pipeline
+      # would report `tee`'s status and publish a green job over a red proof.
+      - name: Run the registered production proofs
+        run: |
+          set -o pipefail
+          mkdir -p target/prover-tools-fixtures
+          make verus 2>&1 | tee target/prover-tools-fixtures/verus-production.out
+
+      # The transcript is the only record of what the verifier reported, so keep
+      # it on failure as well.
+      - name: Upload verifier evidence
+        if: always()
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4  # v5
+        with:
+          name: prover-tools-evidence
+          path: target/prover-tools-fixtures/
+          if-no-files-found: ignore
+          retention-days: 14

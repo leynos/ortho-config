@@ -118,6 +118,11 @@ const SIMPLE_RUNS: &[SimpleRun] = &[
         stdout: "supports_json=Some(true) stdout=Some(Data) classes=[\"success\", \"usage\"]\n",
     },
     SimpleRun {
+        id: "guide-profile-redaction",
+        args: &["--token", "live-token"],
+        stdout: "loaded region=eu-west\npublished token default=None\n",
+    },
+    SimpleRun {
         id: "guide-behaviour-metadata",
         args: &[],
         stdout: "mutation=Some(Delete) bypass=Some(\"--force\")\n",

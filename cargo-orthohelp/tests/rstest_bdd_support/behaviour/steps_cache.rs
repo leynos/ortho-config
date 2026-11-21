@@ -15,11 +15,11 @@
 //! [`record_cache_state`] (reads the current `ir.json` path and content for
 //! later comparison). Both are used by [`super::steps_cmd`].
 
-use std::io::Read;
+use std::io::{Read, Write};
 
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::ambient_authority;
-use cap_std::fs_utf8::{Dir, DirEntry};
+use cap_std::fs_utf8::{Dir, DirEntry, OpenOptions};
 use cap_std::time::SystemTime;
 use rstest_bdd_macros::then;
 
@@ -98,7 +98,7 @@ pub(super) fn record_cache_state(ctx: &OrthoHelpContext) -> StepResult<(Utf8Path
     Ok((cache_path, content))
 }
 
-fn read_cache_file(path: &Utf8Path) -> StepResult<String> {
+pub(super) fn read_cache_file(path: &Utf8Path) -> StepResult<String> {
     let cache_dir = path.parent().ok_or("cached IR parent missing")?;
     let file_name = path.file_name().ok_or("cached IR filename missing")?;
     let dir = Dir::open_ambient_dir(cache_dir, ambient_authority())?;
@@ -106,6 +106,20 @@ fn read_cache_file(path: &Utf8Path) -> StepResult<String> {
     let mut content = String::new();
     file.read_to_string(&mut content)?;
     Ok(content)
+}
+
+/// Replaces a cached `ir.json` body, so a scenario can present the binary with
+/// metadata a released generator would never have cached.
+pub(super) fn write_cache_file(path: &Utf8Path, content: &str) -> StepResult<()> {
+    let cache_dir = path.parent().ok_or("cached IR parent missing")?;
+    let file_name = path.file_name().ok_or("cached IR filename missing")?;
+    let dir = Dir::open_ambient_dir(cache_dir, ambient_authority())?;
+    let mut file = dir.open_with(
+        file_name,
+        OpenOptions::new().write(true).create(true).truncate(true),
+    )?;
+    file.write_all(content.as_bytes())?;
+    Ok(())
 }
 
 fn find_cached_ir(ctx: &OrthoHelpContext) -> StepResult<Option<Utf8PathBuf>> {

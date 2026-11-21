@@ -28,7 +28,7 @@ fn an_alias_verb_from_the_bridged_context_is_advised_from_its_spelling() {
         behaviour: None,
     });
 
-    let context = bridge_ir_to_agent_context(&metadata, "tool", None);
+    let context = bridge_ir_to_agent_context(&metadata, "tool", None).expect("bridge succeeds");
     let info_commands: Vec<_> = context
         .commands
         .iter()
