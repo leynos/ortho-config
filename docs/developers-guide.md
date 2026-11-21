@@ -359,11 +359,15 @@ packaging target per run; neither is implemented, and the suite does not
 currently depend on it.
 
 Three properties are worth keeping in mind when editing it. The lease is held
-for the packaging step alone, never while a contract reads the roots, so
-readers do not block once the roots exist. The run guard is what keeps that
-safe, and is never released early. And the record is removed before the roots
-are replaced, so a failed step leaves no record and no later contract reads a
-half-replaced set as whole.
+for the packaging step alone, never while a contract reads the roots, so a
+reader does not hold the lease while it reads. That is not the same as never
+blocking: a second *process* waits in `hold_run` before it can reuse the roots,
+and that wait can exhaust its allowance. What the lease's early release buys is
+that the wait is on the guard, once per process, rather than on the packaging
+step once per contract. The run guard is what keeps the read safe, and is never
+released early. And the record is removed before the roots are replaced, so a
+failed step leaves no record and no later contract reads a half-replaced set as
+whole.
 
 The lease and the record are expressed in signatures rather than left to
 convention. `PackagingLease` carries the target directory it protects, and

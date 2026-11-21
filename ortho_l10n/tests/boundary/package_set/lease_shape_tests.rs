@@ -55,10 +55,7 @@ use rstest::{fixture, rstest};
 #[rstest]
 fn the_packaging_boundary_is_entered_once_per_run() -> Result<()> {
     let sources = repository_root()?.join("ortho_l10n/tests");
-    let packaged = count_in_tree(
-        &sources.join("boundary_tests"),
-        concat!("prepare_packaged_set", "("),
-    )?;
+    let packaged = count_in_tree(&sources.join("boundary_tests"), "prepare_packaged_set")?;
     let invocations = PACKAGING_INVOCATIONS.len();
 
     // The packaging step runs from `roots` alone. Matched as a call with its
@@ -70,10 +67,7 @@ fn the_packaging_boundary_is_entered_once_per_run() -> Result<()> {
     // scope is exactly what may call it, so a scan of `package_set` would miss
     // the very bypass it is meant to catch. `boundary_tests` cannot reach it,
     // and is not part of this tree.
-    let packaging = count_in_tree(
-        &sources.join("boundary"),
-        concat!("package_sources", "(repository"),
-    )?;
+    let packaging = count_in_tree(&sources.join("boundary"), "package_sources")?;
     ensure!(
         packaging == 1,
         "the packaging boundary is invoked from {packaging} places under \
@@ -161,10 +155,7 @@ fn a_call_outside_package_set_is_counted(scratch_sources: Result<ScratchSources>
         )
         .with_context(|| format!("plant a bypass call at {bypass}"))?;
 
-    let counted = count_in_tree(
-        &sources.join("boundary"),
-        concat!("package_sources", "(repository"),
-    )?;
+    let counted = count_in_tree(&sources.join("boundary"), "package_sources")?;
     ensure!(
         counted == 1,
         "a packaging call planted at boundary/consumer/mod.rs was counted {counted} \
@@ -234,16 +225,72 @@ fn count_in_roots(sources: &Utf8Path) -> Result<usize> {
     let source = directory
         .read_to_string("roots.rs")
         .context("read roots.rs")?;
-    Ok(source
-        .matches(concat!("package_sources", "(repository"))
-        .count())
+    Ok(count_calls(&source, "package_sources"))
 }
 
-/// How many times `needle` appears in the `.rs` files under `root`.
+/// How many call expressions to `name` appear in `source`.
 ///
-/// Counts occurrences rather than files, because two call sites in one module
-/// are exactly the duplication this looks for.
-fn count_in_tree(root: &Utf8Path, needle: &str) -> Result<usize> {
+/// The callee is matched with an optional turbofish and then an opening
+/// parenthesis, so the argument spelling cannot hide a call: `(repository`,
+/// `( &repository`, `(\n        repository` and `::<Budget>(repository` all
+/// count. An earlier version pinned the first argument's spelling, so a
+/// refactor that borrowed it silently dropped the call from the count while
+/// the assertion still passed.
+///
+/// Declarations and imports are excluded, because they are not calls: a
+/// `fn package_sources(` definition and a `use ... package_sources;` would
+/// otherwise inflate a tree-wide count by one per file that mentions it.
+fn count_calls(source: &str, name: &str) -> usize {
+    // Comments and string literals are not calls. Without this the scanner's
+    // own needle literal and the doc comment naming a declaration would each
+    // count, so a tree-wide scan would report the test as a packaging site.
+    let source: String = source
+        .lines()
+        .filter(|line| {
+            let trimmed = line.trim_start();
+            !(trimmed.starts_with("//") || trimmed.starts_with("*"))
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    let source = source.as_str();
+    let mut count = 0;
+    let mut rest = source;
+    while let Some(at) = rest.find(name) {
+        let after_name = &rest[at + name.len()..];
+        let after_turbofish = after_name
+            .strip_prefix("::<")
+            .and_then(|tail| tail.find('>').map(|end| &tail[end + 1..]))
+            .unwrap_or(after_name);
+        let before = &rest[..at];
+        // A definition may be prefixed by visibility and other modifiers, so
+        // look for the `fn` keyword in the last few words rather than requiring
+        // it to be immediately before the name.
+        let is_declaration = before
+            .split_whitespace()
+            .rev()
+            .take(4)
+            .any(|word| word == "fn");
+        // Only a `use` line is an import. A preceding comma or `::` is not
+        // evidence of one: a call can follow either on the same line, and
+        // treating them as imports made the scan count zero real calls.
+        let line_start = before.rfind('\n').map_or(0, |at| at + 1);
+        let is_import = before[line_start..].trim_start().starts_with("use ");
+        if after_turbofish.starts_with('(') && !is_declaration && !is_import {
+            count += 1;
+        }
+        rest = &rest[at + name.len()..];
+    }
+    count
+}
+
+/// How many call expressions to `name` appear in the `.rs` files under `root`.
+///
+/// Uses [`count_calls`] rather than a substring match, so the tree-wide scan
+/// and the single-file scan agree on what a call is. A plain `matches` here
+/// counted the needle's own literal in this test and the declaration in
+/// `mod.rs`, which made the scan report four packaging sites where there is
+/// one.
+fn count_in_tree(root: &Utf8Path, name: &str) -> Result<usize> {
     let root_directory = Dir::open_ambient_dir(root, cap_std::ambient_authority())
         .with_context(|| format!("open {root}"))?;
     let mut total = 0;
@@ -254,13 +301,13 @@ fn count_in_tree(root: &Utf8Path, needle: &str) -> Result<usize> {
             .with_context(|| format!("read {root}/{prefix}"))?
         {
             let entry = listed.with_context(|| format!("read an entry under {root}/{prefix}"))?;
-            let name = entry
+            let entry_name = entry
                 .file_name()
                 .with_context(|| format!("read a file name under {root}/{prefix}"))?;
             let relative = if prefix.is_empty() {
-                name.clone()
+                entry_name.clone()
             } else {
-                format!("{prefix}/{name}")
+                format!("{prefix}/{entry_name}")
             };
             let file_type = entry
                 .file_type()
@@ -269,7 +316,7 @@ fn count_in_tree(root: &Utf8Path, needle: &str) -> Result<usize> {
                 pending.push((entry.open_dir().context("open a subdirectory")?, relative));
                 continue;
             }
-            let is_rust = Utf8Path::new(&name)
+            let is_rust = Utf8Path::new(&entry_name)
                 .extension()
                 .is_some_and(|extension| extension.eq_ignore_ascii_case("rs"));
             if !file_type.is_file() || !is_rust {
@@ -278,9 +325,9 @@ fn count_in_tree(root: &Utf8Path, needle: &str) -> Result<usize> {
             // Relative to the directory the entry came from, not to the root:
             // `directory` is the parent, so only the final name is a path in it.
             let text = directory
-                .read_to_string(&name)
+                .read_to_string(&entry_name)
                 .with_context(|| format!("read {root}/{relative}"))?;
-            total += text.matches(needle).count();
+            total += count_calls(&text, &name);
         }
     }
     Ok(total)

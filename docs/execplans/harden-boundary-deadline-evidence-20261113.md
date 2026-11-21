@@ -48,6 +48,22 @@ not, for the measured arithmetic reason recorded under "Why D3 is not
 delivered". The sections below record what is measured, what was tried and
 reversed, what remains, and why it is reported rather than improvised.
 
+### Rebased onto main, 2026-11-21
+
+The branch was 26 commits behind `origin/main` and conflicted in exactly one
+file. Main had independently split `build_packaged_set`, extracting
+`run_packaging_invocations` and `packaged_roots`; this branch had added the
+lease inside the same function. Both changes are wanted, so the conflict was
+resolved per site rather than by picking a side: main's two helpers are kept,
+and the lease's `prepare`/`package_under_lease` sequence sits inside main's
+`build_packaged_set` shape.
+
+The first resolution left a stray `}` after `packaged_roots`, which a clean
+rebase exit status did not reveal. It was found by diffing the replayed file
+against the pre-rebase branch and reading the hunk, and removed before the tree
+was compiled. All 14 commits replayed; every file this branch owns is
+byte-identical to its pre-rebase content except the three main also changed.
+
 ### Measured result, same host, same command
 
 `make boundary`, both runs on this host under contention:
@@ -475,14 +491,14 @@ A second review round closed the remaining points of the same two rows.
   import or a definition cannot satisfy them. The lease test also requires the
   unpacked roots to be derived from the leased target, which ties the lock to
   what the contracts read.
-- The run guard is now a *parameter* of the reuse decision (`Unit
-  Architecture`, second round). `prepare` takes `&RunGuard`, so the arrival
-  check that reads the record with no lease held cannot be reached without the
-  lock. Before this the guard was acquired in `roots.rs` and parked in a
-  `static OnceLock`: correct at runtime, but the invariant was a convention no
-  signature required, which is exactly the rule `record.rs` already applies to
-  the lease. A probe confirmed the compiler now rejects a guardless call
-  (`E0061: argument #1 of type &RunGuard is missing`).
+- The run guard is now a *parameter* of the reuse decision
+  (`Unit Architecture`, second round). `prepare` takes `&RunGuard`, so the
+  arrival check that reads the record with no lease held cannot be reached
+  without the lock. Before this the guard was acquired in `roots.rs` and parked
+  in a `static OnceLock`: correct at runtime, but the invariant was a
+  convention no signature required, which is exactly the rule `record.rs`
+  already applies to the lease. A probe confirmed the compiler now rejects a
+  guardless call (`E0061: argument #1 of type &RunGuard is missing`).
 - The constant-only poll-interval case is replaced by behaviour:
   `a_free_lease_is_taken_within_the_poll_bound` bounds the time to take a free
   lease at two seconds, which fails a waiter that sleeps for the deadline
@@ -639,7 +655,10 @@ mutation check is the thing to re-run if that ever happens.
   after the wait has ended. The lease wait is real but is nextest's
   cross-process case, where each contract is its own process and does reach
   `prepare`; it is not what the single-process `make boundary` measurement
-  shows.
+  shows. In that cross-process case the first wait a contract meets is the run
+  guard, not the lease: `build_packaged_set` calls `hold_run` before `prepare`,
+  so a process arriving while another holds the guard waits there and reports
+  that contention, and only reaches the lease once the guard is its own.
 - **The six `Verifying ortho_l10n` lines are one tail, not six starts.** The
   baseline log holds none, so packaging did start under the lease, but the
   count of those lines is the count of cached error replays rather than of

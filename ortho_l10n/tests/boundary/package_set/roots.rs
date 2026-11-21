@@ -283,7 +283,6 @@ fn package_under_lease(
     scope.map_or_else(|| Ok(()), |this_run| record_complete(lease, this_run))
 }
 
-
 /// Run each packaging invocation, in order, into `target`.
 fn run_packaging_invocations(
     repository: &camino::Utf8Path,
@@ -307,11 +306,6 @@ fn packaged_roots(package_directory: &camino::Utf8Path) -> Vec<PackagedCrate> {
         })
         .collect()
 }
-}
-
-
-
-
 
 /// Assert every packaged root and archive exists.
 ///
