@@ -1244,6 +1244,59 @@ stopping and reporting.
       recorded as issue #414, not a defect of this candidate. The CodeScene
       code-health check and the Gecko security check both pass on the head.
 
+- [x] (2026-11-21) Round-19 raw-identifier repair of the publication gate. The
+      tenth whole-plan assessment
+      (`EP-11-2-1-whole-plan-6c6f318c-20261121T0159Z`) reported one finding:
+      `macros.rs` stored a `macro_rules!` definition by its rendered spelling
+      and looked the call up the same way, so `macro_rules! r#compile_error`
+      recorded `r#compile_error` while `compile_error!()` looked up
+      `compile_error` and the call was trusted as the prelude macro. Six rustc
+      probes established the defect class is wider than reported: `#[r#cfg]`,
+      `#[r#path]` and `#[r#macro_use]` all apply as their plain forms (verified
+      by gating, redirecting and importing in throwaway copies), `r#ErrorKind`
+      declares `ErrorKind` at file level and nested beside a decoy, `mod
+      r#helper;` loads `helper.rs`, and `r#note!` and `use …::r#compile_error;`
+      both resolve. `r#macro_rules!` is rejected by rustc, so that site needed
+      no change. The repair is one normalizer, `tokens::identifier_name`, used
+      at every site that records or compares a name: the definition and the
+      invocation in `macros.rs`, the `Name` and `Rename` arms in `imports.rs`,
+      the attribute-path predicate and the nested-enum test in `audit.rs`, the
+      file-level enum comparison in `source.rs`, and both module-name joins in
+      `reachability.rs`. The glob root in `imports.rs` deliberately keeps its
+      rendered form, with a comment recording why: only `crate`, `self` and
+      `super` are classified there and Rust forbids a raw spelling of a path
+      keyword, so no other name can become one. Ten committed fixtures carry
+      the controls: seven refusals, each naming its own reason
+      (`raw_macro_definition`, `raw_cfg_hop`, `raw_path_override`,
+      `raw_macro_use`, `raw_import_binding`, `raw_import_name`,
+      `raw_nested_definition`), and three accepted trees that keep the repair
+      from becoming a blanket rejection of the spelling
+      (`raw_file_level_definition`, `raw_macro_invocation`, `raw_inline_hop`).
+      Every fixture compiles under `rustc --edition=2024 --crate-type=lib`, and
+      each refusal fixture's semantic claim was proved on a throwaway copy: the
+      `r#cfg` hop really gates, the `r#path` really redirects to `decoy.rs`,
+      and each splice really declares the eighteen-variant inventory.
+      Non-vacuity was established per site rather than per file. Nine
+      mutations, each reverting exactly one normalization against the committed
+      fixtures, all failed the run, and each file was restored byte-identically
+      under a SHA-256 check: definition (fails `raw_macro_definition` alone),
+      invocation (`raw_macro_invocation`), `use` name arm (`raw_import_name`),
+      `use` rename arm (`raw_import_binding`), attribute path (the three
+      raw-attribute cases), nested enum (the nested case and the accepted
+      control), file-level enum (the accepted control), module-file join
+      (accepted control) and inline-directory join (`raw_inline_hop` alone).
+
+- [x] (2026-11-21) Round-19 certificate on the frozen tree. `make fmt`,
+      `make check-fmt` (113 files unchanged), `make typecheck`, `make lint`
+      (rustdoc, Clippy and Whitaker clean; docstring coverage 1044/1044,
+      100.0%), `make markdownlint` (0 issues in 113 files, spelling gate clean
+      and `typos.toml` current), `make nixie` (every diagram validated),
+      `make test-workflow-contracts` (729 passed, 1 skipped) and `make test`
+      (122 binaries, 3220 passed, 0 failed, 44 ignored; the boundary target 44
+      passed, 10 ignored; the Python suite 128 passed, 5 skipped) all pass, run
+      sequentially and each started once. The focused `clap_error_coverage`
+      suite runs 77 tests, up from 59, all passing.
+
 ## Surprises & discoveries
 
 The plan first incorporated merged PR #651 at
@@ -1511,6 +1564,34 @@ is what separates a shared runner's scheduling from a candidate's behaviour,
 and one red job is a datum until a second observation of the same input
 contradicts it.
 
+A comparison of two names is a comparison of two *normalizations*, and the gate
+had one normalization in exactly one place. `tokens::macro_name` already
+stripped `r#` from a rendered transcription token, because a nested
+`r#include!` had been a reported hole; nothing else did. The asymmetry was
+invisible from the code that had it, because each site looked locally correct:
+a definition stored what it spelled, a call looked up what it spelled, and the
+two agreed for every source that used one spelling. Only a source that spelled
+the *same* identifier two ways in two places exposed it. The lesson is not
+"remember raw identifiers" but that a rule about name identity has to be a
+single function with one owner, and that a module which strips a prefix while
+its neighbour compares rendered text is a defect waiting for a fixture. The
+sweep that followed found the rule needed in six modules, not one.
+
+A second observation is worth recording because it changed the shape of the
+controls. Three of the ten fixtures are *accepted* trees, and two of those
+(`raw_macro_invocation`, `raw_inline_hop`) fail before the repair rather than
+after it. A repair that normalized every recorded name, but refused every raw
+spelling outright, would pass all seven refusal controls while breaking honest
+crates; without the accepted trees the suite could not tell the two apart. The
+refusal cases prove the hole is closed, and the accepted cases prove it was
+closed by resolving the spelling rather than by rejecting it.
+
+A third: the empirical check that `r#macro_rules!` is rejected by rustc is what
+kept the change smaller. Two `path.is_ident("macro_rules")` sites look like the
+same defect and are not, because a raw spelling of that macro name does not
+parse. Recording the probe's result in the Progress entry is what makes the
+omission auditable rather than an oversight.
+
 ## Decision log
 
 - 2026-10-14: propose the design's build-script mechanism, with M0 as an
@@ -1635,6 +1716,17 @@ contradicts it.
   arguments into the item list, so `paste! { include!("inventory.inc") }` is a
   second route that spells neither the inventory's name nor an unresolved
   transcription token.
+
+- 2026-11-21: normalize raw identifiers through one function,
+  `tokens::identifier_name`, at every site that records or compares a name,
+  rather than stripping the prefix where the previous finding happened to
+  point. The rule is a property of Rust's name identity, not of any one module,
+  so duplicating it would let the next site drift. The glob root in
+  `imports.rs` keeps its rendered form deliberately: only `crate`, `self` and
+  `super` are classified there, Rust forbids a raw spelling of a path keyword,
+  and an unreachable normalization would be untestable by construction.
+  `is_error_kind_name` is exported from `audit.rs` so the nested-shape refusal
+  and the file-level scan share one comparison instead of two that can differ.
 
 ## Outcomes & retrospective
 

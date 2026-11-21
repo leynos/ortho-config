@@ -31,7 +31,7 @@ use camino::Utf8Path;
 use syn::{Item, ItemMacro, ItemMod};
 
 use super::imports::{CrateScope, Imports};
-use super::tokens::{invoked_macro_names, mentions_inventory, quote_path};
+use super::tokens::{identifier_name, invoked_macro_names, mentions_inventory, quote_path};
 
 /// Item-level macros that cannot declare anything the gate would count.
 ///
@@ -219,12 +219,18 @@ fn audit_inline_module(
 }
 
 /// The name and transcription of an item macro's `macro_rules!` definition.
+///
+/// The name is recorded with a raw identifier normalized, because the definition
+/// `macro_rules! r#compile_error` declares the name `compile_error` and every
+/// call site spells it that way. Recording the rendered spelling instead stores
+/// a name no lookup can match, so the local definition is invisible at the call
+/// and the splice its transcription performs is trusted as the prelude macro.
 fn macro_rules_definition(invocation: &ItemMacro) -> Option<(String, String)> {
     if !invocation.mac.path.is_ident("macro_rules") {
         return None;
     }
     let name = invocation.ident.as_ref()?;
-    Some((name.to_string(), invocation.mac.tokens.to_string()))
+    Some((identifier_name(name), invocation.mac.tokens.to_string()))
 }
 
 /// Refuse one invocation unless its expansion provably cannot name the enum.
@@ -243,7 +249,7 @@ fn audit_invocation(invocation: &ItemMacro, site: &CallSite, origin: &Utf8Path) 
         return Ok(());
     }
     let provable = path.get_ident().is_some_and(|name| {
-        let invoked = name.to_string();
+        let invoked = identifier_name(name);
         if site.scope.contains_key(&invoked) {
             let mut proven = BTreeSet::new();
             expands_without_inventory(

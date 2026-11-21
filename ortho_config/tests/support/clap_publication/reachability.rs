@@ -23,6 +23,7 @@ use cap_std::fs_utf8::Dir;
 use syn::{Item, ItemMod};
 
 use super::audit::{declares_module_path, has_presence_conditional_attribute};
+use super::tokens::identifier_name;
 
 /// How deep a module tree may nest before the gate refuses to certify it.
 const MAX_MODULE_DEPTH: usize = 32;
@@ -204,7 +205,7 @@ impl Reachability<'_> {
         let is_conditional_declaration = has_presence_conditional_attribute(&module.attrs);
         match &module.content {
             Some((_, nested)) => {
-                let inline = level.prefix.join(module.ident.to_string());
+                let inline = level.prefix.join(identifier_name(&module.ident));
                 self.visit_items(nested, level.descend(&inline, is_conditional_declaration))
             }
             None => self.visit_declared_files(module, level, is_conditional_declaration),
@@ -267,7 +268,9 @@ fn unreadable_declaration(
 /// inline module's name for a nested declaration. A `#[path]` overrides all of
 /// that, which is why [`declares_module_path`] refuses it instead of guessing.
 fn module_files(prefix: &Utf8Path, module: &ItemMod, sources: &[Utf8PathBuf]) -> Vec<Utf8PathBuf> {
-    let name = module.ident.to_string();
+    // `mod r#foo;` loads `foo.rs`: the prefix changes the spelling, not the file
+    // name. Keeping it would resolve no candidate and refuse an honest tree.
+    let name = identifier_name(&module.ident);
     [
         prefix.join(format!("{name}.rs")),
         prefix.join(name).join("mod.rs"),

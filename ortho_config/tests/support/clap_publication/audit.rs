@@ -16,7 +16,9 @@
 use anyhow::{Result, bail, ensure};
 use camino::Utf8Path;
 use syn::punctuated::Punctuated;
-use syn::{Attribute, Item, ItemEnum, Meta, MetaList, Token};
+use syn::{Attribute, Item, ItemEnum, Meta, MetaList, Path, Token};
+
+use super::tokens::identifier_name;
 
 /// Refuse an enum whose own or whose variants' compilation is conditional.
 pub(super) fn audit_definition(definition: &ItemEnum, origin: &Utf8Path) -> Result<()> {
@@ -46,7 +48,19 @@ pub(super) fn reject_cfg_attributes(
 
 /// Whether an attribute is `cfg` or `cfg_attr`.
 fn is_cfg_attribute(attribute: &Attribute) -> bool {
-    attribute.path().is_ident("cfg") || attribute.path().is_ident("cfg_attr")
+    path_names(attribute.path(), "cfg") || path_names(attribute.path(), "cfg_attr")
+}
+
+/// Whether `path` spells exactly `name`, with a raw identifier normalized.
+///
+/// `syn::Path::is_ident` compares the rendered spelling, and `proc-macro2`
+/// keeps the `r#` prefix, so `#[r#cfg]` would not match `"cfg"`. Rust applies
+/// the two as one attribute, and a check that missed the raw spelling would read
+/// a conditional item as unconditional and trust a shape the compiler may
+/// exclude — so every attribute comparison goes through here.
+fn path_names(path: &Path, name: &str) -> bool {
+    path.get_ident()
+        .is_some_and(|ident| identifier_name(ident) == name)
 }
 
 /// Whether any attribute applies `name`, directly or through `cfg_attr`.
@@ -93,10 +107,12 @@ pub(super) fn declares_module_path(attributes: &[Attribute]) -> bool {
 /// not be the reason a count is trusted.
 fn meta_applies(meta: &Meta, name: &str) -> bool {
     match meta {
-        Meta::Path(path) => path.is_ident(name),
-        Meta::NameValue(entry) => entry.path.is_ident(name),
-        Meta::List(list) if list.path.is_ident("cfg_attr") => applies_through_cfg_attr(list, name),
-        Meta::List(list) => list.path.is_ident(name),
+        Meta::Path(path) => path_names(path, name),
+        Meta::NameValue(entry) => path_names(&entry.path, name),
+        Meta::List(list) if path_names(&list.path, "cfg_attr") => {
+            applies_through_cfg_attr(list, name)
+        }
+        Meta::List(list) => path_names(&list.path, name),
     }
 }
 
@@ -113,8 +129,16 @@ fn applies_through_cfg_attr(list: &MetaList, name: &str) -> bool {
 }
 
 /// Whether `item` declares the inventory type.
+///
+/// `pub enum r#ErrorKind` declares `ErrorKind`, so the raw spelling is the same
+/// declaration and has to be refused as a nested one exactly the same way.
 pub(super) fn is_error_kind_enum(item: &Item) -> bool {
-    matches!(item, Item::Enum(definition) if definition.ident == "ErrorKind")
+    matches!(item, Item::Enum(definition) if is_error_kind_name(&definition.ident))
+}
+
+/// Whether an identifier names the inventory type, raw spelling normalized.
+pub(super) fn is_error_kind_name(ident: &syn::Ident) -> bool {
+    identifier_name(ident) == "ErrorKind"
 }
 
 /// Refuse an `ErrorKind` declared inside an inline module.
