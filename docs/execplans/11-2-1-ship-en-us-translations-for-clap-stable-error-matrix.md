@@ -1316,10 +1316,12 @@ stopping and reporting.
       hashes to `516df4f259af7920`.
 
 - [x] (2026-11-21) Round-20 attribute-expansion repair of the publication
-      gate. The tenth whole-plan assessment's remaining finding was that an
-      attribute path can name a procedural macro whose expansion replaces the
-      item the parse shows, and the Round-19 certificate recorded the boundary
-      target only as a phase inside `make test`.
+      gate. The eleventh whole-plan assessment
+      (`EP-11-2-1-whole-plan-52875e63-20261121T0325Z`, head `52875e63`)
+      reported that an attribute path can name a procedural macro whose
+      expansion replaces the item the parse shows, and that the Round-19
+      certificate recorded the boundary target only as a phase inside
+      `make test`.
       - The hole is real and was proved on throwaway sources with
         `rustc --edition 2024 -Zunpretty=expanded`: a module annotated
         `#[attr_macro::inject]` expands to the macro's items, and
