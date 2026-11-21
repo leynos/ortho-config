@@ -789,6 +789,20 @@ with a compatibility probe rather than an assumption.
   recorded in ADR-0024's 2026-11-20 amendment. It is answered once more with
   that evidence rather than repaired.
 
+- [x] (2026-11-21) Applied the one correction CodeRabbit's reply to the
+  `6001035675` dispositions raised. The amendment added to ADR-0024 on
+  2026-11-20 said `ConfigPath::render` is the routine both the report and the
+  suggested file section call. They share `render_segment`, not
+  `ConfigPath::render`: the report maps `render_segment` over the path's
+  segments and joins them with `.`, while `FileSection` calls `render_segment`
+  directly for each table header and each assignment. The reply otherwise
+  recorded that `skip_cli` and the users'-guide subsection were verified and
+  that the Domain Architecture relocation request would not be repeated. A
+  dated 2026-11-21 amendment records the correction and preserves the earlier
+  text, so the ADR's decision history still shows what was claimed and when.
+  The head `a190b7fb` passes `make check-fmt` and `make markdownlint`, and its
+  CI run `44851741372` completed with all eight jobs green.
+
 ## Surprises & discoveries
 
 The full local suite aborted once at round c7 on
