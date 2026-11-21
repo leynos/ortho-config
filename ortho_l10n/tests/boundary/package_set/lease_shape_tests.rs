@@ -262,14 +262,15 @@ fn is_call_line(line: &str, name: &str) -> bool {
     if trimmed.starts_with("use ") || trimmed.split_whitespace().any(|word| word == "fn") {
         return false;
     }
-    let Some(at) = line.find(name) else {
+    // `split_once` rather than `find` plus a byte offset: the offset form
+    // indexes the string, which can panic on a UTF-8 boundary and is denied by
+    // this repository's lint policy.
+    let Some((_before, after)) = line.split_once(name) else {
         return false;
     };
-    let after = &line[at + name.len()..];
-    let after_callee = match after.strip_prefix("::<") {
-        Some(tail) => tail.split_once('>').map_or("", |(_generics, rest)| rest),
-        None => after,
-    };
+    let after_callee = after.strip_prefix("::<").map_or(after, |tail| {
+        tail.split_once('>').map_or("", |(_generics, rest)| rest)
+    });
     after_callee.starts_with('(')
 }
 
@@ -329,7 +330,7 @@ fn count_in_tree(root: &Utf8Path, name: &str) -> Result<usize> {
             let text = directory
                 .read_to_string(&entry_name)
                 .with_context(|| format!("read {root}/{relative}"))?;
-            total += count_calls(&text, &name);
+            total += count_calls(&text, name);
         }
     }
     Ok(total)
