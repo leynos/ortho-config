@@ -161,6 +161,7 @@ impl DocMetadata {
     ///     windows: None,
     ///     behaviour: None,
     ///     renderer: None,
+    ///     output: None,
     ///     profiles: None,
     /// };
     ///

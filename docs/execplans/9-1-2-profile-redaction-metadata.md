@@ -966,6 +966,18 @@ exclusion as it stood at that milestone; it no longer applies.
   encoding as preorder now names it as parent-before-child, with production's
   preorder linearization given as one permitted order.
 
+- [x] (2026-11-21) Close the third assessment round's two findings. The new
+  `redacted_for_output` doctest omitted `DocMetadata::output`, a required
+  struct field, so `cargo test --workspace --doc` failed with E0063 at
+  `51877497`; the example now sets `output: None`. The red run
+  (`cargo test -p ortho_config --doc`: 82 passed, 1 failed, "missing field
+  `output` in initializer of `DocMetadata`") and the green run
+  (`cargo test --workspace --doc --all-features`: 155 passed, 0 failed, 52
+  ignored) are recorded. The Verus entry point's first mapping claim said every
+  production slot has a model counterpart while the same section says preserved
+  slots are collapsed; it now claims a counterpart only for slots the
+  projection can change, matching the table and ADR-0024.
+
 ## Surprises & discoveries
 
 The current context contains selector metadata, not profile bodies or names.
@@ -1041,6 +1053,17 @@ M2 discoveries, 2026-11-16:
     command-example tests.
   The module was restored from a byte-identical copy (`sha256 33cc3bf3…`) and
   all 19 redaction tests passed again.
+
+M3 discoveries, 2026-11-21:
+
+- Doctests are invisible to both `make test` and CI. The `test` target runs
+  `cargo test --all-targets --all-features`, which builds every target except
+  doctests, and the `build-test` jobs run `make test`; no workflow invokes
+  `--doc`. A new doc example can therefore rot while all ten Makefile gates are
+  green. This delivery adds a doctest, so the plan's
+  `cargo test --workspace --doc` command is separate mandatory evidence, not a
+  duplicate of `make test`; the third assessment round caught the example that
+  this gap had let through.
 
 M1 gate evidence, 2026-11-15 (candidate `7a4586f7`, worktree clean of edits
 during each run):
