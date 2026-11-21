@@ -296,9 +296,43 @@ fn without_comments(source: &str) -> String {
 fn count_in_tree(root: &Utf8Path, name: &str) -> Result<usize> {
     let root_directory = Dir::open_ambient_dir(root, cap_std::ambient_authority())
         .with_context(|| format!("open {root}"))?;
+    let walk = Walk { root, name };
     let mut total = 0;
     let mut pending = vec![(root_directory, String::new())];
     while let Some((directory, prefix)) = pending.pop() {
+        total += walk.count_in_directory(&directory, &prefix, &mut pending)?;
+    }
+    Ok(total)
+}
+
+/// What a tree walk is looking for, and where it started.
+///
+/// Grouped rather than passed as two more arguments: `root` is only used to
+/// name paths in errors and `name` is the callee, so they travel together and
+/// keep the per-directory helper within the argument limit.
+struct Walk<'a> {
+    /// The tree being scanned, for error messages.
+    root: &'a Utf8Path,
+    /// The callee whose calls are counted.
+    name: &'a str,
+}
+
+impl Walk<'_> {
+    /// Count calls in one directory, queueing its subdirectories on `pending`.
+    ///
+    /// Split out of [`count_in_tree`] because the walk's per-entry branching -
+    /// directory, non-Rust file, Rust file - is three nested conditionals, and
+    /// Whitaker's cognitive-complexity rule refuses that many clusters in one
+    /// function. Naming the per-entry decision also makes the walk readable:
+    /// the loop above is "pop a directory, account for its entries".
+    fn count_in_directory(
+        &self,
+        directory: &Dir,
+        prefix: &str,
+        pending: &mut Vec<(Dir, String)>,
+    ) -> Result<usize> {
+        let root = self.root;
+        let mut total = 0;
         for listed in directory
             .entries()
             .with_context(|| format!("read {root}/{prefix}"))?
@@ -319,10 +353,7 @@ fn count_in_tree(root: &Utf8Path, name: &str) -> Result<usize> {
                 pending.push((entry.open_dir().context("open a subdirectory")?, relative));
                 continue;
             }
-            let is_rust = Utf8Path::new(&entry_name)
-                .extension()
-                .is_some_and(|extension| extension.eq_ignore_ascii_case("rs"));
-            if !file_type.is_file() || !is_rust {
+            if !file_type.is_file() || !is_rust_source(&entry_name) {
                 continue;
             }
             // Relative to the directory the entry came from, not to the root:
@@ -330,10 +361,17 @@ fn count_in_tree(root: &Utf8Path, name: &str) -> Result<usize> {
             let text = directory
                 .read_to_string(&entry_name)
                 .with_context(|| format!("read {root}/{relative}"))?;
-            total += count_calls(&text, name);
+            total += count_calls(&text, self.name);
         }
+        Ok(total)
     }
-    Ok(total)
+}
+
+/// Whether `entry_name` names a Rust source file.
+fn is_rust_source(entry_name: &str) -> bool {
+    Utf8Path::new(entry_name)
+        .extension()
+        .is_some_and(|extension| extension.eq_ignore_ascii_case("rs"))
 }
 
 /// The packaged set the lease protects is the one the contracts read.
