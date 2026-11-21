@@ -9,10 +9,14 @@
 
 mod fixtures;
 
+use camino::Utf8Path;
+use cap_std::ambient_authority;
+use cap_std::fs_utf8::Dir;
 use insta::assert_snapshot;
 use rstest::rstest;
 use std::error::Error;
 use std::process::{Command, Output};
+use std::time::Duration;
 
 /// Process status for a completed run, including `--help` and `--version`.
 const EXIT_SUCCESS: i32 = 0;
@@ -23,25 +27,12 @@ const EXIT_FAILURE: i32 = 1;
 /// Process status for Clap's argument and dispatch rejection.
 const EXIT_USAGE: i32 = 2;
 
-use camino::Utf8Path;
-use cap_std::ambient_authority;
-use cap_std::fs_utf8::Dir;
-use insta::assert_snapshot;
-use rstest::rstest;
-use std::error::Error;
-use std::process::{Command, Output};
-use std::time::Duration;
-
 /// Budget for one spawned `cargo-orthohelp` invocation.
 ///
 /// The nextest base tier terminates a test after ten 60-second periods, so a
 /// command that hangs is reported here first, with its own description, rather
 /// than as an unexplained test timeout.
 const SUBPROCESS_DEADLINE: Duration = Duration::from_secs(480);
-use camino::Utf8Path;
-use cap_std::ambient_authority;
-use cap_std::fs_utf8::Dir;
-
 
 fn run_direct(args: &[&str]) -> Result<Output, Box<dyn Error + Send + Sync>> {
     let exe = fixtures::cargo_orthohelp_exe()?;
@@ -417,7 +408,6 @@ fn missing_package_reports_failure_status() {
         "the failure should name the missing package, stderr:\n{diagnostics}"
     );
 }
-
 
 #[rstest]
 #[case::unknown_extra_argument(
