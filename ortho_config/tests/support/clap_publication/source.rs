@@ -45,6 +45,7 @@ use syn::Item;
 use super::audit::{
     audit_definition, is_error_kind_name, refuse_nested_error_kinds, reject_cfg_attributes,
 };
+use super::expansion::refuse_unverified_attributes;
 use super::imports::CrateScope;
 use super::library::library_crate_root;
 use super::macros::{collect_crate_names, refuse_item_macros};
@@ -200,14 +201,17 @@ fn collect_sources(
 
 /// Count one file's top-level `ErrorKind` variants, refusing other shapes.
 ///
-/// A declaration nested in an inline module is refused before the file-level
-/// scan, because that scan could otherwise count a compiled decoy while the
-/// exported inventory sat in a module it never looked inside.
+/// An attribute is audited before anything the parse shows is trusted, because
+/// an attribute macro can replace any annotated item, including the enum this
+/// count reads. A declaration nested in an inline module is refused next,
+/// because the file-level scan could otherwise count a compiled decoy while
+/// the exported inventory sat in a module it never looked inside.
 fn analyze_error_kind(
     file: &syn::File,
     crate_scope: &CrateScope,
     origin: &Utf8Path,
 ) -> Result<Option<usize>> {
+    refuse_unverified_attributes(file, origin)?;
     refuse_nested_error_kinds(&file.items, origin)?;
     refuse_item_macros(&file.items, origin, crate_scope)?;
     let mut definitions = file.items.iter().filter_map(|item| match item {

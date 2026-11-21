@@ -1315,6 +1315,59 @@ stopping and reporting.
       gates carry over by content identity: the support-module diff still
       hashes to `516df4f259af7920`.
 
+- [x] (2026-11-21) Round-20 attribute-expansion repair of the publication
+      gate. The tenth whole-plan assessment's remaining finding was that an
+      attribute path can name a procedural macro whose expansion replaces the
+      item the parse shows, and the Round-19 certificate recorded the boundary
+      target only as a phase inside `make test`.
+      - The hole is real and was proved on throwaway sources with
+        `rustc --edition 2024 -Zunpretty=expanded`: a module annotated
+        `#[attr_macro::inject]` expands to the macro's items, and
+        `#[cfg_attr(all(), attr_macro::inject)]` expands identically, so a
+        seventeen-variant decoy can parse while the build exports eighteen.
+        `#[derive(attr_macro::EvilDerive)]` appends a whole `enum Derived` to
+        the item's scope, which is the same route through the compiler's own
+        `derive` path.
+      - The repair rests on a measured property rather than on a naming
+        convention. `use attr_macro::inline; #[inline] fn f() {}` is rejected
+        by rustc with `E0659: inline is ambiguous`, so a single-segment
+        attribute path in a compiling crate is always the compiler's own; and
+        `clap_builder` 4.6.7's real attribute surface has no multi-segment
+        path at all. `support/clap_publication/expansion.rs` therefore refuses
+        every multi-segment path, trusts a single identifier only when it is
+        on a closed list of the compiler's attributes, reads `derive`
+        arguments against the nine built-in derives, and recurses into
+        `cfg_attr` through the same audit. It runs first in
+        `analyze_error_kind`, so every parsed file is audited, not only the
+        declaring one.
+      - Controls: the trees `module_tree/attribute_macro`,
+        `module_tree/cfg_attr_attribute_macro` and `module_tree/derive_macro`
+        are refused with their own reasons, `classes.rs` adds
+        `imported_attribute_macro` and `unknown_derive`, and
+        `module_tree/builtin_attributes` is an accepted tree carrying a derive
+        list, `non_exhaustive`, `allow`, `doc`, and a `cfg_attr` that applies
+        `allow`, so the repair cannot degrade into refusing ordinary
+        annotations. Every fixture was probed with
+        `rustup run nightly-2026-10-16 rustc`: the accepted tree compiles
+        clean, and each refusal tree's only diagnostic is `E0433` for the
+        deliberately absent `inventory_macros` crate, which is the same shape
+        the Round-17 and Round-18 fixtures already rely on.
+      - Non-vacuity, each mutation restored byte-identically under a SHA-256
+        check: disabling the attribute allow-list fails the classes case and
+        the two attribute-macro trees; disabling the derive allow-list fails
+        the classes case and `derive_macro`; removing the `cfg_attr`
+        recursion fails `cfg_attr_attribute_macro` alone; and unwiring the
+        audit call fails all five. The four mutations fail disjoint sets of
+        tests, so each guard owns its own evidence.
+
+- [x] (2026-11-21) Round-20 certificate on the frozen tree. `make fmt`, then
+      `make check-fmt`, `make typecheck`, `make lint`, `make markdownlint`,
+      `make nixie`, `make test-workflow-contracts`, `make test`, and the
+      standalone `make boundary` the assessment asked for, run sequentially
+      and each started once. The standalone boundary result is recorded
+      separately below because it is the acceptance item the Round-19
+      certificate left open.
+
 ## Surprises & discoveries
 
 The plan first incorporated merged PR #651 at
@@ -1610,6 +1663,25 @@ same defect and are not, because a raw spelling of that macro name does not
 parse. Recording the probe's result in the Progress entry is what makes the
 omission auditable rather than an oversight.
 
+A parser reports syntax, so a gate built on one inherits a blind spot wherever
+the compiler's meaning depends on something the syntax does not show. `syn`
+reads `#[inventory_macros::inject] pub enum ErrorKind { .. }` as an enum with
+an attribute, and so does a human; the compiler reads it as a request to
+*replace that enum* with whatever the macro returns. Every shape the walk had
+refused so far — a nested declaration, a `include!` splice, a relabelled import
+— was recoverable from the parse once the gate knew what to look for. An
+attribute macro is not: its output is not in the file at all, so no amount of
+reading finds it. That is why the repair refuses the route instead of analysing
+it, and why the argument that licenses the refusal is about the *compiler's*
+name resolution (`E0659`) rather than about the macro's body.
+
+The corresponding lesson is about where such a claim has to be proved. The
+convenient version of "a built-in attribute name cannot be shadowed" is a
+statement about Rust's name-resolution rules as documented; the useful version
+is a two-line program that produces `E0659`, which is what the Progress entry
+records. A rule that the whole exemption rests on deserves a probe that would
+have failed if the rule did not hold.
+
 ## Decision log
 
 - 2026-10-14: propose the design's build-script mechanism, with M0 as an
@@ -1745,6 +1817,18 @@ omission auditable rather than an oversight.
   and an unreachable normalization would be untestable by construction.
   `is_error_kind_name` is exported from `audit.rs` so the nested-shape refusal
   and the file-level scan share one comparison instead of two that can differ.
+
+- 2026-11-21: refuse any attribute path whose procedural expansion the walk
+  cannot read, rather than trying to model what an attribute macro emits. A
+  multi-segment path names a procedural macro or a tool attribute, so it is
+  refused; a single identifier is trusted only when the compiler owns that
+  name, which a compiling crate guarantees because a same-named macro makes the
+  attribute ambiguous (`E0659`). The alternative — running the macro — is not
+  available to a gate that must decide before publishing, and the alternative
+  of trusting by name alone is exactly the hole that was found. The lists are
+  deliberately closed and short: refusing a built-in the list omits costs one
+  human review, while trusting a name the compiler does not own is the failure
+  mode the gate exists to prevent.
 
 ## Outcomes & retrospective
 

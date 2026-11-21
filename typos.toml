@@ -63,6 +63,7 @@ extend-ignore-re = [
     "`[^`\\n]*cli::tests::localisation[^`\\n]*`",
     "`[^`\\n]*localised_help[^`\\n]*`",
     "`[^`\\n]*normalises_unicode_identifiers[^`\\n]*`",
+    "`analyze_error_kind`",
     "`analyzed`",
     "`artifact_path`",
     "`behavior\\(\\.\\.\\.\\)`",

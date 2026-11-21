@@ -82,6 +82,14 @@ const ORIGIN: &str = "classes/error_kind.rs";
     "#[cfg_attr(all(), cfg(all()))]\npub mod error {\n    pub enum ErrorKind {\n        Alpha,\n    }\n}\n",
     Classification::Refused("inside `mod error`")
 )]
+#[case::imported_attribute_macro(
+    "use inventory_macros::inject;\n\n#[inject]\npub enum ErrorKind {\n    Alpha,\n}\n",
+    Classification::Refused("which can be an attribute macro")
+)]
+#[case::unknown_derive(
+    "#[derive(EvilDerive)]\npub enum ErrorKind {\n    Alpha,\n}\n",
+    Classification::Refused("not one of the compiler's built-in derives")
+)]
 #[case::macro_rules_definition(
     "macro_rules! declare {\n    () => {\n        pub enum ErrorKind {\n            Alpha,\n        }\n    };\n}\n\npub enum ErrorKind {\n    Alpha,\n    Beta,\n}\n",
     Classification::Counted(2)

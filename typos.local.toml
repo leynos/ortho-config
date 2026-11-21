@@ -32,6 +32,9 @@ ignore = [
   "`behaviour\\(interation = \\.\\.\\.\\)`",
   "`normalisation`",
   "`analyzed`",
+  # The publication gate's per-file analysis function; the identifier keeps its
+  # American spelling because it is the function's name in the source.
+  "`analyze_error_kind`",
   "`env\\(allias = …\\)`",
   "`#\\[tokio::test\\(flavor = \"current_thread\"\\)\\]`",
   "`Invoke-ScriptAnalyzer`",

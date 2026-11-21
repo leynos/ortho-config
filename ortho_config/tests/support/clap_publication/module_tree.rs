@@ -161,6 +161,15 @@ fn unconditional_module_chain_is_counted() -> Result<()> {
 // `pub enum r#ErrorKind` inside an inline module is the same declaration as
 // the plain spelling, so the nested shape has to be refused either way.
 #[case::raw_nested_definition("raw_nested_definition", "inside `mod error`")]
+// A multi-segment attribute path names a procedural macro, which can replace the
+// enum it annotates, so the parsed decoy is not the compiled inventory.
+#[case::attribute_macro("attribute_macro", "which can be an attribute macro")]
+// The same macro applied through `cfg_attr(all(), ..)`, which the compiler
+// expands into the attribute before it invokes the macro.
+#[case::cfg_attr_attribute_macro("cfg_attr_attribute_macro", "which can be an attribute macro")]
+// A derive macro appends its output to the item's scope, so a name outside the
+// compiler's built-in set is an item-producing expansion too.
+#[case::derive_macro("derive_macro", "which is not one of the compiler's built-in derives")]
 // A tree without a reported crate root is refused rather than guessed at.
 #[case::no_crate_root("no_crate_root", "expected a crate root lib.rs")]
 fn module_tree_is_refused(#[case] fixture: &str, #[case] expected: &str) -> Result<()> {
@@ -179,6 +188,25 @@ fn inline_module_hop_is_followed() -> Result<()> {
     ensure!(
         count == 2,
         "the inline-module fixture should count two variants, found {count}",
+    );
+    Ok(())
+}
+
+/// The compiler's own attributes are accepted rather than refused wholesale.
+///
+/// Every attribute in this tree is one the compiler defines, including the
+/// built-in derives, a lint level, a documentation value, a conditional
+/// `cfg_attr`, and a nested inline module. A repair that refused every attribute
+/// would fail here, so the refusal stays bounded to the expansions the walk
+/// cannot read.
+#[test]
+fn builtin_attributes_are_accepted() -> Result<()> {
+    let root = fixture_root().join("module_tree/builtin_attributes");
+
+    let count = count_error_kinds_under(&root)?;
+    ensure!(
+        count == 3,
+        "the built-in-attributes fixture should count three variants, found {count}",
     );
     Ok(())
 }

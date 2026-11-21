@@ -120,6 +120,10 @@ semantic inventory test. Neither comparison parses source on its own.
   that source anyway, so this adds no network dependency.
 - **Conditional declarations.** A `cfg`-gated or macro-generated variant fails
   closed and requires an explicit source-support decision rather than a guess.
+- **Closed attribute lists.** The gate trusts only the compiler attributes and
+  the nine built-in derives it names. Upstream adopting a compiler attribute
+  outside those lists, or a derive inside `clap_builder`'s own inventory
+  source, fails the gate until the list is extended deliberately.
 
 ## Consequences and validation
 
@@ -150,9 +154,14 @@ macro with a raw identifier such as `r#include!`, through a call that precedes
 a redefinition of the same name, or through an item argument the invoking macro
 re-emits — and a declared module file staged as a symlink whose target resolves
 within its own directory, whether its declaration is unconditional, carries a
-condition that can hold, or is nested below a conditional inline module. The
-symlink controls also show the direction they must not take: an alias of the
-declaring module stays uncounted rather than refused.
+condition that can hold, or is nested below a conditional inline module. A
+procedural macro can replace an annotated item before the walk parses it, so an
+attribute path that is not one of the compiler's own names is refused: a
+multi-segment path directly, the same macro applied through `cfg_attr`, an
+unknown `derive`, and a `use` item that binds an imported macro to a
+one-segment name. The symlink controls also show the direction they must not
+take: an alias of the declaring module stays uncounted rather than refused, and
+a tree using only the compiler's attributes stays counted.
 
 ## Alternatives rejected
 
