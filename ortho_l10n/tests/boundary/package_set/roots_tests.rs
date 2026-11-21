@@ -14,6 +14,7 @@ use crate::boundary::fixture_cargo::{BOUNDARY_ROOT, repository_root};
 use crate::boundary::package_set::lease::{PackagingLease, Prepared, prepare};
 use crate::boundary::package_set::record::{read_unlocked, record_complete};
 use crate::boundary::package_set::roots::package_under_lease;
+use crate::boundary::package_set::run_guard::{RunGuard, hold_run};
 use anyhow::{Context, Result, ensure};
 use cap_std::fs_utf8::Dir;
 use rstest::{fixture, rstest};
@@ -37,6 +38,12 @@ const THIS_RUN: &str = "roots-regression-this-run";
 struct Held {
     /// The lease, held for the whole of the sequence under test.
     lease: PackagingLease,
+    /// The guard the lease was taken under, held for the same span.
+    ///
+    /// Carried rather than dropped inside the fixture: `prepare` was given a
+    /// proof tied to this guard's lifetime, and the release of the guard is a
+    /// distinct event the cases are meant to observe after the lease's.
+    _guard: RunGuard,
     /// Owns the scratch directory, removing it when the case ends.
     tempdir: tempfile::TempDir,
 }
@@ -58,14 +65,27 @@ fn held_lease() -> Result<Held> {
     let path = camino::Utf8PathBuf::from_path_buf(tempdir.path().to_path_buf())
         .map_err(|path| anyhow::anyhow!("the scratch target {} is not UTF-8", path.display()))?;
 
-    let lease = match prepare(&path, Some(THIS_RUN), Instant::now() + AMPLE_DEADLINE)? {
+    // A guard of this tree's own: these cases read and package a scratch target
+    // rather than the checkout's, so the proof they need is the one that
+    // excludes other readers of *this* tree.
+    let guard = hold_run(&path, Instant::now() + AMPLE_DEADLINE)?;
+    let lease = match prepare(
+        &guard,
+        &path,
+        Some(THIS_RUN),
+        Instant::now() + AMPLE_DEADLINE,
+    )? {
         Prepared::Owned { lease } => lease,
         Prepared::Reused => anyhow::bail!(
             "a fresh target with no record was reported as already packaged, so \
              the sequence below would not run at all"
         ),
     };
-    Ok(Held { lease, tempdir })
+    Ok(Held {
+        lease,
+        _guard: guard,
+        tempdir,
+    })
 }
 
 /// The directory the held lease protects.

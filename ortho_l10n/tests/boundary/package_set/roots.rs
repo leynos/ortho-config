@@ -233,12 +233,17 @@ fn build_packaged_set(budget: Budget) -> Result<Vec<PackagedCrate>> {
     // Taken before anything in the target is read or written, and kept for the
     // life of the process by `RUN_GUARD`. Without it a second run could begin
     // replacing the roots this one is about to read, which is exactly what
-    // `Prepared::Reused` promises cannot happen.
-    let guard = hold_run(&boundary, deadline)?;
-    let _held = RUN_GUARD.get_or_init(|| guard);
+    // `Prepared::Reused` promises cannot happen. `prepare` takes the guard, so
+    // this is the acquisition it is checked against rather than one it assumes.
+    let acquired = hold_run(&boundary, deadline)?;
+    // Parked for the process's whole life, and borrowed back from the store:
+    // `get_or_init` returns the stored guard, so the reference passed on is the
+    // one that outlives `build_packaged_set` rather than a local that would drop
+    // it here.
+    let guard = RUN_GUARD.get_or_init(|| acquired);
 
     let scope = run_scope();
-    match prepare(&target, scope.as_deref(), deadline)? {
+    match prepare(guard, &target, scope.as_deref(), deadline)? {
         Prepared::Reused => {}
         Prepared::Owned { lease } => {
             package_under_lease(&lease, scope.as_deref(), || {

@@ -73,20 +73,35 @@ fn describe(prepared: &Prepared) -> &'static str {
 /// Both sends are best-effort. If the case has already failed and dropped its
 /// receivers there is nobody left to report to, and a panic there would replace
 /// the real failure with a second one.
-fn spawn_waiter(scratch: &Scratch) -> Waiter {
+///
+/// # Errors
+///
+/// Returns an error when this tree's run guard cannot be taken.
+fn spawn_waiter(scratch: &Scratch) -> Result<Waiter> {
+    // The waiter takes this tree's guard, exactly as a contract does. It is not
+    // a *second* acquisition on the same file: the guard excludes other runs,
+    // and the waiter belongs to this one, so it holds the same lock its case
+    // does. It is taken here rather than re-opened inside the thread because a
+    // second open on a file this process already holds would block on itself.
+    let guard = scratch.guard()?;
     let (started, reached) = mpsc::channel();
     let (finished, answered) = mpsc::channel();
     let path = scratch.path().to_path_buf();
     let handle = thread::spawn(move || {
         let _signalled = started.send(());
-        let prepared = prepare(&path, Some(THIS_RUN), Instant::now() + AMPLE_DEADLINE);
+        let prepared = prepare(
+            &guard,
+            &path,
+            Some(THIS_RUN),
+            Instant::now() + AMPLE_DEADLINE,
+        );
         let _reported = finished.send(prepared);
     });
-    Waiter {
+    Ok(Waiter {
         handle,
         reached,
         answered,
-    }
+    })
 }
 
 /// What one fixed-length look at a waiter saw.
@@ -169,7 +184,7 @@ fn a_waiter_behind_a_holder_takes_the_step_once_it_is_released(
 ) -> Result<()> {
     let scratch = scratch_root?;
     let holder = scratch.take(Some(THIS_RUN))?;
-    let waiter = spawn_waiter(&scratch);
+    let waiter = spawn_waiter(&scratch)?;
     waiter.require_started()?;
 
     let idle = waiter.observe_wait();
@@ -221,7 +236,7 @@ fn a_waiter_reuses_the_roots_the_holder_records_while_it_waits(
 ) -> Result<()> {
     let scratch = scratch_root?;
     let holder = scratch.take(Some(THIS_RUN))?;
-    let waiter = spawn_waiter(&scratch);
+    let waiter = spawn_waiter(&scratch)?;
     waiter.require_started()?;
 
     let still_waiting = waiter.observe_wait();

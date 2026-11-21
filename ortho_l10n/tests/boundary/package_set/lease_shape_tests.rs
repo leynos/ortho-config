@@ -311,13 +311,17 @@ fn the_lease_protects_the_set_the_contracts_read() -> Result<()> {
         .read_to_string("roots.rs")
         .with_context(|| format!("read {roots}"))?;
 
-    // The leased step, as a call expression rather than a mention.
-    let prepares = source.matches(concat!("prepare", "(&target")).count();
+    // The leased step, as a call expression rather than a mention. The guard is
+    // the first argument because `prepare` requires the proof that it is held,
+    // so the shape pinned here is `prepare(guard, &target, ..)`.
+    let prepares = source
+        .matches(concat!("prepare", "(guard, &target"))
+        .count();
     ensure!(
         prepares == 1,
-        "roots.rs reaches the lease through {prepares} `prepare(&target, ..)` calls; \
-         it must be exactly one, and the packaged roots must be built from the same \
-         target the lease protects"
+        "roots.rs reaches the lease through {prepares} `prepare(guard, &target, ..)` \
+         calls; it must be exactly one, and the packaged roots must be built from \
+         the same target the lease protects"
     );
 
     // The roots the contracts read are derived from that leased target, so a

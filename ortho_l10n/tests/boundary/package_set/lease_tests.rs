@@ -66,6 +66,7 @@ fn a_record_for_this_run_is_reused(scratch_root: Result<Scratch>) -> Result<()> 
     drop(lease);
 
     let prepared = prepare(
+        &scratch.guard()?,
         scratch.path(),
         Some(THIS_RUN),
         Instant::now() + AMPLE_DEADLINE,
@@ -92,6 +93,7 @@ fn a_record_for_another_run_is_not_reused(scratch_root: Result<Scratch>) -> Resu
     drop(lease);
 
     let prepared = prepare(
+        &scratch.guard()?,
         scratch.path(),
         Some(THIS_RUN),
         Instant::now() + AMPLE_DEADLINE,
@@ -119,7 +121,12 @@ fn without_a_run_scope_a_record_is_neither_written_nor_trusted(
     record_complete(&lease, THIS_RUN)?;
     drop(lease);
 
-    let prepared = prepare(scratch.path(), None, Instant::now() + AMPLE_DEADLINE)?;
+    let prepared = prepare(
+        &scratch.guard()?,
+        scratch.path(),
+        None,
+        Instant::now() + AMPLE_DEADLINE,
+    )?;
     let Prepared::Owned { .. } = prepared else {
         anyhow::bail!(
             "with no run scope a record naming {THIS_RUN} was reused; the \
@@ -141,6 +148,7 @@ fn a_held_lease_is_reported_as_a_wait(scratch_root: Result<Scratch>) -> Result<(
     let held = scratch.take(Some(THIS_RUN))?;
 
     let refused = prepare(
+        &scratch.guard()?,
         scratch.path(),
         Some(THIS_RUN),
         Instant::now() + SPENT_DEADLINE,
@@ -213,6 +221,7 @@ fn a_free_lease_is_taken_within_the_poll_bound(scratch_root: Result<Scratch>) ->
 
     let started = Instant::now();
     let prepared = prepare(
+        &scratch.guard()?,
         scratch.path(),
         Some(THIS_RUN),
         Instant::now() + AMPLE_DEADLINE,
@@ -243,6 +252,7 @@ fn a_cleared_record_is_not_reused(scratch_root: Result<Scratch>) -> Result<()> {
     drop(lease);
 
     let prepared = prepare(
+        &scratch.guard()?,
         scratch.path(),
         Some(THIS_RUN),
         Instant::now() + AMPLE_DEADLINE,

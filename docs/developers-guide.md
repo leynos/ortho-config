@@ -372,9 +372,13 @@ written beside a lease a caller is not holding. The clear-and-package sequence
 lives in `package_under_lease` in `roots.rs`, which takes the packaging work as
 a closure; that is what lets `roots_tests.rs` assert the ordering and the
 failure behaviour without running `cargo package`. The run guard is expressed
-the same way but one level up: `hold_run` returns a `RunGuard`, and
-`build_packaged_set` parks it in a `static OnceLock`, so the process cannot
-forget to keep it.
+the same way but one level up: `hold_run` returns a `RunGuard`, `prepare` takes
+`&RunGuard`, and `build_packaged_set` parks the guard in a `static OnceLock` so
+the process cannot forget to keep it. The arrival check inside `prepare` reads
+the record with no lease held, and that read is only safe while no other run
+may replace the roots, so the guard is a parameter rather than something the
+caller is trusted to hold: a caller that cannot lend a `RunGuard` cannot reach
+the read.
 
 The record reads are fallible in the same way and for the same reason. A
 missing record is the ordinary first-run case and reads as "not complete", but

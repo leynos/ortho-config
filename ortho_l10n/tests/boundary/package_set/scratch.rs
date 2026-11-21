@@ -14,6 +14,7 @@
 //! option is not something these cases should be discovering.
 
 use super::lease::{PackagingLease, Prepared, prepare};
+use super::run_guard::{RunGuard, hold_run};
 use crate::boundary::fixture_cargo::{BOUNDARY_ROOT, repository_root};
 use anyhow::{Context, Result};
 use cap_std::fs_utf8::Dir;
@@ -33,6 +34,11 @@ pub(crate) const AMPLE_DEADLINE: Duration = Duration::from_secs(60);
 pub(crate) const WAKE_UP_BOUND: Duration = Duration::from_secs(2);
 
 /// A scratch packaging target, removed when the value drops.
+///
+/// It can hand out the run guard its leases are taken under, so a case that
+/// calls [`prepare`] has the proof to hand without repeating an acquisition.
+/// The guard is returned by value because one case lends it to a waiter thread;
+/// the caller keeps it for as long as it needs the proof.
 pub(crate) struct Scratch {
     /// The drop guard. Never read; it removes the directory.
     _tempdir: tempfile::TempDir,
@@ -83,6 +89,20 @@ impl Scratch {
         &self.path
     }
 
+    /// Take this tree's run guard, for the cases that call [`prepare`].
+    ///
+    /// Returned by value rather than borrowed: one case hands its guard to a
+    /// waiter thread, and a borrowed lock cannot cross that boundary. The
+    /// caller keeps it for the span it needs the proof, and the lock is
+    /// released when it drops.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the guard cannot be created or locked.
+    pub(crate) fn guard(&self) -> Result<RunGuard> {
+        hold_run(&self.path, Instant::now() + AMPLE_DEADLINE)
+    }
+
     /// The target as a directory handle, for the calls that read a record
     /// without holding a lease.
     ///
@@ -103,7 +123,8 @@ impl Scratch {
     /// Returns an error when the lease is not granted, including when a fresh
     /// target with no record was reported as already packaged.
     pub(crate) fn take(&self, scope: Option<&str>) -> Result<PackagingLease> {
-        match prepare(&self.path, scope, Instant::now() + AMPLE_DEADLINE)? {
+        let guard = self.guard()?;
+        match prepare(&guard, &self.path, scope, Instant::now() + AMPLE_DEADLINE)? {
             Prepared::Owned { lease } => Ok(lease),
             Prepared::Reused => anyhow::bail!(
                 "a fresh target with no record was reported as already packaged; \

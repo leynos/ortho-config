@@ -64,7 +64,9 @@
 //! makes that safe is one level up: every process that reaches this module
 //! holds the *run guard* (see [`super::run_guard::hold_run`]) for its whole
 //! lifetime, so no other run can begin replacing the roots while this one is
-//! still reading them.
+//! still reading them. [`prepare`] takes that guard as a parameter rather than
+//! trusting the caller to hold one, so the arrival check cannot be reached
+//! without it.
 //!
 //! # Two locks, two different questions
 //!
@@ -94,6 +96,7 @@ mod contention_tests;
 mod lease_shape_tests;
 
 use super::record::{read_under_lease, read_unlocked};
+use super::run_guard::RunGuard;
 use anyhow::{Context, Result, ensure};
 use camino::Utf8Path;
 use cap_std::fs_utf8::Dir;
@@ -167,6 +170,16 @@ pub(crate) enum Prepared {
 /// acquired the record is re-checked, because the contract that held it may
 /// have completed the step while this one waited.
 ///
+/// # Why the guard is a parameter
+///
+/// `read_unlocked` is called here with no lease held, and its answer is only
+/// safe because no other run may replace the roots behind it. That is
+/// [`super::run_guard::hold_run`]'s job, and taking the [`RunGuard`] as an
+/// argument is what stops this function being called without one - the same
+/// rule [`super::record`] applies to the lease, for the same reason. A guard
+/// the caller held in a global would be a convention: nothing would tie it to
+/// this call, and a new caller could reach the arrival check without it.
+///
 /// # Why the wait is bounded by the allowance and nothing else
 ///
 /// A reserve carved out of the deadline - enough for the packaging that follows
@@ -186,18 +199,22 @@ pub(crate) enum Prepared {
 /// cannot be locked, when the record cannot be read, or when `deadline` passes
 /// while another contract still holds it.
 pub(crate) fn prepare(
+    guard: &RunGuard,
     target: &Utf8Path,
     scope: Option<&str>,
     deadline: Instant,
 ) -> Result<Prepared> {
+    // The lock itself is held by the caller for its whole life; this borrow
+    // proves the caller has one, and cannot be produced without it. It is used
+    // at the arrival check below rather than merely bound, so the dependency is
+    // part of the code that relies on it.
     let directory = open_target(target)?;
     loop {
         // The arrival check, before any lease exists. `read_unlocked` takes the
-        // directory because this caller has no proof to offer; what makes the
-        // answer safe is [`super::run_guard::hold_run`], which keeps every
-        // other run out of this checkout for as long as this process can read
-        // anything.
-        if read_unlocked(&directory, scope)? {
+        // directory because this caller has no lease to offer; what makes the
+        // answer safe is `guard`, whose lock keeps every other run out of this
+        // checkout for as long as this process can read anything.
+        if read_under_run_guard(guard, &directory, scope)? {
             return Ok(Prepared::Reused);
         }
         if let Some(prepared) = claim(&directory, scope, target)? {
@@ -214,6 +231,20 @@ pub(crate) fn prepare(
         );
         std::thread::sleep(LEASE_POLL_INTERVAL.min(left));
     }
+}
+
+/// Read the completion record under the run guard's exclusion.
+///
+/// [`read_unlocked`] answers "did this run record the roots", and that answer
+/// is safe to act on only while no other run may replace them. The guard is
+/// what makes it safe, so it is a parameter here as well as on [`prepare`], and
+/// a caller that does not hold one cannot reach the read.
+fn read_under_run_guard(guard: &RunGuard, directory: &Dir, scope: Option<&str>) -> Result<bool> {
+    // The guard's only role here is the parameter: it is held by the caller for
+    // the process's life, and its lock is what stops a replace under this read.
+    // Naming it once keeps the dependency from being elided by a future edit.
+    let _ = guard;
+    read_unlocked(directory, scope)
 }
 
 /// Open the packaging target, creating it only if it is not there yet.

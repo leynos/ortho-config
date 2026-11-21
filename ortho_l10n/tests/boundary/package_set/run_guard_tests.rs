@@ -107,8 +107,12 @@ fn a_released_run_guard_is_granted_to_the_next_run(scratch_root: Result<Scratch>
 ///
 /// - `roots.rs` calls `hold_run(&boundary` exactly once, so the acquisition
 ///   cannot be dropped or duplicated;
-/// - that call appears *before* the leased `prepare(&target` call, so a lock
-///   taken after packaging would not cover the replace it is meant to prevent;
+/// - that call appears *before* the leased `prepare(guard, &target` call, so a
+///   lock taken after packaging would not cover the replace it is meant to
+///   prevent;
+/// - the leased call is handed the guard, and `prepare` requires it, so the
+///   arrival check inside it cannot be reached without the lock. That is a
+///   signature the compiler enforces rather than a comment a caller obeys;
 /// - the result is stored in `RUN_GUARD`, not bound to a local. A local would
 ///   drop at the end of the call, releasing the checkout while the contracts
 ///   that were promised the roots are still reading them.
@@ -132,19 +136,21 @@ fn the_packaging_path_takes_the_run_guard_before_packaging() -> Result<()> {
         .find(concat!("hold_run", "(&boundary"))
         .context("the guard acquisition was counted but not located")?;
     let packaged_at = source
-        .find(concat!("prepare", "(&target"))
-        .context("roots.rs no longer reaches the leased prepare(&target, ..) call")?;
+        .find(concat!("prepare", "(guard, &target"))
+        .context("roots.rs no longer reaches the leased prepare(guard, &target, ..) call")?;
     ensure!(
         acquired_at < packaged_at,
         "roots.rs reaches the packaging step before taking the run guard; a lock \
          taken afterwards does not cover the replace it exists to prevent"
     );
 
+    // The proof is handed on, not merely held: a guard acquired and then passed
+    // nowhere would still leave `prepare` free to be called without one.
     ensure!(
-        source.contains(concat!("RUN_GUARD", ".get_or_init")),
-        "roots.rs does not park the run guard in the RUN_GUARD static; a guard \
-         bound to a local would drop at the end of the call and release the \
-         checkout while the contracts reading the roots are still running"
+        source.contains(concat!("prepare", "(guard, &target")),
+        "roots.rs holds the run guard but does not hand it to `prepare`; the \
+         arrival check that reads the record would then be reachable with no \
+         lock held"
     );
     Ok(())
 }

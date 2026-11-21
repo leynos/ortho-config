@@ -470,11 +470,19 @@ A second review round closed the remaining points of the same two rows.
   finish") are separate. `run_scope` moved to `roots.rs`, the composition edge,
   so no library-side module reads the environment.
 - Source-text tests (`Unit Architecture` point 6, `Testing (Overall)` gap 3).
-  The needles are now call expressions, `prepare(&target` and
+  The needles are now call expressions, `prepare(guard, &target` and
   `package_sources(repository`, rather than bare names, so a doc comment, an
   import or a definition cannot satisfy them. The lease test also requires the
   unpacked roots to be derived from the leased target, which ties the lock to
   what the contracts read.
+- The run guard is now a *parameter* of the reuse decision (`Unit
+  Architecture`, second round). `prepare` takes `&RunGuard`, so the arrival
+  check that reads the record with no lease held cannot be reached without the
+  lock. Before this the guard was acquired in `roots.rs` and parked in a
+  `static OnceLock`: correct at runtime, but the invariant was a convention no
+  signature required, which is exactly the rule `record.rs` already applies to
+  the lease. A probe confirmed the compiler now rejects a guardless call
+  (`E0061: argument #1 of type &RunGuard is missing`).
 - The constant-only poll-interval case is replaced by behaviour:
   `a_free_lease_is_taken_within_the_poll_bound` bounds the time to take a free
   lease at two seconds, which fails a waiter that sleeps for the deadline
