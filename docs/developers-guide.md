@@ -3763,6 +3763,30 @@ this repository's pinned nightly, and `mold` is not a prerequisite it can rely
 on. `build_standard_routing_test.py` holds the assignment to exactly
 `-D warnings`.
 
+### Responding to `bumpy_road_function` findings
+
+`bumpy_road_function` reports a function whose separated clusters of nested
+conditional and early-return logic run together. Because the suite is a rolling
+release, a suite revision can change how an existing construct is scored
+without any commit in this repository, so a branch that passed yesterday can
+fail after a reinstall. Reproduce a finding with `make lint-whitaker` before
+changing code, record the installed suite revision, and confirm the check is
+not vacuous: the lint must still fire on a deliberately bumpy function.
+
+Findings are refactored, not suppressed. Split each flagged function into named
+helpers with declared inputs and outputs, preserving its observable behaviour,
+its error variants, and its diagnostic spans. Do not change the threshold in
+either direction, or exclude a crate, without a maintainer decision; the lint's
+strictness is repository policy, and the shared suite already tunes its
+weighting upstream.
+
+The derive parsing entry points are the worked example. A top-level matcher
+routes each attribute family, and each recognized key delegates the actual
+value parsing to a helper such as `parse_default_from_meta`,
+`apply_struct_doc_attr`, `apply_field_attr`, or `parse_field_entry`. Keeping
+each helper to one decision keeps the weighted clusters apart while leaving
+each parse contract in one readable place.
+
 ### The advisory Clippy-on-beta lane
 
 `clippy-beta` is the early-warning job for lints that have landed on the Rust
