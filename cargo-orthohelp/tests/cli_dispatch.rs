@@ -164,27 +164,48 @@ fn version_reports_success_and_the_built_version(
     );
 }
 
+/// What a failing dispatch case must report.
+///
+/// The fields travel together because they describe one failure class: its
+/// diagnostic, the usage hint it may add, and the status its class documents.
+struct FailureExpectation {
+    /// Failure message used in assertion diagnostics.
+    message: &'static str,
+    /// Text the diagnostic must contain.
+    error: &'static str,
+    /// Usage line the diagnostic must add, when the class has one.
+    usage: Option<&'static str>,
+    /// Process status the failure class documents.
+    status: i32,
+}
+
 #[rstest]
 #[case::direct_without_subcommand(
     &["--format", "ir"],
-    "direct invocation without subcommand should fail",
-    "unexpected argument '--format'",
-    Some("Usage: cargo <COMMAND>"),
-    EXIT_USAGE
+    FailureExpectation {
+        message: "direct invocation without subcommand should fail",
+        error: "unexpected argument '--format'",
+        usage: Some("Usage: cargo <COMMAND>"),
+        status: EXIT_USAGE,
+    }
 )]
 #[case::unknown_subcommand(
     &["unknown"],
-    "unknown subcommand should fail",
-    "unrecognized subcommand 'unknown'",
-    Some("Usage: cargo <COMMAND>"),
-    EXIT_USAGE
+    FailureExpectation {
+        message: "unknown subcommand should fail",
+        error: "unrecognized subcommand 'unknown'",
+        usage: Some("Usage: cargo <COMMAND>"),
+        status: EXIT_USAGE,
+    }
 )]
 #[case::invalid_subcommand_option(
     &["orthohelp", "--man-section", "9"],
-    "invalid man section should fail",
-    "invalid value '9'",
-    None,
-    EXIT_USAGE
+    FailureExpectation {
+        message: "invalid man section should fail",
+        error: "invalid value '9'",
+        usage: None,
+        status: EXIT_USAGE,
+    }
 )]
 // The root type is validated after the arguments have parsed, so a rejected
 // value is an ordinary runtime failure rather than a usage error.
@@ -199,31 +220,28 @@ fn version_reports_success_and_the_built_version(
             "std::process::exit(1); let _ = <orthohelp_fixture::SimpleFixtureConfig",
         ),
     ],
-    "injection-shaped root type should fail",
-    "InvalidRootType",
-    None,
-    EXIT_FAILURE
+    FailureExpectation {
+        message: "injection-shaped root type should fail",
+        error: "InvalidRootType",
+        usage: None,
+        status: EXIT_FAILURE,
+    }
 )]
-fn command_failure_cases(
-    #[case] args: &[&str],
-    #[case] failure_message: &str,
-    #[case] expected_error: &str,
-    #[case] expected_usage: Option<&str>,
-    #[case] expected_status: i32,
-) {
+fn command_failure_cases(#[case] args: &[&str], #[case] expected: FailureExpectation) {
     let output = run_direct(args).expect("direct orthohelp invocation should run");
 
     assert_eq!(
         output.status.code(),
-        Some(expected_status),
-        "{failure_message}: expected the documented status for its failure class"
+        Some(expected.status),
+        "{}: expected the documented status for its failure class",
+        expected.message
     );
     let stderr = stderr(&output);
     assert!(
-        stderr.contains(expected_error),
+        stderr.contains(expected.error),
         "unexpected error output:\n{stderr}"
     );
-    if let Some(usage_text) = expected_usage {
+    if let Some(usage_text) = expected.usage {
         assert!(
             stderr.contains(usage_text),
             "unexpected error usage:\n{stderr}"
