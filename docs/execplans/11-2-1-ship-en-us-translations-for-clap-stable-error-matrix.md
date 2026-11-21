@@ -1232,6 +1232,18 @@ stopping and reporting.
       `-or` spellings and `make fmt` was re-run before the tree was committed,
       so the certified tree is the committed one.
 
+- [x] (2026-11-21) Hosted state of the Round-18 head `12432bfb`. PR run
+      `44840879584` attempt 1 failed `build-test (windows)` in
+      `timeout_diagnostic_keeps_bounded_output_and_truncation_evidence`; the
+      one bounded `gh run rerun --failed` produced attempt 2, green on all
+      eight jobs, which is the whole remedy applied. The dispatch run
+      `44842466194` on the same head keeps both Windows coverage steps green
+      and fails only `Publish dry run` on both legs (step 38 Linux, step 37
+      Windows) with `E0432` for `cargo-orthohelp` against the published
+      `ortho_config` 0.11.0 — the pre-existing release-ordering blocker
+      recorded as issue #414, not a defect of this candidate. The CodeScene
+      code-health check and the Gecko security check both pass on the head.
+
 ## Surprises & discoveries
 
 The plan first incorporated merged PR #651 at
@@ -1479,6 +1491,25 @@ compiled, and a declaration inside it can name a file the walk then never
 resolves. Inspecting the subtree while refusing to certify it closes that
 without weakening the count, which is why the walk now tracks certified and
 inspected files separately.
+
+A deadline test on a millisecond budget is load-sensitive, and the load that
+breaks it need not come from the diff.
+`timeout_diagnostic_keeps_bounded_output_and_truncation_evidence` failed once
+on the hosted Windows runner with `elapsed_ms=192` against
+`effective_deadline_ms=150`, and the assertion's own evidence shows a race the
+supervisor lost rather than a defect:
+`stdout: bytes_seen=98363, bytes_captured=64, truncated=true` beside
+`stderr: bytes_seen=23, bytes_captured=23, truncated=false`, so the probe's
+stdout splice had been consumed while its stderr sentinel had already been
+written but not yet drained. The test file came from #664 and this branch never
+touched it — the whole repair range `8f946ca3..12432bfb` changes only
+`clap_publication` support, its fixtures, and documentation — and the same head
+passed both coverage steps on the same Windows image twenty minutes later in
+the dispatch run. Attribution therefore rests on identity, not on the
+coincidence that the failure landed in this PR's run: a rerun of the same head
+is what separates a shared runner's scheduling from a candidate's behaviour,
+and one red job is a datum until a second observation of the same input
+contradicts it.
 
 ## Decision log
 
