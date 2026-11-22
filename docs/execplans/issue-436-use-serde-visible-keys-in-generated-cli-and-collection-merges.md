@@ -61,8 +61,15 @@ CLI ledger is keyed by the identifier.
 - [x] (2026-11-21) Cleared the deterministic Clippy findings: an
       `Option::map_or_else` rewrite for the documentation file key, a redundant
       closure, and two `shadow_reuse` bindings in the new tests.
-- [ ] Run the remaining deterministic gates (`lint`, `test`, `nixie`) and
-      clear CodeRabbit findings.
+- [x] (2026-11-22) `check-fmt`, `lint`, `markdownlint`, and `nixie` pass at
+      `44be0406`. The full `make test` ran for 6109 s: every executed binary
+      passed except `cargo-orthohelp --test compile_time :: must_use_compile_tests`,
+      which hit its unchanged 900 s child deadline. A standalone build of that
+      child took 17 m 45 s under a ~500-deep admission queue, beyond the
+      deadline before any UI case ran; the first UI case then passed. This is
+      host-load evidence, not a branch defect.
+- [ ] Clear CodeRabbit findings and record the composite test evidence in the
+      pull request.
 - [ ] Push the branch and open the draft pull request.
 
 ## Surprises & discoveries
@@ -88,6 +95,11 @@ CLI ledger is keyed by the identifier.
   generated flag comes from the Rust identifier or `ortho_config(cli_long)`.
   The renamed-boolean fixture therefore sets `cli_long = "enabled"` so the
   hidden parser and the manual parser agree.
+- The unchanged `cargo-orthohelp` compile-time suite has a fixed 900 s child
+  budget. Under a saturated shared admission queue the child's fixture build
+  alone took 17 m 45 s, so the deadline expired before a code error could be
+  observed. The suite is outside this branch's change surface; the budget is
+  not adjusted here.
 
 ## Decision log
 
@@ -113,6 +125,11 @@ CLI ledger is keyed by the identifier.
 - **Legacy test-only override tokens are left behaviourally unchanged.** They
   destructure the new tuple shape but continue to use `stringify!` because they
   are `#[cfg(test)]` scaffolding, not generated runtime code.
+- **The `cargo-orthohelp` deadline failure is treated as infrastructure.** The
+  failing test and its 900 s budget are unchanged by this branch, the queue was
+  hundreds of requests deep, and the child build alone exceeded the budget
+  before any assertion ran. Raising the unrelated deadline would mask a host
+  capacity problem rather than improve the code.
 
 ## Outcomes & retrospective
 
