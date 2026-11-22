@@ -372,9 +372,10 @@ describes the same contract.
 Applications that drive discovery by hand use `ConfigDiscovery` directly.
 `ConfigDiscovery::load_first` distinguishes three outcomes. `Ok(Some(...))`
 contains the first successfully parsed candidate. `Ok(None)` means discovery
-had no candidates to try. `Err(...)` means a required candidate failed, or
-candidates existed but none loaded successfully; surface or map that error
-rather than treating it as absence.
+had no candidates to try, or every candidate was optional and absent.
+`Err(...)` means a required candidate failed, or no candidate loaded while an
+optional candidate recorded an error; surface or map that error rather than
+treating it as absence.
 
 A required candidate is stricter than an ordinary one. A path added with
 `ConfigDiscoveryBuilder::add_required_path`, or a non-empty path selected by the

@@ -502,12 +502,14 @@ later candidate loads. That matches the derive-generated `compose_layers`
 policy, which always appends required errors. Automatic discovery candidates
 stay optional, preserving the buffered-error policy established for
 [issue 96](https://github.com/leynos/ortho-config/issues/96). When a required
-candidate fails, or when every candidate fails, the helper returns `Err`
-containing the aggregated diagnostics (required diagnostics, plus optional
-diagnostics only when nothing loaded) so callers can surface them together. If
-no candidates exist, the function returns `Ok(None)`. Returning `OrthoResult`
-keeps the API aligned with the rest of the crate and allows downstream binaries
-to continue using their existing `From<Arc<OrthoError>>` implementations.
+candidate fails, or when no candidate loads and an optional candidate recorded
+an error, the helper returns `Err` containing the aggregated diagnostics
+(required diagnostics, plus optional diagnostics only when nothing loaded) so
+callers can surface them together. If no candidates exist, or every candidate
+was optional and absent, the function returns `Ok(None)`. Returning
+`OrthoResult` keeps the API aligned with the rest of the crate and allows
+downstream binaries to continue using their existing `From<Arc<OrthoError>>`
+implementations.
 
 Discovery reads the named environment variables it needs — the
 configuration-path selector, the XDG base directories, the Windows

@@ -232,11 +232,11 @@ impl ConfigDiscovery {
     ///
     /// # Errors
     ///
-    /// Returns an error when any required candidate fails, or when candidates
-    /// existed but none loaded successfully. The error aggregates the recorded
-    /// required diagnostics; optional diagnostics join it only when no
-    /// candidate loaded at all. Returns `Ok(None)` when there were no
-    /// candidates, or when every candidate was optional and absent.
+    /// Returns an error when any required candidate fails, or when no candidate
+    /// loaded and an optional candidate recorded an error. The error aggregates
+    /// the recorded required diagnostics; optional diagnostics join it only
+    /// when nothing loaded. Returns `Ok(None)` when there were no candidates,
+    /// or when every candidate was optional and absent.
     ///
     /// [`ConfigDiscoveryBuilder::add_required_path`]: super::ConfigDiscoveryBuilder::add_required_path
     /// [`ConfigDiscoveryBuilder::env_var`]: super::ConfigDiscoveryBuilder::env_var
