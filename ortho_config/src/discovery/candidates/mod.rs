@@ -1,9 +1,6 @@
 //! Candidate-path generation and deduplication for `ConfigDiscovery`.
 
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
-
-use crate::OrthoError;
 
 use super::telemetry;
 use super::{ConfigDiscovery, DiscoveryScope};
@@ -13,17 +10,8 @@ use super::candidate_set::{CandidateAccumulator, CandidateDecisions, CandidateSe
 
 mod anchor;
 mod provenance;
+mod selector;
 mod variants;
-
-/// A configured selector's value, classified.
-enum SelectorValue {
-    /// The variable is configured but unset in the environment.
-    Unset,
-    /// The variable is set to an empty value, which discovery ignores.
-    Empty,
-    /// The variable names a path, preserved as read.
-    Accepted(std::ffi::OsString),
-}
 
 impl ConfigDiscovery {
     /// Produces the canonical filename, dotfile, and enabled format variants for one base.
@@ -217,61 +205,6 @@ impl ConfigDiscovery {
             let _ = acc.push_automatic(dotfile, telemetry::CANDIDATE_HOME, DiscoveryScope::User);
         }
         source
-    }
-
-    /// Push the configuration-path selector, reporting how it resolved.
-    ///
-    /// Owns the not-configured case, the accumulator side effect, and the
-    /// required error for a relative value that cannot be anchored. The value
-    /// classification lives in [`ConfigDiscovery::classify_selector`] so the
-    /// three-way rule can be read (and changed) in one place.
-    ///
-    /// A relative selector is resolved against the environment source's
-    /// working directory, never the process's. When the source cannot report
-    /// one, the path cannot be read without bypassing that boundary, so
-    /// selection fails closed with a required error instead of dropping the
-    /// selector and letting automatic discovery decide.
-    fn push_selector(
-        &self,
-        acc: &mut CandidateAccumulator,
-    ) -> (&'static str, Option<Arc<OrthoError>>) {
-        let Some(env_var) = self.env_var.as_ref() else {
-            return (telemetry::SELECTOR_NOT_CONFIGURED, None);
-        };
-
-        match self.classify_selector(env_var) {
-            SelectorValue::Unset => (telemetry::SELECTOR_UNSET, None),
-            SelectorValue::Empty => (telemetry::SELECTOR_EMPTY, None),
-            SelectorValue::Accepted(value) => {
-                let raw = PathBuf::from(value);
-                let Some(path) = self.anchored(raw.clone()) else {
-                    return (
-                        telemetry::SELECTOR_DROPPED,
-                        Some(Self::unanchored_selector_error(raw)),
-                    );
-                };
-                // A non-empty selector is explicit, so its path is required even
-                // though unset and empty values reach no arm here.
-                let _ = acc.push_required(path, telemetry::CANDIDATE_SELECTOR);
-                (telemetry::SELECTOR_ACCEPTED, None)
-            }
-        }
-    }
-
-    /// Classify the configured selector's lookup result.
-    ///
-    /// The three non-accepting states are kept distinct because they call for
-    /// different action: no selector was configured at all (handled by the
-    /// caller), one was configured but the operator has not set it, or it is
-    /// set to an empty value — the last being a likely mistake that discovery
-    /// deliberately ignores. An accepted value keeps its `OsString` so the
-    /// caller can convert it to a path without a lossy round trip.
-    fn classify_selector(&self, env_var: &str) -> SelectorValue {
-        match self.env_source.get(env_var) {
-            None => SelectorValue::Unset,
-            Some(value) if value.is_empty() => SelectorValue::Empty,
-            Some(value) => SelectorValue::Accepted(value),
-        }
     }
 
     /// Adds one project filename for each configured root in caller order.

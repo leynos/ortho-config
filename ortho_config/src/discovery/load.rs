@@ -2,7 +2,7 @@
 
 use std::borrow::Cow;
 use std::io;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
 
 use camino::Utf8PathBuf;
@@ -379,32 +379,6 @@ impl ConfigDiscovery {
             source: Box::new(io::Error::new(
                 io::ErrorKind::NotFound,
                 "required configuration file not found",
-            )),
-        })
-    }
-
-    /// Builds the required error for a relative selector that cannot be anchored.
-    ///
-    /// A relative selector must resolve against the environment source's
-    /// working directory. When the source cannot report one, reading the path
-    /// would fall back to the process's working directory, which is exactly
-    /// what the injected source boundary prevents. Selection therefore fails
-    /// closed instead of dropping the selector and letting automatic discovery
-    /// choose a different file.
-    ///
-    /// # Examples
-    ///
-    /// An unanchorable `chosen.toml` produces a file error carrying that path,
-    /// so [`ConfigDiscovery::load_first`] can report it as a required failure.
-    pub(super) fn unanchored_selector_error(path: PathBuf) -> Arc<OrthoError> {
-        Arc::new(OrthoError::File {
-            path,
-            source: Box::new(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                concat!(
-                    "configuration path selector is relative but the environment ",
-                    "source cannot report a working directory"
-                ),
             )),
         })
     }
