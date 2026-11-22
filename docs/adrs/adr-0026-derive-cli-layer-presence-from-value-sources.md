@@ -131,6 +131,11 @@ no layer; no artificial read is generated to silence an unused variable.
    and collection values on both compose paths, plus renamed and relabelled
    fields.
 
+Step 2 also satisfies the `bumpy_road_function` policy added to the developers'
+guide: the parse shapes are split into named helpers with one decision each,
+and the source policy is a single parameterized builder rather than two
+near-identical functions. The finding is refactored, not suppressed.
+
 ## Known risks and limitations
 
 - A future clap value source would need an explicit decision about whether it
