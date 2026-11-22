@@ -11,17 +11,37 @@ use proc_macro2::TokenStream;
 use quote::quote;
 use syn::LitStr;
 
-/// Generate CLI parsing that retains clap's value-source metadata for layering.
+/// Which parse results the generated compose method reads.
 ///
-/// `retain_parsed_values` selects whether the parsed struct and `ArgMatches`
-/// are bound for the CLI layer. A struct with no option field cannot form a
-/// layer, so its parse is validation-only: errors are still reported, but no
-/// bindings are emitted for values nothing would read.
-pub(super) fn build_cli_parse_tokens(
-    krate: &TokenStream,
-    retain_parsed_values: bool,
-) -> TokenStream {
-    if !retain_parsed_values {
+/// The parsed struct feeds the generated `config_path` selector and the CLI
+/// layer; `ArgMatches` feeds only the CLI layer. Binding a value nothing reads
+/// would need an artificial reference to stay warning-free, so the binding set
+/// is derived from the fields that actually consume it.
+#[derive(Clone, Copy)]
+pub(super) struct ParseBindings {
+    /// Whether the parsed struct is retained.
+    retain_cli: bool,
+    /// Whether `ArgMatches` is retained.
+    retain_matches: bool,
+}
+
+impl ParseBindings {
+    /// Derive the binding set from config-path presence and CLI fields.
+    ///
+    /// A config-path selector reads `cli.config_path` even when the struct has
+    /// no configuration fields, while `ArgMatches` is needed only to build the
+    /// sparse CLI layer.
+    pub(super) const fn new(has_config_path: bool, has_cli_fields: bool) -> Self {
+        Self {
+            retain_cli: has_config_path || has_cli_fields,
+            retain_matches: has_cli_fields,
+        }
+    }
+}
+
+/// Generate CLI parsing that retains the parse results the method reads.
+pub(super) fn build_cli_parse_tokens(krate: &TokenStream, bindings: ParseBindings) -> TokenStream {
+    if !bindings.retain_cli {
         return quote! {
             let args: Vec<std::ffi::OsString> = iter.into_iter().map(Into::into).collect();
             let program_label = #krate::program_label_from_args(&args);
@@ -31,6 +51,23 @@ pub(super) fn build_cli_parse_tokens(
             {
                 errors.push(std::sync::Arc::new(error.into()));
             }
+        };
+    }
+
+    if !bindings.retain_matches {
+        return quote! {
+            let args: Vec<std::ffi::OsString> = iter.into_iter().map(Into::into).collect();
+            let program_label = #krate::program_label_from_args(&args);
+            let parsed = Self::command()
+                .try_get_matches_from_mut(args)
+                .and_then(|matches| Self::from_arg_matches(&matches));
+            let cli = match parsed {
+                Ok(cli) => Some(cli),
+                Err(error) => {
+                    errors.push(std::sync::Arc::new(error.into()));
+                    None
+                }
+            };
         };
     }
 
@@ -295,27 +332,41 @@ mod tests {
         );
     }
 
-    /// A struct with no CLI field parses for validation only.
+    /// A struct with no CLI field retains only the config-path selector.
     ///
-    /// No layer is emitted because no configuration value can enter one, and
-    /// the parse must not bind `cli` or `matches`: nothing would read them, and
-    /// artificial reads would hide that fact from the unused-variable lint.
+    /// No layer is emitted because no configuration value can enter one, but
+    /// the discovery chain reads `cli.config_path`, so the parsed struct must
+    /// remain bound. `ArgMatches` has no consumer and must not be bound.
     #[test]
-    fn empty_field_list_uses_a_validation_only_parse() {
+    fn empty_field_list_retains_only_the_config_path_selector() {
         let layer = build_cli_layer_tokens(&quote! { ::ortho_config }, &[]).to_string();
         assert!(
             layer.is_empty(),
             "the empty field list must emit no CLI layer: {layer}"
         );
 
-        let parse = build_cli_parse_tokens(&quote! { ::ortho_config }, false).to_string();
+        let parse =
+            build_cli_parse_tokens(&quote! { ::ortho_config }, ParseBindings::new(true, false))
+                .to_string();
         assert!(
-            parse.contains("try_get_matches_from_mut") && parse.contains("errors . push"),
-            "the validation-only parse must still report parse errors: {parse}"
+            parse.contains("let cli") && !parse.contains("let (cli"),
+            "the config-path selector must retain only the parsed struct: {parse}"
         );
         assert!(
-            !parse.contains("let (cli") && !parse.contains("_parsed"),
-            "the validation-only parse must not bind values nothing reads: {parse}"
+            !parse.contains("matches . as_ref") && !parse.contains("_parsed"),
+            "nothing may read ArgMatches when no CLI field exists: {parse}"
+        );
+
+        let validation =
+            build_cli_parse_tokens(&quote! { ::ortho_config }, ParseBindings::new(false, false))
+                .to_string();
+        assert!(
+            validation.contains("try_get_matches_from_mut") && validation.contains("errors . push"),
+            "the validation-only parse must still report parse errors: {validation}"
+        );
+        assert!(
+            !validation.contains("let cli") && !validation.contains("_parsed"),
+            "the validation-only parse must not bind values nothing reads: {validation}"
         );
     }
 

@@ -10,7 +10,7 @@ use crate::CliFieldInfo;
 use crate::derive::build::DefaultStructInit;
 
 pub(crate) mod cli;
-use cli::{build_cli_layer_tokens, build_cli_parse_tokens};
+use cli::{ParseBindings, build_cli_layer_tokens, build_cli_parse_tokens};
 
 mod discovery;
 use self::discovery::build_file_discovery;
@@ -209,7 +209,8 @@ fn build_compose_layers_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStrea
     if *profiles {
         load_impl_profiles::build_profile_compose_layers_impl(args, &file_discovery, &env_section)
     } else {
-        let parse_setup = build_cli_parse_tokens(krate, !cli_field_info.is_empty());
+        let parse_bindings = ParseBindings::new(*has_config_path, !cli_field_info.is_empty());
+        let parse_setup = build_cli_parse_tokens(krate, parse_bindings);
         let defaults = build_legacy_defaults(krate, defaults_ident, default_struct_init);
         let file_layers = build_legacy_file_layers(&file_discovery);
         let environment_layer = build_legacy_environment_layer(krate, &env_section);
