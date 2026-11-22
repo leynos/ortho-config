@@ -48,6 +48,25 @@ not, for the measured arithmetic reason recorded under "Why D3 is not
 delivered". The sections below record what is measured, what was tried and
 reversed, what remains, and why it is reported rather than improvised.
 
+### Gate status on the rebased head
+
+`make check-fmt`, `make lint` (rustdoc, Clippy and Whitaker) and
+`make typecheck` pass. `make test` does not complete on this host, for two
+reasons that are both outside this branch's diff:
+
+- `cargo-orthohelp`'s `agent_context_contract` runs its three cases in
+  parallel under plain `cargo test`, sharing one `target/orthohelp` bridge
+  directory. CI serialises them through the `orthohelp_cache` nextest group
+  (`max-threads = 1`); `make test` does not apply nextest groups at all. Run
+  serially, all 21 cases pass.
+- `cargo-orthohelp`'s `compile_time` (`must_use_compile_tests`) hit its 900 s
+  child deadline with 407 compile-slot waits recorded. `.config/nextest.toml`
+  records the same target at 523.5 s when competing and 158.7 s with every slot
+  reserved, so the deadline is sized for an uncontended pool. The host was
+  fully saturated by other agents' worktrees.
+
+Neither crate appears in this branch's diff.
+
 ### Rebased onto main, 2026-11-21
 
 The branch was 26 commits behind `origin/main` and conflicted in exactly one
