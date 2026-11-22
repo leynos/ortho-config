@@ -56,7 +56,7 @@ reasons that are both outside this branch's diff:
 
 - `cargo-orthohelp`'s `agent_context_contract` runs its three cases in
   parallel under plain `cargo test`, sharing one `target/orthohelp` bridge
-  directory. CI serialises them through the `orthohelp_cache` nextest group
+  directory. CI serializes them through the `orthohelp_cache` nextest group
   (`max-threads = 1`); `make test` does not apply nextest groups at all. Run
   serially, all 21 cases pass.
 - `cargo-orthohelp`'s `compile_time` (`must_use_compile_tests`) hit its 900 s
