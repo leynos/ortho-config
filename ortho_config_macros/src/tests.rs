@@ -169,7 +169,10 @@ fn build_components_from_input(input: &DeriveInput) -> Result<MacroComponents> {
         fields: &fields,
         struct_attrs: &struct_attrs,
         field_attrs: &field_attrs,
-        serde_rename_all: None,
+        serde_rename_rules: crate::derive::parse::SerdeRenameRules {
+            serialize: None,
+            deserialize: None,
+        },
         krate: &krate,
     };
     build_macro_components(&args).map_err(|err| anyhow!(err))

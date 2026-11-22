@@ -1595,7 +1595,10 @@ generated documentation, generated agent context, and enforceable CLI policy.
   explicit value equal to the default remains. The declarative path accepts only
   `CommandLine`; the profile path also accepts `EnvVariable`, preserving the
   existing contract that an environment-filled argument keeps outranking the
-  profile layer.
+  profile layer. The sparse CLI layer and the defaults layer are both inputs to
+  the configuration deserializer, so both name a field by its deserialization
+  key; a serde rename, alias, or serialize-only rename therefore cannot split
+  one override across two keys.
 
 [^hello-world-feedback]: `docs/feedback-from-hello-world-example.md`.
 [^behavioural-testing]: `docs/behavioural-testing-in-rust-with-cucumber.md`.

@@ -6,40 +6,44 @@
 use quote::{format_ident, quote};
 
 use crate::derive::parse::{
-    ClapDefaultValue, ClapDefaultValueShape, ClapInferredDefault, FieldAttrs,
+    ClapDefaultValue, ClapDefaultValueShape, ClapInferredDefault, FieldAttrs, SerdeRenameAll,
+    serde_deserialized_field_key,
 };
 
 use super::cli::option_type_tokens;
 
-/// Returns a field identifier or emits a compile error for unsupported tuple
-/// input that escaped the earlier derive validation.
-fn require_named_field(field: &syn::Field) -> Result<&syn::Ident, proc_macro2::TokenStream> {
+/// Returns a field identifier or an error for unsupported tuple input that
+/// escaped the earlier derive validation.
+fn require_named_field(field: &syn::Field) -> syn::Result<&syn::Ident> {
     field.ident.as_ref().ok_or_else(|| {
         syn::Error::new_spanned(field, "OrthoConfig defaults structs require named fields")
-            .to_compile_error()
     })
 }
 
 /// Builds optional fields for the synthetic defaults struct, preserving the
 /// configuration struct's order and excluding subcommand selectors.
+///
+/// Each field serializes under the configuration's deserialization key, so the
+/// defaults layer and the sparse CLI layer name the same member when the field
+/// carries a serialization-only rename or a container-level rename rule.
 pub(crate) fn build_default_struct_fields(
     fields: &[syn::Field],
     field_attrs: &[FieldAttrs],
-) -> Vec<proc_macro2::TokenStream> {
+    serde_deserialize_rename_all: Option<SerdeRenameAll>,
+) -> syn::Result<Vec<proc_macro2::TokenStream>> {
     fields
         .iter()
         .zip(field_attrs.iter())
         .filter(|(_, attrs)| !attrs.cli.is_subcommand())
         .map(|(f, _)| {
-            let name = match require_named_field(f) {
-                Ok(ident) => ident,
-                Err(err) => return err,
-            };
+            let name = require_named_field(f)?;
+            let key = serde_deserialized_field_key(f, serde_deserialize_rename_all)?;
+            let key_lit = syn::LitStr::new(&key, name.span());
             let ty = option_type_tokens(&f.ty);
-            quote! {
-                #[serde(skip_serializing_if = "Option::is_none")]
+            Ok(quote! {
+                #[serde(rename = #key_lit, skip_serializing_if = "Option::is_none")]
                 pub #name: #ty
-            }
+            })
         })
         .collect()
 }
@@ -73,7 +77,7 @@ pub(crate) fn build_default_struct_init(
             let name = match require_named_field(f) {
                 Ok(ident) => ident,
                 Err(err) => {
-                    default_fields.push(err);
+                    default_fields.push(err.to_compile_error());
                     return;
                 }
             };

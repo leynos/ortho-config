@@ -237,6 +237,7 @@ mod tests {
         let fields = [crate::CliFieldInfo {
             field_name: "port".to_owned(),
             serialized_key: "port".to_owned(),
+            deserialized_key: "port".to_owned(),
             arg_id: "port".to_owned(),
             is_default_as_absent: true,
         }];

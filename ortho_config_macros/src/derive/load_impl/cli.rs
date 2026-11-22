@@ -207,18 +207,19 @@ pub(super) fn build_cli_layer_tokens(
 ///
 /// Three spellings meet here. The argument ID answers `value_source`; the Rust
 /// member name is the key the synthetic CLI struct serializes; and the
-/// serialized key is the configuration member the sparse layer must override.
-/// They differ under `#[arg(id = "...")]`, `#[serde(rename = "...")]`, or a
-/// container-level rename rule, so reading or writing with the wrong one drops
-/// an explicit value or places it where the merge cannot see it.
+/// deserialized key is the configuration member the merge feeds to serde. They
+/// differ under `#[arg(id = "...")]`, `#[serde(rename = "...")]`, a
+/// serialize-only rename, or a container-level rename rule, so reading or
+/// writing with the wrong one drops an explicit value or places it where the
+/// deserializer cannot see it.
 fn sparse_insertion(field: &CliFieldInfo, explicit_source: &TokenStream) -> TokenStream {
     let arg_id = LitStr::new(&field.arg_id, proc_macro2::Span::call_site());
     let field_name = LitStr::new(&field.field_name, proc_macro2::Span::call_site());
-    let serialized_key = LitStr::new(&field.serialized_key, proc_macro2::Span::call_site());
+    let deserialized_key = LitStr::new(&field.deserialized_key, proc_macro2::Span::call_site());
     quote! {
         if matches!(matches.value_source(#arg_id), #explicit_source) {
             if let Some(field_value) = values.remove(#field_name) {
-                sparse.insert(#serialized_key.to_owned(), field_value);
+                sparse.insert(#deserialized_key.to_owned(), field_value);
             }
         }
     }
@@ -242,11 +243,17 @@ mod tests {
     /// The `ValueSource` spelling for an explicitly typed value.
     const CLI: &str = "CommandLine";
 
-    /// One field with distinct member, clap, and serde spellings.
-    fn field(field_name: &str, arg_id: &str, serialized_key: &str) -> CliFieldInfo {
+    /// One field with distinct member, clap, serialize, and deserialize spellings.
+    fn field(
+        field_name: &str,
+        arg_id: &str,
+        serialized_key: &str,
+        deserialized_key: &str,
+    ) -> CliFieldInfo {
         CliFieldInfo {
             field_name: field_name.to_owned(),
             serialized_key: serialized_key.to_owned(),
+            deserialized_key: deserialized_key.to_owned(),
             arg_id: arg_id.to_owned(),
             is_default_as_absent: false,
         }
@@ -295,8 +302,8 @@ mod tests {
     #[test]
     fn sparse_layer_maps_member_names_to_serialized_keys() {
         let fields = [
-            field("port", "listen_port", "service_port"),
-            field("nickname", "nickname", "display_name"),
+            field("port", "listen_port", "wire_port", "service_port"),
+            field("nickname", "nickname", "nickname", "display_name"),
         ];
         let rendered = build_cli_layer_tokens(
             &quote! { ::ortho_config },
@@ -316,6 +323,11 @@ mod tests {
                 "the sparse layer must name {needle}: {rendered}"
             );
         }
+        assert!(
+            !rendered.contains("\"wire_port\""),
+            "the sparse layer must use the deserialization key, not the serialized one: \
+             {rendered}"
+        );
     }
 
     /// The layer no longer compares the whole CLI object with the defaults.
@@ -383,6 +395,6 @@ mod tests {
 
     /// A single field for the builders to extract.
     fn pruned_field() -> Vec<CliFieldInfo> {
-        vec![field("retries", "retries", "retries")]
+        vec![field("retries", "retries", "retries", "retries")]
     }
 }

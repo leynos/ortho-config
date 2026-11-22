@@ -34,7 +34,7 @@ use derive::generate::localization::{
 };
 use derive::generate::ortho_impl::generate_trait_implementation;
 use derive::generate::required_schema::RequiredSchemaSource;
-use derive::parse::{parse_input, serde_rename_all};
+use derive::parse::{parse_input, serde_rename_rules};
 
 /// Derive macro for the
 /// [`OrthoConfig`](https://docs.rs/ortho_config/latest/ortho_config/trait.OrthoConfig.html)
@@ -58,14 +58,14 @@ pub fn derive_ortho_config(input_tokens: TokenStream) -> TokenStream {
 /// convert them into a `compile_error!` invocation.
 fn expand_ortho_config(derive_input: &DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
     let (ident, fields, struct_attrs, field_attrs) = parse_input(derive_input)?;
-    let serde_rename_all = serde_rename_all(&derive_input.attrs)?;
+    let serde_rename_rules = serde_rename_rules(&derive_input.attrs)?;
     let krate = derive::crate_path::resolve(struct_attrs.crate_path.as_ref());
     let component_args = MacroComponentArgs {
         ident: &ident,
         fields: &fields,
         struct_attrs: &struct_attrs,
         field_attrs: &field_attrs,
-        serde_rename_all,
+        serde_rename_rules,
         krate: &krate,
     };
     let components = build_macro_components(&component_args)?;
@@ -94,7 +94,7 @@ fn expand_ortho_config(derive_input: &DeriveInput) -> syn::Result<proc_macro2::T
         fields: &fields,
         field_attrs: &field_attrs,
         struct_attrs: &struct_attrs,
-        serde_rename_all,
+        serde_rename_all: serde_rename_rules.serialize,
         cli_fields: &components.cli_field_metadata,
         localization_ids: &localization_ids,
         krate: &krate,
@@ -204,6 +204,13 @@ pub(crate) struct CliFieldInfo {
     /// This respects `#[serde(rename = "...")]` and `#[serde(rename_all = "...")]`
     /// so `CliValueExtractor` can reliably map values from `serde_json::to_value(self)`.
     pub serialized_key: String,
+    /// The key serde accepts for this field when deserializing.
+    ///
+    /// The defaults and sparse CLI layers are both inputs to the configuration
+    /// deserializer, so they must agree on this key. It differs from
+    /// [`Self::serialized_key`] under a serialize-only rename, and from
+    /// [`Self::field_name`] under any rename.
+    pub deserialized_key: String,
     /// The clap argument ID used with `ArgMatches::value_source()`.
     ///
     /// This is the `id = "..."` override from `#[arg(...)]`/`#[clap(...)]` when

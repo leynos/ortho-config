@@ -156,7 +156,10 @@ This rule applies to every field, which is why the loader no longer carries
 per-attribute pruning lists for `cli_default_as_absent` or boolean defaults.
 The declarative path accepts only `CommandLine`; the profile-enabled path also
 accepts `EnvVariable` so an environment-filled argument keeps outranking the
-profile layer.
+profile layer. The sparse CLI layer and the defaults layer both feed the
+configuration deserializer, so both name a field by its deserialization key;
+the serialized key is reserved for `CliValueExtractor`, which serializes the
+configuration struct.
 
 When changing this path, update parse-IR tests, generated-loader integration
 tests, and compile-fail coverage for unsupported shapes. Include cases where a

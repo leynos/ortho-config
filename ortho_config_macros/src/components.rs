@@ -14,7 +14,7 @@ use crate::derive::build::{
 use crate::derive::load_impl::{
     DiscoveryTokens, LoadImplArgs, LoadImplIdents, LoadImplTokens, build_load_impl,
 };
-use crate::derive::parse::SerdeRenameAll;
+use crate::derive::parse::SerdeRenameRules;
 use crate::{CliFieldInfo, derive};
 
 /// Internal data generated during macro expansion.
@@ -134,8 +134,8 @@ pub(super) struct MacroComponentArgs<'a> {
     pub(super) struct_attrs: &'a derive::parse::StructAttrs,
     /// Parsed per-field settings aligned with `fields` by index.
     pub(super) field_attrs: &'a [derive::parse::FieldAttrs],
-    /// Container-level Serde naming rule used by serialized field lookup.
-    pub(super) serde_rename_all: Option<SerdeRenameAll>,
+    /// Container-level Serde naming rules, separated by direction.
+    pub(super) serde_rename_rules: SerdeRenameRules,
     /// Resolved path to the downstream `ortho_config` crate.
     pub(super) krate: &'a proc_macro2::TokenStream,
 }
@@ -203,15 +203,16 @@ pub(super) fn build_macro_components(
         fields,
         struct_attrs,
         field_attrs,
-        serde_rename_all,
+        serde_rename_rules,
         krate,
     } = args;
 
     let defaults_ident = format_ident!("__{}Defaults", ident);
-    let default_struct_fields = build_default_struct_fields(fields, field_attrs);
+    let default_struct_fields =
+        build_default_struct_fields(fields, field_attrs, serde_rename_rules.deserialize)?;
     let cli_ident = format_ident!("__{}Cli", ident);
     let cli_build_result =
-        build_cli_struct_tokens(fields, field_attrs, struct_attrs, *serde_rename_all)?;
+        build_cli_struct_tokens(fields, field_attrs, struct_attrs, *serde_rename_rules)?;
     let default_struct_init = build_default_struct_init(fields, field_attrs, krate);
     let env_provider = build_env_provider(struct_attrs, krate);
     let config_env_var = build_config_env_var(struct_attrs);

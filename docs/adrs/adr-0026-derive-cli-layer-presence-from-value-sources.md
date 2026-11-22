@@ -83,20 +83,30 @@ least one field matches. Accepted.
 ## Decision outcome / proposed direction
 
 `ortho_config_macros/src/derive/load_impl/cli.rs` owns one sparse-layer emitter.
-`build_cli_layer_tokens` passes `CommandLine`;
-`build_profile_cli_layer_tokens` passes `CommandLine | EnvVariable`. The
-emitter computes `has_explicit_cli_value` from the same per-field source checks
-and pushes an object containing only the matching fields.
+`build_cli_layer_tokens` takes an `ExplicitSource` policy; the declarative
+call site passes `CommandLine`, and the profile-enabled call site passes
+`CommandLineOrEnvironment`. The emitter computes `has_explicit_cli_value` from
+the same per-field source checks and pushes an object containing only the
+matching fields.
 
-`CliFieldInfo` is threaded through `LoadImplArgs` so generation uses the
-argument ID and serialized key already computed for the CLI surface. The
-`cli_default_as_absent` field-name list and the boolean-default pruning list
-are removed from `DefaultStructInit` and the loader: a `DefaultValue` source is
-simply absent from the sparse layer, while an explicit value equal to the
-default is present.
+`CliFieldInfo` carries the three spellings a field can have: the Rust member
+name that the synthetic CLI struct serializes, the clap argument ID that the
+source check uses, and the configuration's deserialization key. The emitter
+reads the parsed value by the member name and stores it under the
+deserialization key. The defaults struct emits that same key, so both layers
+name one member under `#[serde(rename)]`, an alias, or a serialize-only rename.
+The serialized key remains only for `CliValueExtractor`, which serializes the
+configuration struct.
 
-A struct with no option fields emits no layer. The generated method still reads
-its parse bindings so the expansion does not introduce unused-variable warnings.
+The `cli_default_as_absent` field-name list and the boolean-default pruning
+list are removed from `DefaultStructInit` and the loader: a `DefaultValue`
+source is simply absent from the sparse layer, while an explicit value equal to
+the default is present.
+
+Parse bindings are derived from their consumers. The parsed struct is retained
+for the generated `config_path` selector or the CLI layer, and `ArgMatches`
+only for the CLI layer. A struct with neither emits a validation-only parse and
+no layer; no artificial read is generated to silence an unused variable.
 
 ## Goals and non-goals
 
@@ -113,16 +123,24 @@ its parse bindings so the expansion does not introduce unused-variable warnings.
 ## Migration plan
 
 1. Thread `CliFieldInfo` through the loader arguments.
-2. Replace both CLI-layer builders with the shared sparse emitter.
-3. Remove the redundant pruning plumbing from the defaults and profile
-   builders.
+2. Replace both CLI-layer builders with the shared sparse emitter and a
+   per-path `ExplicitSource` policy.
+3. Remove the redundant pruning plumbing, and align the defaults struct with
+   the configuration deserialization key.
 4. Add regression coverage for explicit and absent scalar, boolean, optional,
-   and collection values on both compose paths.
+   and collection values on both compose paths, plus renamed and relabelled
+   fields.
 
 ## Known risks and limitations
 
 - A future clap value source would need an explicit decision about whether it
   counts as explicit input; the shared emitter makes that a one-place change.
+- `#[serde(alias = "...")]` remains accepted by the configuration
+  deserializer, but neither layer emits a second key for the same field: doing
+  so would fail deserialization with a duplicate-field error.
+- A serialize-only rename is honoured by using the deserialization key for both
+  merge layers; `CliValueExtractor` keeps the serialized key because it
+  serializes the configuration struct.
 - No generated configuration-field argument binds a clap `env` today, so the
   profile path's `EnvVariable` arm is latent. It is retained so a future
   binding cannot silently fall below the profile layer.
