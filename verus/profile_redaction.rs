@@ -79,13 +79,17 @@
 //!
 //! That oracle is a second, differently shaped implementation rather than an
 //! independent specification, so a mistake made identically in both would
-//! agree. `proptest_assertions.rs` states the preserved and cleared slots group
-//! by group to catch exactly that. The oracle's reach is bounded by the
-//! generator in `proptests_support.rs`: depth 4, at most 32 command nodes, at
-//! most 64 fields, and at most 8 children or fields per node. Inside that bound
-//! the corpus is adversarial — every protected literal is drawn from a
-//! `SECRET-` family — but no claim is made outside it. The division is recorded
-//! in ADR-0026 as a residual testing boundary.
+//! agree. `proptest_assertions.rs` compares each original node with its
+//! projected counterpart group by group, which catches such a mistake where
+//! the two agree about a preserved or cleared slot. It does not catch every
+//! one: the command-example expectation comes from the oracle's own
+//! `model_has_protected` decision, so a protected-field decision shared by
+//! production and the oracle can escape both checks. The oracle's reach is
+//! bounded by the generator in `proptests_support.rs`: depth 4, at most 32
+//! command nodes, at most 64 fields, and at most 8 children or fields per node.
+//! Inside that bound the corpus is adversarial — every protected literal is
+//! drawn from a `SECRET-` family — but no claim is made outside it. The
+//! division is recorded in ADR-0026 as a residual testing boundary.
 //!
 //! The model specifies one document, so the sibling-group boundary has no
 //! separate theorem here. `DocMetadata::redacted_group_for_output` does not add

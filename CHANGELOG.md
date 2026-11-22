@@ -186,7 +186,7 @@ All notable changes to this project will be documented in this file.
   implementation; a handwritten `OrthoConfig` implementation, or a generic
   wrapper that forwards these helpers, must add the bound, deriving
   `RequiredConfigSchema` on the type where needed. See
-  [the migration guide](docs/v0-11-0-migration-guide.md#13-adopt-nested-requirement-schemas-or-widen-your-own-helpers)
+  [the migration guide](docs/v0-11-0-migration-guide.md#14-adopt-nested-requirement-schemas-or-widen-your-own-helpers)
   for the exact edits.
 
 ### Added (profile redaction)

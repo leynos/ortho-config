@@ -1381,6 +1381,32 @@ is attributed to host compile-admission saturation rather than to the change.
 The hosted legs are the authoritative environment for that suite; the local
 residual is recorded here rather than treated as a passing gate.
 
+That attribution was then strengthened on `eee2ecfe`. A
+`cargo test --all-targets --all-features --no-fail-fast` run reached the
+targets the abort had masked: 121 test binaries passed with zero failures,
+including `must_use_compile_tests`, which now finishes inside its 900 s budget
+against a warmed trybuild scratch tree. The only red target was
+`ortho_l10n --test boundary`, whose nested consumer builds each get a 440 s
+deadline and were killed while queued behind compile admission; a second run of
+that target alone was likewise killed at 900 s with no test result, and no
+rustc or clippy diagnostic appeared in either log. Every one of those targets,
+including the boundary suite and `must_use_compile_tests`, passes in the hosted
+`build-test` legs for both Linux and Windows at this head. The local
+`make test` target therefore remains unproven on this host under admission
+saturation, whilst its constituent suites are proven green wherever the
+environment can give them slots.
+
+2026-11-22, replayed again: `main` advanced to `c4377e48` (#433 bounded IR
+cache reads, #724 phrase-checker bump) while the assessments were running, and
+the second replay completed with no conflicts. Two review findings were then
+fixed. The completeness assessment found a CHANGELOG anchor still pointing at
+the pre-rebase section 13; it now points at section 14, matching the heading
+the first replay produced. The proof assessment found that the Verus entry
+point's prose still implied the slot assertions catch any mistake the oracle
+shares; it now says they catch a shared mistake about a preserved or cleared
+slot, but not a shared `model_has_protected` decision, which drives the
+command-example expectation on both sides.
+
 ## Outcomes & retrospective
 
 M1 implemented on 2026-11-15 under the user's execution approval. No formal
