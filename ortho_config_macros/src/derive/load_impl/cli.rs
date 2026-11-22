@@ -42,12 +42,10 @@ impl ParseBindings {
 /// Generate CLI parsing that retains the parse results the method reads.
 pub(super) fn build_cli_parse_tokens(krate: &TokenStream, bindings: ParseBindings) -> TokenStream {
     let prefix = build_parse_prefix(krate);
-    let parse = if !bindings.retain_cli {
-        build_validation_only_parse()
-    } else if !bindings.retain_matches {
-        build_cli_only_parse()
+    let parse = if bindings.retain_cli {
+        build_value_parse(bindings.retain_matches)
     } else {
-        build_cli_and_matches_parse()
+        build_validation_only_parse()
     };
     quote! { #prefix #parse }
 }
@@ -82,45 +80,48 @@ fn build_validation_only_parse() -> TokenStream {
     }
 }
 
-/// Parse and bind only the parsed struct.
-fn build_cli_only_parse() -> TokenStream {
+/// Parse and bind the parsed struct, retaining `ArgMatches` when requested.
+///
+/// The tuple is always built because `ArgMatches` is needed to convert the
+/// parsed struct; the CLI-only shape discards it with `_matches` rather than
+/// omitting the conversion or adding an artificial read.
+fn build_value_parse(retain_matches: bool) -> TokenStream {
     let push_error = push_parse_error();
-    quote! {
-        let parsed = Self::command()
-            .try_get_matches_from_mut(args)
-            .and_then(|matches| Self::from_arg_matches(&matches));
-        let cli = match parsed {
-            Ok(cli) => Some(cli),
-            Err(error) => {
-                #push_error
-                None
-            }
-        };
-    }
-}
-
-/// Parse and bind both the parsed struct and `ArgMatches`.
-fn build_cli_and_matches_parse() -> TokenStream {
-    let push_error = push_parse_error();
-    quote! {
+    let parsed = quote! {
         let parsed = Self::command()
             .try_get_matches_from_mut(args)
             .and_then(|matches| {
                 Self::from_arg_matches(&matches).map(|cli| (cli, matches))
             });
-        let (cli, matches) = match parsed {
-            Ok((cli, matches)) => (Some(cli), Some(matches)),
-            Err(error) => {
-                #push_error
-                (None, None)
-            }
-        };
+    };
+    if retain_matches {
+        quote! {
+            #parsed
+            let (cli, matches) = match parsed {
+                Ok((cli, matches)) => (Some(cli), Some(matches)),
+                Err(error) => {
+                    #push_error
+                    (None, None)
+                }
+            };
+        }
+    } else {
+        quote! {
+            #parsed
+            let cli = match parsed {
+                Ok((cli, _matches)) => Some(cli),
+                Err(error) => {
+                    #push_error
+                    None
+                }
+            };
+        }
     }
 }
 
 /// The clap value sources that count as explicit input for a compose path.
 #[derive(Clone, Copy)]
-enum ExplicitSource {
+pub(super) enum ExplicitSource {
     /// Only values typed on the command line.
     CommandLine,
     /// Command-line values and values filled from a clap `env` binding.
@@ -142,39 +143,6 @@ impl ExplicitSource {
     }
 }
 
-/// Generate the declarative CLI layer.
-///
-/// Only fields whose clap value source is the command line enter the layer. An
-/// explicit value equal to the configured default is therefore retained, while
-/// a parser default or an absent argument is omitted. Comparing the whole
-/// serialized CLI object with the defaults object cannot make that distinction:
-/// it either drops an explicit default-valued argument or admits parser-filled
-/// defaults that the user never typed.
-pub(super) fn build_cli_layer_tokens(
-    krate: &TokenStream,
-    cli_field_info: &[CliFieldInfo],
-) -> TokenStream {
-    build_sparse_cli_layer_tokens(krate, cli_field_info, ExplicitSource::CommandLine)
-}
-
-/// Generate the profile-enabled CLI layer.
-///
-/// `--profile` sits below explicit CLI input, and an argument filled from a
-/// clap `env` binding must keep outranking the profile layer, so this path also
-/// accepts `ValueSource::EnvVariable`. No generated configuration-field
-/// argument binds an environment variable today; the arm preserves the
-/// existing environment-aware contract rather than silently narrowing it.
-pub(super) fn build_profile_cli_layer_tokens(
-    krate: &TokenStream,
-    cli_field_info: &[CliFieldInfo],
-) -> TokenStream {
-    build_sparse_cli_layer_tokens(
-        krate,
-        cli_field_info,
-        ExplicitSource::CommandLineOrEnvironment,
-    )
-}
-
 /// Emit a CLI layer containing only fields clap attributes to `explicit_source`.
 ///
 /// The layer is pushed only when at least one field has an explicit source, so
@@ -183,7 +151,12 @@ pub(super) fn build_profile_cli_layer_tokens(
 /// what makes the `cli_default_as_absent` pruning and the boolean-default
 /// pruning unnecessary: the sparse extraction applies the same rule to every
 /// field without a per-attribute list.
-fn build_sparse_cli_layer_tokens(
+///
+/// Each compose path chooses the sources it admits. The declarative path takes
+/// only `CommandLine`; the profile-enabled path also takes `EnvVariable`,
+/// because a profile sits below an environment-filled argument and no generated
+/// configuration-field argument binds an environment variable today.
+pub(super) fn build_cli_layer_tokens(
     krate: &TokenStream,
     cli_field_info: &[CliFieldInfo],
     explicit_source: ExplicitSource,
@@ -284,45 +257,38 @@ mod tests {
         rendered.matches(needle).count()
     }
 
-    /// The declarative path keeps pruning to command-line values.
+    /// Each compose path admits exactly the sources it documents.
     ///
-    /// Its environment value arrives through the environment layer, which is
-    /// pushed above the CLI layer, so accepting `EnvVariable` here would add
-    /// nothing and would change the generated tokens for every existing user.
+    /// The declarative path takes only command-line values: its environment
+    /// value arrives through the environment layer, which is pushed above the
+    /// CLI layer. The profile path also takes `EnvVariable`, because an
+    /// environment-filled argument must stay above the profile layer. No
+    /// generated configuration-field argument binds an environment variable
+    /// today, so that arm is latent; it is pinned so the paths cannot drift.
     #[test]
-    fn declarative_layer_accepts_only_command_line_values() {
-        let rendered =
-            build_cli_layer_tokens(&quote! { ::ortho_config }, &pruned_field()).to_string();
-        assert_eq!(
-            occurrences(&rendered, ENV),
-            0,
-            "the declarative path must not treat an environment value as explicit: {rendered}"
-        );
-        assert!(
-            occurrences(&rendered, CLI) >= 1,
-            "the declarative path must still count an explicitly typed value: {rendered}"
-        );
-    }
-
-    /// The profile path must also retain an environment-filled value.
-    ///
-    /// The profile layer is inserted beneath the environment, so an argument
-    /// clap fills from an `env` binding has to survive this extraction to reach
-    /// the composer at its documented rank. No generated configuration-field
-    /// argument binds an environment variable today, so the case is latent; the
-    /// wiring is still pinned so the two paths cannot drift apart.
-    #[test]
-    fn profile_layer_accepts_command_line_and_environment_values() {
-        let rendered =
-            build_profile_cli_layer_tokens(&quote! { ::ortho_config }, &pruned_field()).to_string();
-        assert!(
-            occurrences(&rendered, ENV) >= 1,
-            "the profile path must count an environment-filled value as explicit: {rendered}"
-        );
-        assert!(
-            occurrences(&rendered, CLI) >= 1,
-            "the profile path must still count an explicitly typed value: {rendered}"
-        );
+    fn layer_source_policy_matches_each_compose_path() {
+        for (source, allows_environment, context) in [
+            (ExplicitSource::CommandLine, false, "declarative"),
+            (
+                ExplicitSource::CommandLineOrEnvironment,
+                true,
+                "profile-enabled",
+            ),
+        ] {
+            let rendered =
+                build_cli_layer_tokens(&quote! { ::ortho_config }, &pruned_field(), source)
+                    .to_string();
+            assert_eq!(
+                occurrences(&rendered, ENV) > 0,
+                allows_environment,
+                "the {context} path must treat an environment value as explicit only when \
+                 documented: {rendered}"
+            );
+            assert!(
+                occurrences(&rendered, CLI) >= 1,
+                "the {context} path must still count an explicitly typed value: {rendered}"
+            );
+        }
     }
 
     /// Each field is read by its CLI member and stored under its config key.
@@ -332,7 +298,12 @@ mod tests {
             field("port", "listen_port", "service_port"),
             field("nickname", "nickname", "display_name"),
         ];
-        let rendered = build_cli_layer_tokens(&quote! { ::ortho_config }, &fields).to_string();
+        let rendered = build_cli_layer_tokens(
+            &quote! { ::ortho_config },
+            &fields,
+            ExplicitSource::CommandLine,
+        )
+        .to_string();
         for needle in [
             "\"listen_port\"",
             "\"port\"",
@@ -350,8 +321,12 @@ mod tests {
     /// The layer no longer compares the whole CLI object with the defaults.
     #[test]
     fn sparse_layer_has_no_whole_object_comparison() {
-        let rendered =
-            build_cli_layer_tokens(&quote! { ::ortho_config }, &pruned_field()).to_string();
+        let rendered = build_cli_layer_tokens(
+            &quote! { ::ortho_config },
+            &pruned_field(),
+            ExplicitSource::CommandLine,
+        )
+        .to_string();
         assert!(
             !rendered.contains("defaults_value") && !rendered.contains("differs_from_defaults"),
             "the layer must decide membership per field, not by object equality: {rendered}"
@@ -373,7 +348,9 @@ mod tests {
     /// remain bound. `ArgMatches` has no consumer and must not be bound.
     #[test]
     fn empty_field_list_retains_only_the_config_path_selector() {
-        let layer = build_cli_layer_tokens(&quote! { ::ortho_config }, &[]).to_string();
+        let layer =
+            build_cli_layer_tokens(&quote! { ::ortho_config }, &[], ExplicitSource::CommandLine)
+                .to_string();
         assert!(
             layer.is_empty(),
             "the empty field list must emit no CLI layer: {layer}"

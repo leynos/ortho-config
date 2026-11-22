@@ -12,7 +12,7 @@ use syn::Ident;
 
 use crate::derive::load_impl::LoadImplArgs;
 use crate::derive::load_impl::LoadSourceTokens;
-use crate::derive::load_impl::cli::build_profile_cli_layer_tokens;
+use crate::derive::load_impl::cli::{ExplicitSource, build_cli_layer_tokens};
 
 /// Emit the profile-aware composition body, returning layers with their selection.
 ///
@@ -38,7 +38,11 @@ pub(crate) fn build_profile_compose_layers_impl(
     let defaults = build_profile_defaults(args);
     let file_layers = build_profile_file_layers(krate, file_discovery);
     let environment_layer = build_profile_environment_layer(krate, env_section);
-    let cli_push = build_profile_cli_layer_tokens(krate, cli_field_info);
+    let cli_push = build_cli_layer_tokens(
+        krate,
+        cli_field_info,
+        ExplicitSource::CommandLineOrEnvironment,
+    );
 
     quote! {
         // Keep this path anchored under the resolved crate so derive users

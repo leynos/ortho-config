@@ -10,7 +10,7 @@ use crate::CliFieldInfo;
 use crate::derive::build::DefaultStructInit;
 
 pub(crate) mod cli;
-use cli::{ParseBindings, build_cli_layer_tokens, build_cli_parse_tokens};
+use cli::{ExplicitSource, ParseBindings, build_cli_layer_tokens, build_cli_parse_tokens};
 
 mod discovery;
 use self::discovery::build_file_discovery;
@@ -214,7 +214,7 @@ fn build_compose_layers_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStrea
         let defaults = build_legacy_defaults(krate, defaults_ident, default_struct_init);
         let file_layers = build_legacy_file_layers(&file_discovery);
         let environment_layer = build_legacy_environment_layer(krate, &env_section);
-        let cli_push = build_cli_layer_tokens(krate, cli_field_info);
+        let cli_push = build_cli_layer_tokens(krate, cli_field_info, ExplicitSource::CommandLine);
         quote! {
             use clap::{CommandFactory as _, FromArgMatches as _};
             // Keep this path anchored under the resolved crate so derive users
