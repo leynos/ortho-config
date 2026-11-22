@@ -1,6 +1,9 @@
 //! Candidate-path generation and deduplication for `ConfigDiscovery`.
 
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
+
+use crate::OrthoError;
 
 use super::telemetry;
 use super::{ConfigDiscovery, DiscoveryScope};
@@ -218,25 +221,39 @@ impl ConfigDiscovery {
 
     /// Push the configuration-path selector, reporting how it resolved.
     ///
-    /// Owns only the not-configured case and the accumulator side effect;
-    /// the value classification lives in [`ConfigDiscovery::classify_selector`]
-    /// so the three-way rule can be read (and changed) in one place.
-    fn push_selector(&self, acc: &mut CandidateAccumulator) -> &'static str {
+    /// Owns the not-configured case, the accumulator side effect, and the
+    /// required error for a relative value that cannot be anchored. The value
+    /// classification lives in [`ConfigDiscovery::classify_selector`] so the
+    /// three-way rule can be read (and changed) in one place.
+    ///
+    /// A relative selector is resolved against the environment source's
+    /// working directory, never the process's. When the source cannot report
+    /// one, the path cannot be read without bypassing that boundary, so
+    /// selection fails closed with a required error instead of dropping the
+    /// selector and letting automatic discovery decide.
+    fn push_selector(
+        &self,
+        acc: &mut CandidateAccumulator,
+    ) -> (&'static str, Option<Arc<OrthoError>>) {
         let Some(env_var) = self.env_var.as_ref() else {
-            return telemetry::SELECTOR_NOT_CONFIGURED;
+            return (telemetry::SELECTOR_NOT_CONFIGURED, None);
         };
 
         match self.classify_selector(env_var) {
-            SelectorValue::Unset => telemetry::SELECTOR_UNSET,
-            SelectorValue::Empty => telemetry::SELECTOR_EMPTY,
+            SelectorValue::Unset => (telemetry::SELECTOR_UNSET, None),
+            SelectorValue::Empty => (telemetry::SELECTOR_EMPTY, None),
             SelectorValue::Accepted(value) => {
-                let Some(path) = self.anchored(PathBuf::from(value)) else {
-                    return telemetry::SELECTOR_DROPPED;
+                let raw = PathBuf::from(value);
+                let Some(path) = self.anchored(raw.clone()) else {
+                    return (
+                        telemetry::SELECTOR_DROPPED,
+                        Some(Self::unanchored_selector_error(raw)),
+                    );
                 };
                 // A non-empty selector is explicit, so its path is required even
                 // though unset and empty values reach no arm here.
                 let _ = acc.push_required(path, telemetry::CANDIDATE_SELECTOR);
-                telemetry::SELECTOR_ACCEPTED
+                (telemetry::SELECTOR_ACCEPTED, None)
             }
         }
     }
@@ -344,7 +361,7 @@ impl ConfigDiscovery {
             let _ = acc.push_optional(path.clone(), telemetry::CANDIDATE_EXPLICIT);
         }
 
-        let selector = self.push_selector(&mut acc);
+        let (selector, selector_error) = self.push_selector(&mut acc);
         let xdg = self.push_xdg(&mut acc);
         self.push_windows(&mut acc);
         let home = self.push_home(&mut acc);
@@ -352,6 +369,7 @@ impl ConfigDiscovery {
 
         CandidateSet {
             candidates: acc.candidates,
+            assembly_errors: selector_error.into_iter().collect(),
             decisions: CandidateDecisions {
                 selector,
                 xdg_config_home: xdg.config_home,

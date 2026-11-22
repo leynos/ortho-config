@@ -5,6 +5,9 @@
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
+
+use crate::OrthoError;
 
 use super::telemetry;
 use super::{ConfigDiscovery, DiscoveryScope};
@@ -275,6 +278,11 @@ impl CandidateDecisions {
 pub(super) struct CandidateSet {
     /// Ordered unique locations, from most-preferred to least-preferred.
     pub(super) candidates: Vec<Candidate>,
+    /// Required failures produced while assembling the list.
+    ///
+    /// A relative selector that cannot be anchored has no path the loader may
+    /// read, so it produces its required error here rather than a candidate.
+    pub(super) assembly_errors: Vec<Arc<OrthoError>>,
     /// Decisions retained for emission by the load operation boundary.
     pub(super) decisions: CandidateDecisions,
 }

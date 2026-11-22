@@ -103,6 +103,13 @@ propagates to derived consumers without a macro change.
   tests.
 - Deduplication promotion: an optional explicit path later named by the
   selector becomes required. Verified by a unit test in `dedup_tests.rs`.
+- Required-after-success traversal: a required path after the first successful
+  candidate is still checked, both when the success is a required path and when
+  it is an optional explicit path generated before the selector. Verified by
+  `loading_required.rs` and the selector tests in `loading.rs`.
+- Unanchorable relative selector: a non-empty relative selector whose source
+  cannot report a working directory is a required failure, not a fallback.
+  Verified by `loading_required.rs` and `injected_env_loaders.rs`.
 - Derive propagation: `load_from_iter_with_sources` returns
   `OrthoError::File` when the selector names a missing or malformed file even
   when a valid automatic file exists. Verified in
@@ -140,6 +147,14 @@ propagates to derived consumers without a macro change.
 - The four-argument Clippy ceiling and the 400-line file cap both shaped the
   accumulator API: three thin `push_*` methods build a private `CandidateSpec`,
   keeping call sites short without adding a fifth positional argument.
+- Review found the first-success walk was still too eager: optional explicit
+  paths are generated before the selector, so a valid optional path could end
+  the walk before the required selector was checked. The walk now skips only
+  optional candidates after a success and still attempts every remaining
+  required one.
+- Review also found that an unanchorable relative selector was silently
+  dropped. It now produces a required assembly error, so `load_first` fails
+  rather than falling back to the process working directory.
 
 ## Decision log
 
@@ -156,6 +171,13 @@ propagates to derived consumers without a macro change.
   partitioned outcomes; their callers already choose how to surface required
   errors, and the derive does so eagerly. The handwritten example consumer was
   updated to follow that contract.
+- Carry an unanchorable selector's error on `CandidateSet` as an assembly
+  error rather than inventing a candidate path the loader must not read. Both
+  the flat walk and the scoped walk record it in the required bucket with the
+  `selector` source label.
+- Check remaining required candidates after the first success, but keep the
+  first success's value and precedence. Optional candidates after that point
+  are still skipped, so the optional-error suppression contract is unchanged.
 
 ## Outcomes & retrospective
 

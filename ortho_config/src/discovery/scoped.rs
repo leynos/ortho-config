@@ -27,6 +27,7 @@
 
 use std::collections::HashSet;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use crate::MergeLayer;
 
@@ -93,6 +94,17 @@ impl ConfigDiscovery {
         let set = self.candidate_set();
         set.decisions.emit();
         let mut errors = PartitionedErrors::default();
+        for err in &set.assembly_errors {
+            errors.record(
+                &CandidateFailure {
+                    operation: telemetry::OPERATION_COMPOSE_LAYERS,
+                    required: true,
+                    source: telemetry::CANDIDATE_SELECTOR,
+                    scope: None,
+                },
+                Arc::clone(err),
+            );
+        }
         let mut layers = Vec::new();
         let mut origins = Vec::new();
         let mut loaded_paths = HashSet::new();

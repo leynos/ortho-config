@@ -114,9 +114,9 @@ fn load_first_fails_when_selector_candidate_is_invalid(
         .add_explicit_path(valid)
         .build();
 
-    // The valid explicit path is a fallback the walk reaches, so the failure
-    // here proves a required selector's error outranks a successful later
-    // candidate rather than merely proving that every candidate failed.
+    // Optional explicit paths are generated before the selector, so this valid
+    // path is the walk's first success. The required selector must still be
+    // checked; otherwise that success would hide the selector's error.
     let outcome = discovery.load_first_partitioned();
     ensure!(
         outcome.figment.is_some(),
@@ -385,3 +385,6 @@ fn required_paths_emit_missing_errors(config_temp_dir: Result<TempDir>) -> Resul
     );
     Ok(())
 }
+
+#[path = "loading_required.rs"]
+mod loading_required;

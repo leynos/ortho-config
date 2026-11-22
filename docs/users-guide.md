@@ -380,9 +380,10 @@ A required candidate is stricter than an ordinary one. A path added with
 `ConfigDiscoveryBuilder::add_required_path`, or a non-empty path selected by the
 `env_var(...)` selector, must load. Its missing, unreadable, malformed,
 disabled-format, or `extends` error is returned even when a later optional
-candidate loaded successfully. An unset or empty selector value selects
-nothing, so it does not fail closed, and automatic discovery candidates remain
-optional.
+candidate loaded successfully. A relative selector the environment source
+cannot anchor is also a required failure: discovery never falls back to the
+process's working directory. An unset or empty selector value selects nothing,
+so it does not fail closed, and automatic discovery candidates remain optional.
 
 <!-- tested-example: guide-load-first-outcomes -->
 ```rust

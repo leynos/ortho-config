@@ -39,7 +39,11 @@ fn selector_state_is_reported(
     let discovery = builder.build();
 
     let events = capture(|| discovery.load_first());
-    assert_eq!(only(&events, "discovery.selector").field("state"), expected);
+    assert_eq!(
+        only(&events, "discovery.selector").field("state"),
+        expected,
+        "selector state should be {expected}"
+    );
 }
 
 /// A source that holds one selector and cannot report a working directory.
@@ -74,7 +78,11 @@ fn selector_without_a_working_directory_is_reported(
         .build();
 
     let events = capture(|| discovery.load_first());
-    assert_eq!(only(&events, "discovery.selector").field("state"), expected);
+    assert_eq!(
+        only(&events, "discovery.selector").field("state"),
+        expected,
+        "selector state for {selector} should be {expected}"
+    );
 }
 
 /// A missing required candidate is reported as a required failure.
@@ -95,12 +103,21 @@ fn a_missing_required_candidate_reports_a_required_failure() {
     // pin it, since that distinction is the whole point of the test.
     assert_eq!(
         only(&events, "discovery.load").field("outcome"),
-        "not_found"
+        "not_found",
+        "a missing required candidate should leave the terminal outcome not_found"
     );
 
     let candidate = only(&events, "discovery.candidate");
-    assert_eq!(candidate.field("outcome"), "required_failure");
-    assert_eq!(candidate.field("required"), "true");
+    assert_eq!(
+        candidate.field("outcome"),
+        "required_failure",
+        "the candidate event should report a required failure"
+    );
+    assert_eq!(
+        candidate.field("required"),
+        "true",
+        "the candidate event should mark the failure required"
+    );
 }
 
 /// A candidate failure names the rung that produced the candidate and why it
@@ -116,8 +133,16 @@ fn a_candidate_failure_carries_source_and_category() {
     let events = capture(|| discovery.load_first_partitioned());
 
     let candidate = only(&events, "discovery.candidate");
-    assert_eq!(candidate.field("source"), "required_explicit");
-    assert_eq!(candidate.field("category"), "file");
+    assert_eq!(
+        candidate.field("source"),
+        "required_explicit",
+        "the candidate source should name the required explicit rung"
+    );
+    assert_eq!(
+        candidate.field("category"),
+        "file",
+        "the candidate category should be file"
+    );
 }
 
 /// A selector-supplied candidate that fails to parse is a required failure.
@@ -138,10 +163,26 @@ fn a_selector_candidate_failure_is_labelled_selector() {
     let events = capture(|| discovery.load_first());
 
     let candidate = only(&events, "discovery.candidate");
-    assert_eq!(candidate.field("source"), "selector");
-    assert_eq!(candidate.field("category"), "file");
-    assert_eq!(candidate.field("required"), "true");
-    assert_eq!(candidate.field("outcome"), "required_failure");
+    assert_eq!(
+        candidate.field("source"),
+        "selector",
+        "the candidate source should be selector"
+    );
+    assert_eq!(
+        candidate.field("category"),
+        "file",
+        "the candidate category should be file"
+    );
+    assert_eq!(
+        candidate.field("required"),
+        "true",
+        "the selector candidate should be required"
+    );
+    assert_eq!(
+        candidate.field("outcome"),
+        "required_failure",
+        "the selector candidate should report a required failure"
+    );
 }
 
 /// A failed selector stays a required failure when a later fallback loads.
@@ -164,11 +205,31 @@ fn a_failed_selector_reports_required_failure_before_a_fallback() {
     let events = capture(|| discovery.load_first());
 
     let candidate = only(&events, "discovery.candidate");
-    assert_eq!(candidate.field("source"), "selector");
-    assert_eq!(candidate.field("required"), "true");
-    assert_eq!(candidate.field("outcome"), "required_failure");
+    assert_eq!(
+        candidate.field("source"),
+        "selector",
+        "the failed candidate source should be selector"
+    );
+    assert_eq!(
+        candidate.field("required"),
+        "true",
+        "the failed selector candidate should be required"
+    );
+    assert_eq!(
+        candidate.field("outcome"),
+        "required_failure",
+        "the failed selector candidate should report a required failure"
+    );
 
     let load = only(&events, "discovery.load");
-    assert_eq!(load.field("outcome"), "success");
-    assert_eq!(load.field("source"), "explicit");
+    assert_eq!(
+        load.field("outcome"),
+        "success",
+        "the terminal event should report the fallback success"
+    );
+    assert_eq!(
+        load.field("source"),
+        "explicit",
+        "the terminal event should name the explicit fallback"
+    );
 }

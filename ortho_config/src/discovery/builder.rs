@@ -159,6 +159,10 @@ impl ConfigDiscoveryBuilder {
     /// its `extends` chain, [`ConfigDiscovery::load_first`] returns that error
     /// even when a later automatic candidate would have loaded.
     ///
+    /// A relative value is resolved against the environment source's working
+    /// directory. If the source cannot report one, selection fails closed
+    /// rather than falling back to the process's working directory.
+    ///
     /// An unset or empty value selects nothing: it does not fail closed, and
     /// automatic discovery continues normally.
     ///

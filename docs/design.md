@@ -497,10 +497,10 @@ once a readable file is found. Optional candidates that fail to read are
 skipped so later candidates can load successfully. Required candidates are
 fatal: a path added with `add_required_path`, or a non-empty path selected by
 the builder's `env_var` selector, reports its missing, unreadable, malformed,
-disabled-format, or `extends` failure even when a later candidate loads. That
-matches the derive-generated `compose_layers` policy, which always appends
-required errors. Automatic discovery candidates stay optional, preserving the
-buffered-error policy established for
+disabled-format, `extends`, or unanchorable-relative-path failure even when a
+later candidate loads. That matches the derive-generated `compose_layers`
+policy, which always appends required errors. Automatic discovery candidates
+stay optional, preserving the buffered-error policy established for
 [issue 96](https://github.com/leynos/ortho-config/issues/96). When a required
 candidate fails, or when every candidate fails, the helper returns `Err`
 containing the aggregated diagnostics (required diagnostics, plus optional
