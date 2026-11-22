@@ -16,7 +16,8 @@
 mod hermetic_env;
 
 use anyhow::{Context as _, Result, anyhow, ensure};
-use cap_std::{ambient_authority, fs::Dir};
+use camino::{Utf8Path, Utf8PathBuf};
+use cap_std::{ambient_authority, fs_utf8::Dir};
 use hermetic_env::hermetic;
 use ortho_config::declarative::LayerComposition;
 use ortho_config::{
@@ -24,7 +25,6 @@ use ortho_config::{
 };
 use rstest::rstest;
 use serde::{Deserialize, Serialize};
-use std::path::Path;
 use std::sync::Arc;
 
 /// Declarative configuration carrying one field of each relevant shape.
@@ -229,8 +229,12 @@ fn assert_merged_values(expected: &Expected, actual: &Actual<'_>) -> Result<()> 
     Ok(())
 }
 
-/// Write `body` to `app.toml` beneath `dir`.
-fn write_config(dir: &Path, body: &str) -> Result<std::path::PathBuf> {
+/// Write `body` to `app.toml` beneath `dir`, returning its UTF-8 path.
+///
+/// The capability handle names the directory it may touch, and the returned
+/// path is `camino`'s UTF-8 type so a non-UTF-8 fixture root is reported rather
+/// than silently carried into the environment map.
+fn write_config(dir: &Utf8Path, body: &str) -> Result<Utf8PathBuf> {
     let cap = Dir::open_ambient_dir(dir, ambient_authority()).context("open fixture dir")?;
     cap.write("app.toml", body.as_bytes())
         .context("write app.toml")?;
@@ -240,15 +244,21 @@ fn write_config(dir: &Path, body: &str) -> Result<std::path::PathBuf> {
 /// Compose one case's layers, assert the CLI-layer presence, and merge them.
 fn run_case<T: CaseConfig>(case: &Case) -> Result<()> {
     let dir = tempfile::tempdir().context("create fixture dir")?;
-    let config_path = write_config(dir.path(), case.file_body)?;
+    let root = Utf8Path::from_path(dir.path())
+        .ok_or_else(|| anyhow!("temporary fixture path is not UTF-8"))?
+        .to_owned();
+    let config_path = write_config(&root, case.file_body)?;
 
     let mut environment = MapEnv::new()
-        .with_var("HOME", dir.path().join("home-empty"))
-        .with_var(format!("{}CONFIG_PATH", T::PREFIX), config_path);
+        .with_var("HOME", root.join("home-empty").as_std_path())
+        .with_var(
+            format!("{}CONFIG_PATH", T::PREFIX),
+            config_path.as_std_path(),
+        );
     for (key, value) in case.env {
         environment.insert(format!("{}{key}", T::PREFIX), value);
     }
-    let env = hermetic(environment, dir.path());
+    let env = hermetic(environment, root.as_std_path());
 
     let composition = T::compose(case.cli_args.iter().copied(), Arc::new(env));
     let (layers, errors) = composition.into_parts();
