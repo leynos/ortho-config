@@ -94,7 +94,7 @@ fn expand_ortho_config(derive_input: &DeriveInput) -> syn::Result<proc_macro2::T
         fields: &fields,
         field_attrs: &field_attrs,
         struct_attrs: &struct_attrs,
-        serde_rename_all: serde_rename_rules.serialize,
+        serde_deserialize_rename_all: serde_rename_rules.deserialize,
         cli_fields: &components.cli_field_metadata,
         localization_ids: &localization_ids,
         krate: &krate,

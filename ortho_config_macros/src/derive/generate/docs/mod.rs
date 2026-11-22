@@ -39,8 +39,8 @@ pub(crate) struct DocsArgs<'a> {
     pub field_attrs: &'a [FieldAttrs],
     /// Container settings that supply names, headings, and platform metadata.
     pub struct_attrs: &'a StructAttrs,
-    /// Serde naming policy used to identify serialized configuration keys.
-    pub serde_rename_all: Option<SerdeRenameAll>,
+    /// Serde naming policy used to identify configuration input keys.
+    pub serde_deserialize_rename_all: Option<SerdeRenameAll>,
     /// CLI details used to keep generated help metadata in sync with parsing.
     pub cli_fields: &'a [CliFieldMetadata],
     /// Localisation identifiers determine which field defaults follow the
@@ -64,7 +64,7 @@ pub(crate) fn generate_docs_impl(args: &DocsArgs<'_>) -> syn::Result<TokenStream
         prefix: args.struct_attrs.prefix.as_deref(),
         fields: args.fields,
         field_attrs: args.field_attrs,
-        serde_rename_all: args.serde_rename_all,
+        serde_deserialize_rename_all: args.serde_deserialize_rename_all,
         cli_fields: args.cli_fields,
         localization_ids: args.localization_ids,
         krate,
