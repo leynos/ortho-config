@@ -213,7 +213,7 @@ fn load_first_fails_when_selector_extends_chain_is_broken(
 #[cfg(unix)]
 #[rstest]
 fn load_first_fails_when_selector_is_unreadable(config_temp_dir: Result<TempDir>) -> Result<()> {
-    use std::os::unix::fs::PermissionsExt;
+    use cap_std::fs::PermissionsExt as _;
 
     let temp_dir = config_temp_dir?;
     let dir_path = temp_dir.path();
@@ -222,10 +222,13 @@ fn load_first_fails_when_selector_is_unreadable(config_temp_dir: Result<TempDir>
     let dir = open_cap_utf8_dir(dir_path)?;
     write_cap_file(&dir, "unreadable.toml", "is_enabled = true")?;
     write_cap_file(&dir, "valid.toml", "is_enabled = false")?;
-    std::fs::set_permissions(&unreadable, std::fs::Permissions::from_mode(0o000))?;
+    dir.set_permissions(
+        "unreadable.toml",
+        cap_std::fs::Permissions::from_mode(0o000),
+    )?;
     // A privileged runner can read the file regardless of its mode, so skip
     // rather than assert something the environment cannot exercise.
-    if std::fs::read(&unreadable).is_ok() {
+    if dir.read("unreadable.toml").is_ok() {
         return Ok(());
     }
 

@@ -11,6 +11,20 @@ use ortho_config::{ConfigDiscovery, MapEnv};
 use rstest::rstest;
 use std::sync::Arc;
 
+/// Build discovery around one missing required path and a closed XDG base.
+///
+/// The caller owns `empty`: it must stay alive for the test, and its only XDG
+/// base keeps a host `/etc/xdg/demo/config.toml` out of the candidate list.
+fn missing_required_discovery(empty: &tempfile::TempDir) -> ConfigDiscovery {
+    ConfigDiscovery::builder("demo")
+        .clear_project_roots()
+        .add_required_path("/nonexistent/required.toml")
+        .env_source(Arc::new(
+            MapEnv::new().with_var("XDG_CONFIG_DIRS", empty.path()),
+        ))
+        .build()
+}
+
 /// The selector's four states are distinguished.
 ///
 /// `not_configured` and `unset` look identical from the candidate list — both
@@ -91,11 +105,8 @@ fn selector_without_a_working_directory_is_reported(
 /// distinguishes "nothing was there" from "the path you insisted on was not".
 #[test]
 fn a_missing_required_candidate_reports_a_required_failure() {
-    let discovery = ConfigDiscovery::builder("demo")
-        .clear_project_roots()
-        .add_required_path("/nonexistent/required.toml")
-        .env_source(Arc::new(MapEnv::new()))
-        .build();
+    let empty = tempfile::tempdir().expect("a temporary directory should be creatable");
+    let discovery = missing_required_discovery(&empty);
 
     let events = capture(|| discovery.load_first_partitioned());
 
@@ -124,11 +135,8 @@ fn a_missing_required_candidate_reports_a_required_failure() {
 /// failed, both drawn from closed vocabularies.
 #[test]
 fn a_candidate_failure_carries_source_and_category() {
-    let discovery = ConfigDiscovery::builder("demo")
-        .clear_project_roots()
-        .add_required_path("/nonexistent/required.toml")
-        .env_source(Arc::new(MapEnv::new()))
-        .build();
+    let empty = tempfile::tempdir().expect("a temporary directory should be creatable");
+    let discovery = missing_required_discovery(&empty);
 
     let events = capture(|| discovery.load_first_partitioned());
 
