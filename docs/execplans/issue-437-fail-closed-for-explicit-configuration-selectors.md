@@ -126,11 +126,14 @@ propagates to derived consumers without a macro change.
   `error_aggregation.feature` exercise the same outcomes through the public
   loader.
 - Full gates: `make check-fmt`, `make lint`, `make markdownlint`, and
-  `make nixie` pass for the candidate commit. `make test` is blocked locally by
+  `make nixie` pass for the candidate commit. Local `make test` was blocked by
   the `cargo-orthohelp` trybuild child's fixed 900 s deadline under a 100+ deep
-  shared compiler queue. The affected suites (33 unit, 252 integration, 148
-  example tests) and pytest (128 passed, 5 skipped) pass independently; CI
-  remains the full test signal.
+  shared compiler queue; the affected suites (33 unit, 252 integration, 148
+  example tests) and pytest (128 passed, 5 skipped) passed independently.
+- CI run 45002542265 passed every required and advisory job:
+  `build-test (linux)` in 36m 5s, `build-test (windows)` in 36m 19s, both
+  Clippy legs, the MSRV build, and all packaging dry runs. That supplies the
+  complete test signal the local trybuild deadline could not.
 
 ## Progress
 
@@ -141,12 +144,17 @@ propagates to derived consumers without a macro change.
   fail-closed `load_first`.
 - [x] Documentation and changelog.
 - [x] Regression tests at builder, derive, telemetry, example, and BDD level.
-- [x] Repository gates and CodeRabbit review: format, lint, Markdown, spelling,
-  Mermaid, affected suites, and pytest are green; the only local red is the
-  untouched `cargo-orthohelp` trybuild deadline under host saturation.
-- [ ] Full `make test` green locally (blocked by shared compiler-queue
-  saturation; CI owns this signal).
-- [ ] Draft pull request opened.
+- [x] Repository gates: format, lint, Markdown, spelling, Mermaid, affected
+  suites, and pytest are green. The only local red was the untouched
+  `cargo-orthohelp` trybuild deadline under host saturation.
+- [x] CodeRabbit review: six rounds requested; every finding dispositioned,
+  and the rounds after the first were re-reviewed until only documentation and
+  test-hygiene items remained, all fixed. The final confirmation attempt hit
+  the shared review quota.
+- [x] Full test signal: CI run 45002542265 passed `build-test (linux)` and
+  `build-test (windows)` plus every advisory job.
+- [x] Draft pull request opened:
+      [PR 726](https://github.com/leynos/ortho-config/pull/726).
 
 ## Surprises & discoveries
 
