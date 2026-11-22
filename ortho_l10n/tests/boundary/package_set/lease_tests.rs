@@ -87,24 +87,15 @@ fn a_record_for_this_run_is_reused(scratch_root: Result<Scratch>) -> Result<()> 
 /// complete" and this run packages afresh.
 #[rstest]
 fn a_record_for_another_run_is_not_reused(scratch_root: Result<Scratch>) -> Result<()> {
-    let scratch = scratch_root?;
-    let lease = scratch.take(Some(THIS_RUN))?;
-    record_complete(&lease, OTHER_RUN)?;
-    drop(lease);
-
-    let prepared = prepare(
-        &scratch.guard()?,
-        scratch.path(),
-        Some(THIS_RUN),
-        Instant::now() + AMPLE_DEADLINE,
-    )?;
-    let Prepared::Owned { .. } = prepared else {
-        anyhow::bail!(
-            "a record naming {OTHER_RUN} was reused for {THIS_RUN}; roots built by \
-             an earlier run may not describe this run's sources"
-        );
-    };
-    Ok(())
+    require_not_reused(
+        &scratch_root?,
+        &Scopes {
+            writer: Some(THIS_RUN),
+            recorded: OTHER_RUN,
+            reader: Some(THIS_RUN),
+        },
+        "roots built by an earlier run may not describe this run's sources",
+    )
 }
 
 /// With no run identifier, no record is written and none is trusted.
@@ -116,24 +107,56 @@ fn a_record_for_another_run_is_not_reused(scratch_root: Result<Scratch>) -> Resu
 fn without_a_run_scope_a_record_is_neither_written_nor_trusted(
     scratch_root: Result<Scratch>,
 ) -> Result<()> {
-    let scratch = scratch_root?;
-    let lease = scratch.take(None)?;
-    record_complete(&lease, THIS_RUN)?;
+    require_not_reused(
+        &scratch_root?,
+        &Scopes {
+            writer: None,
+            recorded: THIS_RUN,
+            reader: None,
+        },
+        "the single-process runners must package rather than trust it",
+    )
+}
+
+/// Plant a record and require the next `prepare` to own the packaging step.
+///
+/// The two cases above differ only in which scope writes the record and which
+/// scope reads it, so the shared shape is stated once: a record that does not
+/// name the reading scope must never be answered with `Reused`. `why` is the
+/// consequence, so a failure explains what reusing it would have cost.
+fn require_not_reused(scratch: &Scratch, scopes: &Scopes<'_>, why: &str) -> Result<()> {
+    let lease = scratch.take(scopes.writer)?;
+    record_complete(&lease, scopes.recorded)?;
     drop(lease);
 
     let prepared = prepare(
         &scratch.guard()?,
         scratch.path(),
-        None,
+        scopes.reader,
         Instant::now() + AMPLE_DEADLINE,
     )?;
     let Prepared::Owned { .. } = prepared else {
         anyhow::bail!(
-            "with no run scope a record naming {THIS_RUN} was reused; the \
-             single-process runners must package rather than trust it"
+            "a record naming {} was reused by a caller with scope {:?}; {why}",
+            scopes.recorded,
+            scopes.reader
         );
     };
     Ok(())
+}
+
+/// The three scopes a reuse decision involves.
+///
+/// Grouped because they are one question - "does the record this writer made
+/// name the reader's run" - and passing them positionally would let a caller
+/// transpose the writer and the reader without the compiler noticing.
+struct Scopes<'a> {
+    /// Scope the record is written under.
+    writer: Option<&'a str>,
+    /// Scope the record names.
+    recorded: &'a str,
+    /// Scope the next `prepare` reads under.
+    reader: Option<&'a str>,
 }
 
 /// A lease held by another handle is reported as a wait, not taken again.

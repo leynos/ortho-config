@@ -28,7 +28,7 @@
 //! [`super::roots_tests`]; what these add is "and there is still exactly one of
 //! them".
 
-use super::lease_shape_scan::{count_in_roots, count_in_tree};
+use super::lease_shape_scan::{Callee, count_in_roots, count_in_tree};
 use crate::boundary::fixture_cargo::repository_root;
 use crate::boundary::package_set::scratch::{Scratch, scratch_root};
 use crate::boundary::package_set::{PACKAGED_CRATES, PACKAGING_INVOCATIONS};
@@ -56,7 +56,10 @@ use rstest::{fixture, rstest};
 #[rstest]
 fn the_packaging_boundary_is_entered_once_per_run() -> Result<()> {
     let sources = repository_root()?.join("ortho_l10n/tests");
-    let packaged = count_in_tree(&sources.join("boundary_tests"), "prepare_packaged_set")?;
+    let packaged = count_in_tree(
+        &sources.join("boundary_tests"),
+        Callee::named("prepare_packaged_set"),
+    )?;
     let invocations = PACKAGING_INVOCATIONS.len();
 
     // The packaging step runs from `roots` alone. Matched as a call with its
@@ -68,7 +71,7 @@ fn the_packaging_boundary_is_entered_once_per_run() -> Result<()> {
     // scope is exactly what may call it, so a scan of `package_set` would miss
     // the very bypass it is meant to catch. `boundary_tests` cannot reach it,
     // and is not part of this tree.
-    let packaging = count_in_tree(&sources.join("boundary"), "package_sources")?;
+    let packaging = count_in_tree(&sources.join("boundary"), Callee::named("package_sources"))?;
     ensure!(
         packaging == 1,
         "the packaging boundary is invoked from {packaging} places under \
@@ -156,7 +159,7 @@ fn a_call_outside_package_set_is_counted(scratch_sources: Result<ScratchSources>
         )
         .with_context(|| format!("plant a bypass call at {bypass}"))?;
 
-    let counted = count_in_tree(&sources.join("boundary"), "package_sources")?;
+    let counted = count_in_tree(&sources.join("boundary"), Callee::named("package_sources"))?;
     ensure!(
         counted == 1,
         "a packaging call planted at boundary/consumer/mod.rs was counted {counted} \

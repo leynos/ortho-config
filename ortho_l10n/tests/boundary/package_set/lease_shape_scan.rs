@@ -14,6 +14,28 @@ use anyhow::{Context, Result};
 use camino::Utf8Path;
 use cap_std::fs_utf8::Dir;
 
+/// The name of a function whose calls are counted.
+///
+/// A newtype rather than a bare `&str` because it is a domain value - the
+/// callee - and not arbitrary text: every function below takes one, and a
+/// caller cannot pass a file name or a needle by mistake. It also keeps the
+/// module's string-argument ratio under `CodeScene`'s threshold, which is a
+/// symptom of the same thing rather than a separate goal.
+#[derive(Clone, Copy)]
+pub(super) struct Callee<'a>(&'a str);
+
+impl<'a> Callee<'a> {
+    /// Name the callee whose calls are counted.
+    pub(super) const fn named(name: &'a str) -> Self {
+        Self(name)
+    }
+
+    /// The callee's name as text, for matching.
+    const fn as_str(self) -> &'a str {
+        self.0
+    }
+}
+
 /// How many packaging calls `roots.rs` itself makes.
 ///
 /// A single-file read rather than a tree walk, because the question here is
@@ -28,7 +50,7 @@ pub(super) fn count_in_roots(sources: &Utf8Path) -> Result<usize> {
     let source = directory
         .read_to_string("roots.rs")
         .context("read roots.rs")?;
-    Ok(count_calls(&source, "package_sources"))
+    Ok(count_calls(&source, Callee::named("package_sources")))
 }
 
 /// How many call expressions to `name` appear in `source`.
@@ -43,7 +65,7 @@ pub(super) fn count_in_roots(sources: &Utf8Path) -> Result<usize> {
 /// Declarations, imports and comments are excluded, because they are not
 /// calls: a `fn package_sources(` definition, a `use ... package_sources;` and
 /// a doc comment naming either would otherwise inflate a tree-wide count.
-pub(super) fn count_calls(source: &str, name: &str) -> usize {
+pub(super) fn count_calls(source: &str, name: Callee<'_>) -> usize {
     without_comments(source)
         .lines()
         .filter(|line| is_call_line(line, name))
@@ -57,7 +79,7 @@ pub(super) fn count_calls(source: &str, name: &str) -> usize {
 /// their own line in this codebase, and a line-level rule is one a reader can
 /// check by eye. A turbofish is stripped from the callee before the
 /// parenthesis is looked for, so `name::<Budget>(` counts.
-fn is_call_line(line: &str, name: &str) -> bool {
+fn is_call_line(line: &str, name: Callee<'_>) -> bool {
     let trimmed = line.trim_start();
     if trimmed.starts_with("//") || trimmed.starts_with('*') {
         return false;
@@ -68,7 +90,7 @@ fn is_call_line(line: &str, name: &str) -> bool {
     // `split_once` rather than `find` plus a byte offset: the offset form
     // indexes the string, which can panic on a UTF-8 boundary and is denied by
     // this repository's lint policy.
-    let Some((_before, after)) = line.split_once(name) else {
+    let Some((_before, after)) = line.split_once(name.as_str()) else {
         return false;
     };
     let after_callee = after.strip_prefix("::<").map_or(after, |tail| {
@@ -96,7 +118,7 @@ fn without_comments(source: &str) -> String {
 /// counted the needle's own literal in this test and the declaration in
 /// `mod.rs`, which made the scan report four packaging sites where there is
 /// one.
-pub(super) fn count_in_tree(root: &Utf8Path, name: &str) -> Result<usize> {
+pub(super) fn count_in_tree(root: &Utf8Path, name: Callee<'_>) -> Result<usize> {
     let root_directory = Dir::open_ambient_dir(root, cap_std::ambient_authority())
         .with_context(|| format!("open {root}"))?;
     let walk = Walk { root, name };
@@ -117,7 +139,7 @@ struct Walk<'a> {
     /// The tree being scanned, for error messages.
     root: &'a Utf8Path,
     /// The callee whose calls are counted.
-    name: &'a str,
+    name: Callee<'a>,
 }
 
 impl Walk<'_> {
