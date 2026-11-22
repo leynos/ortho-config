@@ -77,7 +77,7 @@ pub(super) fn count_calls(source: &str, name: Callee<'_>) -> usize {
     let mut remaining = code.as_str();
     let mut total = 0;
     while let Some((before, after)) = remaining.split_once(name.as_str()) {
-        if is_call_position(before, after) {
+        if is_call_position(&Site { before, after }) {
             total += 1;
         }
         remaining = after;
@@ -85,13 +85,27 @@ pub(super) fn count_calls(source: &str, name: Callee<'_>) -> usize {
     total
 }
 
-/// Whether a callee occurrence at `before`/`after` is a call rather than a
-/// declaration or an import.
+/// One occurrence of the callee in the source, split at the match.
+///
+/// Grouped rather than passed as two arguments: they are two halves of one
+/// occurrence, and `before`/`after` positional strings are exactly what a
+/// caller transposes. Grouping also keeps this module's string-argument ratio
+/// under `CodeScene`'s threshold.
+#[derive(Clone, Copy)]
+struct Site<'a> {
+    /// The text preceding the callee, used for the line-context tests.
+    before: &'a str,
+    /// The text following it, used for the parenthesis test.
+    after: &'a str,
+}
+
+/// Whether `site` is a call rather than a declaration or an import.
 ///
 /// `before` is the text preceding the callee on its own line, so the
 /// declaration and import tests stay line-scoped while the parenthesis test
 /// spans lines.
-fn is_call_position(before: &str, after: &str) -> bool {
+fn is_call_position(site: &Site<'_>) -> bool {
+    let Site { before, after } = *site;
     // `rsplit_once` rather than `rfind` plus an offset: indexing can panic on
     // a UTF-8 boundary and is denied by this repository's lint policy.
     let line = before
