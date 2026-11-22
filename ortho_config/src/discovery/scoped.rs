@@ -105,6 +105,7 @@ impl ConfigDiscovery {
                 Arc::clone(err),
             );
         }
+        Self::check_required_outside_scopes(&set, scopes, &mut errors);
         let mut layers = Vec::new();
         let mut origins = Vec::new();
         let mut loaded_paths = HashSet::new();
@@ -137,6 +138,35 @@ impl ConfigDiscovery {
             None,
         );
         (errors.into_layers_outcome(layers), origins)
+    }
+
+    /// Attempt required candidates that no requested scope will reach.
+    ///
+    /// Explicit paths and the selector carry no automatic scope, so the
+    /// per-scope walk never reaches them. A required one must still be checked:
+    /// its absence or failure is fatal even though its layers are not part of a
+    /// stacked composition. Candidates that belong to a requested scope are
+    /// left to that scope's walk, so their errors are not duplicated.
+    fn check_required_outside_scopes(
+        set: &CandidateSet,
+        scopes: &[DiscoveryScope],
+        errors: &mut PartitionedErrors,
+    ) {
+        for candidate in set.candidates.iter().filter(|candidate| {
+            candidate.required && !scopes.iter().any(|scope| candidate.in_scope(*scope))
+        }) {
+            if let Err(error) = Self::chain_layers(&candidate.path, true) {
+                errors.record(
+                    &CandidateFailure {
+                        operation: telemetry::OPERATION_COMPOSE_LAYERS,
+                        required: true,
+                        source: candidate.source,
+                        scope: None,
+                    },
+                    error,
+                );
+            }
+        }
     }
 
     /// Resolve one scope, least-preferred candidate first.

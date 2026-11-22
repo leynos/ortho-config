@@ -110,6 +110,10 @@ propagates to derived consumers without a macro change.
 - Unanchorable relative selector: a non-empty relative selector whose source
   cannot report a working directory is a required failure, not a fallback.
   Verified by `loading_required.rs` and `injected_env_loaders.rs`.
+- Scoped composition: a required selector with no automatic scope is still
+  checked by `StackScopes`, so its absence is reported even though its layers
+  are not part of the stacked composition. Verified by
+  `tests/scoped_required_selector.rs`.
 - Derive propagation: `load_from_iter_with_sources` returns
   `OrthoError::File` when the selector names a missing or malformed file even
   when a valid automatic file exists. Verified in
@@ -155,6 +159,9 @@ propagates to derived consumers without a macro change.
 - Review also found that an unanchorable relative selector was silently
   dropped. It now produces a required assembly error, so `load_first` fails
   rather than falling back to the process working directory.
+- Review found a second traversal gap in `StackScopes`: a required selector has
+  no automatic scope, so the per-scope walk never attempted it. A pre-pass now
+  checks required candidates that no requested scope will visit.
 
 ## Decision log
 
@@ -178,6 +185,10 @@ propagates to derived consumers without a macro change.
 - Check remaining required candidates after the first success, but keep the
   first success's value and precedence. Optional candidates after that point
   are still skipped, so the optional-error suppression contract is unchanged.
+- In `StackScopes`, check required candidates that no requested scope owns in a
+  single pre-pass, and skip candidates a requested scope will visit so their
+  errors are not recorded twice. The pre-pass discards any successful layers:
+  explicit selection remains outside the stacked composition's value.
 
 ## Outcomes & retrospective
 

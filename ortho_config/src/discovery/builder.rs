@@ -179,7 +179,8 @@ impl ConfigDiscoveryBuilder {
     ///     .build();
     /// assert_eq!(
     ///     discovery.candidates().first().map(std::path::PathBuf::as_path),
-    ///     Some(std::path::Path::new("/etc/demo.toml"))
+    ///     Some(std::path::Path::new("/etc/demo.toml")),
+    ///     "the selected configuration path must be the first candidate"
     /// );
     /// ```
     #[must_use]
