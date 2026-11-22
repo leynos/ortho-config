@@ -101,9 +101,14 @@ fn selector_promotes_an_existing_optional_candidate_to_required() -> Result<()> 
     let shared = dir.path().join("shared.toml");
 
     let discovery = ConfigDiscovery::builder("app")
+        .project_roots([dir.path().to_path_buf()])
         .add_explicit_path(&shared)
         .env_var("APP_CONFIG_PATH")
-        .env_source(Arc::new(MapEnv::new().with_var("APP_CONFIG_PATH", &shared)))
+        .env_source(Arc::new(
+            MapEnv::new()
+                .with_var("APP_CONFIG_PATH", &shared)
+                .with_var("XDG_CONFIG_DIRS", dir.path()),
+        ))
         .build();
 
     let outcome = discovery.load_first_partitioned();

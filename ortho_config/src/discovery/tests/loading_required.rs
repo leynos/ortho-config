@@ -5,6 +5,7 @@
 //! that a first-success walk can otherwise hide: a required candidate after the
 //! first success, and a relative selector the environment source cannot anchor.
 
+use std::path::Path;
 use std::sync::Arc;
 
 use anyhow::{Result, ensure};
@@ -97,4 +98,61 @@ fn load_first_fails_when_relative_selector_cannot_be_anchored(
         "expected the unanchorable selector to be a required error"
     );
     expect_file_error(discovery.load_first(), "chosen.toml")
+}
+
+/// Assert that a malformed later required selector of a deferred format fails.
+///
+/// JSON5 and YAML providers defer parse errors until the Figment is queried.
+/// `load_config_file` performs an `extends` lookup before returning, and that
+/// lookup forces the deferred parse into a file error, so the malformed
+/// selector is a required failure even though the optional TOML fallback is
+/// generated first and loads successfully.
+#[cfg(any(feature = "json5", feature = "yaml"))]
+fn assert_deferred_selector_failure(dir_path: &Path, file_name: &str) -> Result<()> {
+    let selected = dir_path.join(file_name);
+    let valid = dir_path.join("valid.toml");
+    let discovery = ConfigDiscovery::builder("hello_world")
+        .env_var("HELLO_WORLD_CONFIG_PATH")
+        .env_source(Arc::new(
+            MapEnv::new().with_var("HELLO_WORLD_CONFIG_PATH", &selected),
+        ))
+        .add_explicit_path(valid)
+        .build();
+
+    let outcome = discovery.load_first_partitioned();
+    ensure!(
+        outcome.figment.is_some(),
+        "expected the optional fallback to load"
+    );
+    ensure!(
+        !outcome.required_errors.is_empty(),
+        "expected the malformed selector to be a required error"
+    );
+    expect_file_error(discovery.load_first(), file_name)
+}
+
+/// A malformed JSON5 selector is reported even when an earlier file loaded.
+#[cfg(feature = "json5")]
+#[rstest]
+fn load_first_fails_when_later_required_json5_selector_is_malformed(
+    config_temp_dir: Result<TempDir>,
+) -> Result<()> {
+    let temp_dir = config_temp_dir?;
+    let dir = open_cap_utf8_dir(temp_dir.path())?;
+    write_cap_file(&dir, "broken.json5", "{ is_enabled: ")?;
+    write_cap_file(&dir, "valid.toml", "is_enabled = false")?;
+    assert_deferred_selector_failure(temp_dir.path(), "broken.json5")
+}
+
+/// A malformed YAML selector is reported even when an earlier file loaded.
+#[cfg(feature = "yaml")]
+#[rstest]
+fn load_first_fails_when_later_required_yaml_selector_is_malformed(
+    config_temp_dir: Result<TempDir>,
+) -> Result<()> {
+    let temp_dir = config_temp_dir?;
+    let dir = open_cap_utf8_dir(temp_dir.path())?;
+    write_cap_file(&dir, "broken.yaml", "is_enabled: [")?;
+    write_cap_file(&dir, "valid.toml", "is_enabled = false")?;
+    assert_deferred_selector_failure(temp_dir.path(), "broken.yaml")
 }

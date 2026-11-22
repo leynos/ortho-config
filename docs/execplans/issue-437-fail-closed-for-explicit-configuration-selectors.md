@@ -114,6 +114,10 @@ propagates to derived consumers without a macro change.
   checked by `StackScopes`, so its absence is reported even though its layers
   are not part of the stacked composition. Verified by
   `tests/scoped_required_selector.rs`.
+- Deferred formats: a malformed JSON5 or YAML selector after an earlier
+  optional success is a required file error. The loader's `extends` lookup
+  forces the deferred parse before `build` runs. Verified by
+  `loading_required.rs`.
 - Derive propagation: `load_from_iter_with_sources` returns
   `OrthoError::File` when the selector names a missing or malformed file even
   when a valid automatic file exists. Verified in
@@ -162,6 +166,11 @@ propagates to derived consumers without a macro change.
 - Review found a second traversal gap in `StackScopes`: a required selector has
   no automatic scope, so the per-scope walk never attempted it. A pre-pass now
   checks required candidates that no requested scope will visit.
+- Review suspected that JSON5 and YAML deferred parse errors could be
+  discarded with a later required selector's value. Investigation showed that
+  `load_config_file` already queries `extends`, which forces the deferred parse
+  into a `File` error before `build` runs. Regression tests pin that behaviour;
+  no extraction change was needed.
 
 ## Decision log
 
@@ -189,6 +198,9 @@ propagates to derived consumers without a macro change.
   single pre-pass, and skip candidates a requested scope will visit so their
   errors are not recorded twice. The pre-pass discards any successful layers:
   explicit selection remains outside the stacked composition's value.
+- Do not add an extraction pass to `load_first_partitioned`: the loader's
+  `extends` lookup already forces deferred JSON5/YAML parse errors, and the new
+  regression tests pin the resulting `File` error.
 
 ## Outcomes & retrospective
 
