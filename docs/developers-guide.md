@@ -3168,13 +3168,11 @@ reads the named variable through the discovery `EnvSource`, treating an unset
 or empty value as "no selection".
 
 A winning selector suppresses every later selector and all automatic probing.
-That is the property `add_required_path` cannot deliver: the gate lives at
-candidate generation, so a required path can no longer mechanically coexist
-with later discovered layers. `add_required_path` does make a missing or failed
-explicit path fatal to `ConfigDiscovery::load_first`, but it does not suppress
-automatic discovery; a later automatic file can still contribute layers.
-Exclusivity remains the policy's job. `ExplicitMode` decides what happens once
-a rung wins:
+Exclusivity is the policy's own gate, applied before automatic discovery runs;
+`add_required_path` has no equivalent, because it adds a candidate rather than
+suppressing the search. A required path does make a missing or failed explicit
+path fatal to `ConfigDiscovery::load_first`, but a later automatic file can
+still contribute layers. `ExplicitMode` decides what happens once a rung wins:
 
 - `ExplicitMode::RequiredExclusive` is the default. A missing or malformed
   selected file produces a single terminal `selected_error` carrying the winning

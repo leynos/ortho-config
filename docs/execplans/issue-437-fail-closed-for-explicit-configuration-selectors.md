@@ -1,6 +1,6 @@
 # Fail closed for explicit configuration selectors
 
-Status: COMPLETE (pending gate evidence and review)
+Status: COMPLETE (implementation; draft pull request and CI pending)
 
 ## Purpose
 
@@ -125,8 +125,12 @@ propagates to derived consumers without a macro change.
 - Behavioural contract: feature scenarios in `config_path.feature` and
   `error_aggregation.feature` exercise the same outcomes through the public
   loader.
-- Full gates: `make check-fmt`, `make lint`, `make test`, `make markdownlint`,
-  and `make nixie` pass for the candidate commit.
+- Full gates: `make check-fmt`, `make lint`, `make markdownlint`, and
+  `make nixie` pass for the candidate commit. `make test` is blocked locally by
+  the `cargo-orthohelp` trybuild child's fixed 900 s deadline under a 100+ deep
+  shared compiler queue. The affected suites (33 unit, 252 integration, 148
+  example tests) and pytest (128 passed, 5 skipped) pass independently; CI
+  remains the full test signal.
 
 ## Progress
 
@@ -137,7 +141,11 @@ propagates to derived consumers without a macro change.
   fail-closed `load_first`.
 - [x] Documentation and changelog.
 - [x] Regression tests at builder, derive, telemetry, example, and BDD level.
-- [ ] Repository gates and CodeRabbit review.
+- [x] Repository gates and CodeRabbit review: format, lint, Markdown, spelling,
+  Mermaid, affected suites, and pytest are green; the only local red is the
+  untouched `cargo-orthohelp` trybuild deadline under host saturation.
+- [ ] Full `make test` green locally (blocked by shared compiler-queue
+  saturation; CI owns this signal).
 - [ ] Draft pull request opened.
 
 ## Surprises & discoveries
@@ -171,6 +179,20 @@ propagates to derived consumers without a macro change.
   `load_config_file` already queries `extends`, which forces the deferred parse
   into a `File` error before `build` runs. Regression tests pin that behaviour;
   no extraction change was needed.
+- Whitaker's module-size rule enforces the 400-line cap. The selector handling
+  moved into `candidates/selector.rs`, and the unanchored-selector error moved
+  with it out of `load.rs`; both parent modules are now under the cap.
+- Review found test-hygiene issues: a host `/etc/xdg` file could change the
+  required-candidate telemetry outcome, and the unreadable-file fixture used
+  `std::fs` beside its `cap_std` directory. The XDG base is now a fixture
+  directory, and permissions and the read probe go through the same capability.
+- `allow-expect-in-tests` does not cover helper functions, and
+  `panic_in_result_fn` forbids assertions in `Result`-returning tests. The
+  telemetry helper stays infallible and the test function owns its `expect`.
+- The host compiler queue stayed 100–500 requests deep throughout. The
+  `cargo-orthohelp` trybuild child has a fixed 900 s deadline and timed out
+  even alone with a warm 482 MB fixture cache. This is infrastructure
+  saturation, not an assertion failure in this change.
 
 ## Decision log
 
@@ -201,6 +223,12 @@ propagates to derived consumers without a macro change.
 - Do not add an extraction pass to `load_first_partitioned`: the loader's
   `extends` lookup already forces deferred JSON5/YAML parse errors, and the new
   regression tests pin the resulting `File` error.
+- Split selector resolution into `candidates/selector.rs` rather than relaxing
+  Whitaker's module-size rule. The rule is a single, enforceable cap; moving
+  cohesive selector code is the honest fix.
+- Keep test helpers infallible where their only fallible step is fixture
+  creation the test itself can own. This accommodates both
+  `allow-expect-in-tests` and `panic_in_result_fn` without suppression.
 
 ## Outcomes & retrospective
 
@@ -211,15 +239,25 @@ deduplication promotes requiredness rather than letting an earlier optional
 entry relax it. Automatic discovery candidates remain optional, so the issue 96
 buffered-error policy still holds for them.
 
-Two things were worth discovering. The derive already had the correct policy,
-so the selector fix propagated with no macro change; but the `hello_world`
-example carried its own copy of the old fall-through logic, which shows the
-hazard of handwritten consumers of partitioned outcomes. Second, the
-repository's four-argument Clippy ceiling plus the 400-line file cap together
-pushed the accumulator API toward three thin `push_*` methods over a private
-`CandidateSpec`, which read better than the alternative of a fifth positional
-parameter.
+The derive already had the correct policy, so the selector fix propagated with
+no macro change; but the `hello_world` example carried its own copy of the old
+fall-through logic, which shows the hazard of handwritten consumers of
+partitioned outcomes. The repository's four-argument Clippy ceiling and
+400-line module cap also shaped the implementation: candidate metadata is
+grouped in a private `CandidateSpec`, and selector resolution now lives in
+`candidates/selector.rs` rather than stretching its parent module.
 
-Verification evidence: `make check-fmt`, `make lint`, `make test`,
-`make markdownlint`, and `make nixie` are recorded in the pull request, and
-each new regression test was written to fail against the pre-change behaviour.
+Review found four genuine gaps beyond the original report: the walk could stop
+before a later required selector, an unanchorable relative selector was dropped,
+`StackScopes` never attempted scope-less required selectors, and test fixtures
+could see a host `/etc/xdg` file. All four are fixed and pinned by regression
+tests. A suspected JSON5/YAML deferred-parse gap was disproved by the loader's
+`extends` lookup and is recorded as such.
+
+Verification evidence: `make check-fmt`, `make lint`, `make markdownlint`, and
+`make nixie` pass; 33 discovery unit tests, 252 affected integration tests
+(including 103 behavioural scenarios), 148 example tests, and 128 Python tests
+pass. The full `make test` is locally blocked by the untouched
+`cargo-orthohelp` trybuild child's 900 s deadline under host compiler-queue
+saturation; CI provides that signal. Each regression test was written to fail
+against the pre-change behaviour.
