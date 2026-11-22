@@ -48,6 +48,27 @@ not, for the measured arithmetic reason recorded under "Why D3 is not
 delivered". The sections below record what is measured, what was tried and
 reversed, what remains, and why it is reported rather than improvised.
 
+### Review convergence, 2026-11-22
+
+Five rounds of CodeRabbit findings on the rebased head, all valid and all
+repaired with mutant-proven fixtures:
+
+- the nextest wait named the lease rather than the run guard, at a second site
+  the first correction missed;
+- the call matcher pinned the first argument's spelling, then required `(` on
+  the same line, then required it with no whitespace, then rejected a call as a
+  function's first statement because `fn` was in its four-word window;
+- two CodeScene findings: duplicated cases, and a string-argument ratio that
+  the matcher's own signature pushed back over the threshold.
+
+Each fix was proved non-vacuous by reverting it and watching exactly the new
+fixture fail, then restoring byte-identically. The scan is now line-spanning,
+requires `fn` immediately before the callee, and reports 10.0 on `cs review`.
+
+At `8bc8b6e2` both required checks pass, CodeScene passes, and the local gates
+(`check-fmt`, `lint`, `typecheck`, `spelling`) pass. Review request `f086bf6d`
+is queued for the final inspection.
+
 ### Gate status on the rebased head
 
 `make check-fmt`, `make lint` (rustdoc, Clippy and Whitaker) and
