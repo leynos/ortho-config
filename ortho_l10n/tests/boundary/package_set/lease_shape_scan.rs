@@ -60,50 +60,57 @@ pub(super) fn count_in_roots(sources: &Utf8Path) -> Result<usize> {
 
 /// How many call expressions to `name` appear in `source`.
 ///
-/// The callee is matched with an optional turbofish and then an opening
-/// parenthesis, so the argument spelling cannot hide a call: `(repository`,
-/// `( &repository`, a newline before the argument and `::<Budget>(repository`
-/// all count. An earlier version pinned the first argument's spelling, so a
-/// refactor that borrowed it silently dropped the call from the count while
-/// the assertion still passed.
+/// The callee is matched with an optional turbofish, optional whitespace, and
+/// then an opening parenthesis, over the whole source rather than line by
+/// line, so no spelling of the gap between callee and arguments can hide a
+/// call: `(repository`, `( &repository`, a newline before or after the
+/// parenthesis, and `::<Budget>(repository` all count. An earlier version
+/// pinned the first argument's spelling, and a later one tested a single line,
+/// so a refactor or a line break silently dropped the call from the count
+/// while the assertion still passed.
 ///
 /// Declarations, imports and comments are excluded, because they are not
 /// calls: a `fn package_sources(` definition, a `use ... package_sources;` and
 /// a doc comment naming either would otherwise inflate a tree-wide count.
 pub(super) fn count_calls(source: &str, name: Callee<'_>) -> usize {
-    without_comments(source)
-        .lines()
-        .filter(|line| is_call_line(line, name))
-        .count()
+    let code = without_comments(source);
+    let mut remaining = code.as_str();
+    let mut total = 0;
+    while let Some((before, after)) = remaining.split_once(name.as_str()) {
+        if is_call_position(before, after) {
+            total += 1;
+        }
+        remaining = after;
+    }
+    total
 }
 
-/// Whether `line` contains a call to `name` rather than a declaration or an
-/// import of it.
+/// Whether a callee occurrence at `before`/`after` is a call rather than a
+/// declaration or an import.
 ///
-/// Line-granular on purpose: a definition, an import and a call each occupy
-/// their own line in this codebase, and a line-level rule is one a reader can
-/// check by eye. A turbofish is stripped from the callee before the
-/// parenthesis is looked for, so `name::<Budget>(` counts.
-fn is_call_line(line: &str, name: Callee<'_>) -> bool {
-    let trimmed = line.trim_start();
-    if trimmed.starts_with("//") || trimmed.starts_with('*') {
+/// `before` is the text preceding the callee on its own line, so the
+/// declaration and import tests stay line-scoped while the parenthesis test
+/// spans lines.
+fn is_call_position(before: &str, after: &str) -> bool {
+    // `rsplit_once` rather than `rfind` plus an offset: indexing can panic on
+    // a UTF-8 boundary and is denied by this repository's lint policy.
+    let line = before
+        .rsplit_once('\n')
+        .map_or(before, |(_prev, line)| line);
+    if line.trim_start().starts_with("use ") {
         return false;
     }
-    if trimmed.starts_with("use ") || trimmed.split_whitespace().any(|word| word == "fn") {
+    if before
+        .split_whitespace()
+        .rev()
+        .take(4)
+        .any(|word| word == "fn")
+    {
         return false;
     }
-    // `split_once` rather than `find` plus a byte offset: the offset form
-    // indexes the string, which can panic on a UTF-8 boundary and is denied by
-    // this repository's lint policy.
-    let Some((_before, after)) = line.split_once(name.as_str()) else {
-        return false;
-    };
     let after_callee = after.strip_prefix("::<").map_or(after, |tail| {
         tail.split_once('>').map_or("", |(_generics, rest)| rest)
     });
-    // Rust allows whitespace between the callee and its argument list, so
-    // `package_sources (&repository, ..)` is a valid call and must count. An
-    // earlier version required the `(` immediately and would have missed it.
     after_callee.trim_start().starts_with('(')
 }
 
@@ -245,6 +252,7 @@ mod matcher_tests {
     )]
     #[case::space_before_parenthesis(&format!("{} (&repository, target)", callee()), 1)]
     #[case::newline_before_argument(&format!("{}(\n        repository,", callee()), 1)]
+    #[case::newline_before_parenthesis(&format!("{}\n(&repository, target)", callee()), 1)]
     #[case::turbofish(&format!("{}::<Budget>(repository,", callee()), 1)]
     #[case::in_a_match_arm(&format!("=> {}(repository, target)", callee()), 1)]
     fn a_call_is_counted_whatever_its_spelling(#[case] source: &str, #[case] expected: usize) {
