@@ -10,7 +10,7 @@ use quote::{quote, quote_spanned};
 use syn::ext::IdentExt;
 use syn::{Ident, Type};
 
-use crate::derive::parse::{FieldAttrs, option_inner};
+use crate::derive::parse::{FieldAttrs, clap_arg_id, option_inner};
 
 mod replay;
 
@@ -156,6 +156,14 @@ fn process_cli_field(
     let short_lit = syn::LitChar::new(resolved.short, proc_macro2::Span::call_site());
     let span = resolved.name.span();
     let replay_attributes = replay::clap_replay_attributes(attrs, resolved.is_bool);
+    // The configuration field's explicit `id` must reach the synthetic parser
+    // too: `CliFieldInfo::arg_id` and the subcommand extractor both look the
+    // argument up under it. Without this replay the generated CLI struct would
+    // record the Rust member name while the extractor asked for the override.
+    let id_attribute = clap_arg_id(field)?.map(|id| {
+        let id_lit = syn::LitStr::new(&id, span);
+        quote_spanned! { span => id = #id_lit, }
+    });
 
     let arg_attr = if resolved.is_bool {
         // Presence-only flags (`ArgAction::SetTrue`) can express `true` but not
@@ -178,6 +186,7 @@ fn process_cli_field(
             #[arg(
                 long = #long_lit,
                 short = #short_lit,
+                #id_attribute
                 #replay_attributes
                 value_name = "BOOL",
                 num_args = 0..=1,
@@ -187,7 +196,12 @@ fn process_cli_field(
         }
     } else {
         quote_spanned! { span =>
-            #[arg(long = #long_lit, short = #short_lit, #replay_attributes)]
+            #[arg(
+                long = #long_lit,
+                short = #short_lit,
+                #id_attribute
+                #replay_attributes
+            )]
         }
     };
 

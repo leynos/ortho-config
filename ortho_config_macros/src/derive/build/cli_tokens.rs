@@ -8,7 +8,9 @@ use crate::derive::build::{
     CliFieldMetadata, build_cli_field_metadata, build_cli_struct_fields, build_config_flag_field,
     effective_config_cli_long,
 };
-use crate::derive::parse::{SerdeRenameAll, clap_arg_id_or_field_name, serde_serialized_field_key};
+use crate::derive::parse::{
+    SerdeRenameAll, clap_arg_id_or_field_name, clap_member_name, serde_serialized_field_key,
+};
 
 use super::profile_flag::{ProfileFlagBuildInputs, build_profile_flag_field};
 
@@ -34,9 +36,11 @@ fn build_cli_field_info(
     // The arg id is resolved by the shared helper so `CliValueExtractor` looks
     // the field up under the same id the generated `clap` attribute declares,
     // including the `r#`-stripping fallback for raw identifiers.
+    let field_name = clap_member_name(field)?;
     let arg_id = clap_arg_id_or_field_name(field)?;
     let serialized_key = serde_serialized_field_key(field, serde_rename_all)?;
     Ok(CliFieldInfo {
+        field_name,
         serialized_key,
         arg_id,
         is_default_as_absent: attrs.cli_default_as_absent,

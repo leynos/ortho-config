@@ -68,7 +68,7 @@ pub(crate) fn clap_arg_id_from_attribute(
 /// Only [`clap_arg_id_or_field_name`] should need this: callers that want the
 /// id clap will actually record must go through the resolver, so the fallback
 /// is applied in one place.
-fn clap_arg_id(field: &syn::Field) -> syn::Result<Option<String>> {
+pub(crate) fn clap_arg_id(field: &syn::Field) -> syn::Result<Option<String>> {
     let mut arg_id: Option<syn::LitStr> = None;
     for attr in field.attrs.iter().filter(|attr| is_clap_attribute(attr)) {
         clap_arg_id_from_attribute(attr, &mut arg_id)?;
@@ -91,6 +91,16 @@ pub(crate) fn clap_arg_id_or_field_name(field: &syn::Field) -> syn::Result<Strin
     if let Some(explicit) = clap_arg_id(field)? {
         return Ok(explicit);
     }
+    clap_member_name(field)
+}
+
+/// The Rust member name the generated CLI struct serializes.
+///
+/// The synthetic CLI struct keeps the source field's identifier and does not
+/// copy a `#[serde(rename)]`, so this is the key the parsed CLI object carries.
+/// `serde_derive` unraws the identifier, so `r#type` serializes under `type`;
+/// this helper applies the same rule so the lookup matches the object.
+pub(crate) fn clap_member_name(field: &syn::Field) -> syn::Result<String> {
     let ident = field
         .ident
         .as_ref()

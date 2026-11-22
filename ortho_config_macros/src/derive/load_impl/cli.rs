@@ -41,39 +41,68 @@ impl ParseBindings {
 
 /// Generate CLI parsing that retains the parse results the method reads.
 pub(super) fn build_cli_parse_tokens(krate: &TokenStream, bindings: ParseBindings) -> TokenStream {
-    if !bindings.retain_cli {
-        return quote! {
-            let args: Vec<std::ffi::OsString> = iter.into_iter().map(Into::into).collect();
-            let program_label = #krate::program_label_from_args(&args);
-            if let Err(error) = Self::command()
-                .try_get_matches_from_mut(args)
-                .and_then(|matches| Self::from_arg_matches(&matches))
-            {
-                errors.push(std::sync::Arc::new(error.into()));
-            }
-        };
-    }
+    let prefix = build_parse_prefix(krate);
+    let parse = if !bindings.retain_cli {
+        build_validation_only_parse()
+    } else if !bindings.retain_matches {
+        build_cli_only_parse()
+    } else {
+        build_cli_and_matches_parse()
+    };
+    quote! { #prefix #parse }
+}
 
-    if !bindings.retain_matches {
-        return quote! {
-            let args: Vec<std::ffi::OsString> = iter.into_iter().map(Into::into).collect();
-            let program_label = #krate::program_label_from_args(&args);
-            let parsed = Self::command()
-                .try_get_matches_from_mut(args)
-                .and_then(|matches| Self::from_arg_matches(&matches));
-            let cli = match parsed {
-                Ok(cli) => Some(cli),
-                Err(error) => {
-                    errors.push(std::sync::Arc::new(error.into()));
-                    None
-                }
-            };
-        };
-    }
-
+/// Emit the argument collection and program label shared by every parse shape.
+fn build_parse_prefix(krate: &TokenStream) -> TokenStream {
     quote! {
         let args: Vec<std::ffi::OsString> = iter.into_iter().map(Into::into).collect();
         let program_label = #krate::program_label_from_args(&args);
+    }
+}
+
+/// Emit the error push shared by every parse shape.
+///
+/// Each call site is inside an `Err(error) =>` arm, where `error` is bound.
+fn push_parse_error() -> TokenStream {
+    quote! {
+        errors.push(std::sync::Arc::new(error.into()));
+    }
+}
+
+/// Parse for validation only; no values are bound.
+fn build_validation_only_parse() -> TokenStream {
+    let push_error = push_parse_error();
+    quote! {
+        if let Err(error) = Self::command()
+            .try_get_matches_from_mut(args)
+            .and_then(|matches| Self::from_arg_matches(&matches))
+        {
+            #push_error
+        }
+    }
+}
+
+/// Parse and bind only the parsed struct.
+fn build_cli_only_parse() -> TokenStream {
+    let push_error = push_parse_error();
+    quote! {
+        let parsed = Self::command()
+            .try_get_matches_from_mut(args)
+            .and_then(|matches| Self::from_arg_matches(&matches));
+        let cli = match parsed {
+            Ok(cli) => Some(cli),
+            Err(error) => {
+                #push_error
+                None
+            }
+        };
+    }
+}
+
+/// Parse and bind both the parsed struct and `ArgMatches`.
+fn build_cli_and_matches_parse() -> TokenStream {
+    let push_error = push_parse_error();
+    quote! {
         let parsed = Self::command()
             .try_get_matches_from_mut(args)
             .and_then(|matches| {
@@ -82,7 +111,7 @@ pub(super) fn build_cli_parse_tokens(krate: &TokenStream, bindings: ParseBinding
         let (cli, matches) = match parsed {
             Ok((cli, matches)) => (Some(cli), Some(matches)),
             Err(error) => {
-                errors.push(std::sync::Arc::new(error.into()));
+                #push_error
                 (None, None)
             }
         };
@@ -203,16 +232,19 @@ fn build_sparse_cli_layer_tokens(
 
 /// Emit the guarded move of one field from the sanitized CLI object.
 ///
-/// The argument ID answers `value_source`, while the serialized key names the
-/// JSON member. They differ when the field carries `#[serde(rename)]` or a
-/// container-level rename rule, so using one for both would either test the
-/// wrong argument or remove the wrong member.
+/// Three spellings meet here. The argument ID answers `value_source`; the Rust
+/// member name is the key the synthetic CLI struct serializes; and the
+/// serialized key is the configuration member the sparse layer must override.
+/// They differ under `#[arg(id = "...")]`, `#[serde(rename = "...")]`, or a
+/// container-level rename rule, so reading or writing with the wrong one drops
+/// an explicit value or places it where the merge cannot see it.
 fn sparse_insertion(field: &CliFieldInfo, explicit_source: &TokenStream) -> TokenStream {
     let arg_id = LitStr::new(&field.arg_id, proc_macro2::Span::call_site());
+    let field_name = LitStr::new(&field.field_name, proc_macro2::Span::call_site());
     let serialized_key = LitStr::new(&field.serialized_key, proc_macro2::Span::call_site());
     quote! {
         if matches!(matches.value_source(#arg_id), #explicit_source) {
-            if let Some(field_value) = values.remove(#serialized_key) {
+            if let Some(field_value) = values.remove(#field_name) {
                 sparse.insert(#serialized_key.to_owned(), field_value);
             }
         }
@@ -237,9 +269,10 @@ mod tests {
     /// The `ValueSource` spelling for an explicitly typed value.
     const CLI: &str = "CommandLine";
 
-    /// One field with distinct clap and serde spellings.
-    fn field(arg_id: &str, serialized_key: &str) -> CliFieldInfo {
+    /// One field with distinct member, clap, and serde spellings.
+    fn field(field_name: &str, arg_id: &str, serialized_key: &str) -> CliFieldInfo {
         CliFieldInfo {
+            field_name: field_name.to_owned(),
             serialized_key: serialized_key.to_owned(),
             arg_id: arg_id.to_owned(),
             is_default_as_absent: false,
@@ -292,17 +325,18 @@ mod tests {
         );
     }
 
-    /// Each field is moved by its serialized key and tested by its argument ID.
+    /// Each field is read by its CLI member and stored under its config key.
     #[test]
-    fn sparse_layer_moves_each_field_by_its_serialized_key() {
+    fn sparse_layer_maps_member_names_to_serialized_keys() {
         let fields = [
-            field("port", "listen_port"),
-            field("nickname", "display_name"),
+            field("port", "listen_port", "service_port"),
+            field("nickname", "nickname", "display_name"),
         ];
         let rendered = build_cli_layer_tokens(&quote! { ::ortho_config }, &fields).to_string();
         for needle in [
-            "\"port\"",
             "\"listen_port\"",
+            "\"port\"",
+            "\"service_port\"",
             "\"nickname\"",
             "\"display_name\"",
         ] {
@@ -372,6 +406,6 @@ mod tests {
 
     /// A single field for the builders to extract.
     fn pruned_field() -> Vec<CliFieldInfo> {
-        vec![field("retries", "retries")]
+        vec![field("retries", "retries", "retries")]
     }
 }

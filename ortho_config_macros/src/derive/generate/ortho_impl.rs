@@ -235,6 +235,7 @@ mod tests {
     fn cli_default_as_absent_extractor_ignores_the_callers_features() -> Result<()> {
         let ident = parse_str("ServeArgs").context("parse ServeArgs ident")?;
         let fields = [crate::CliFieldInfo {
+            field_name: "port".to_owned(),
             serialized_key: "port".to_owned(),
             arg_id: "port".to_owned(),
             is_default_as_absent: true,

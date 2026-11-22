@@ -34,8 +34,9 @@ mod type_utils;
 
 pub(crate) use behaviour_attrs::parse_behaviour_meta;
 pub(crate) use clap_attrs::{
-    clap_arg_id_from_attribute, clap_arg_id_or_field_name, clap_field_env, clap_field_is_flattened,
-    clap_field_is_subcommand, clap_variant_name, reject_subcommand_ortho_config_attrs,
+    clap_arg_id, clap_arg_id_from_attribute, clap_arg_id_or_field_name, clap_field_env,
+    clap_field_is_flattened, clap_field_is_subcommand, clap_member_name, clap_variant_name,
+    reject_subcommand_ortho_config_attrs,
 };
 pub(crate) use clap_defaults::{ClapDefaultValue, ClapInferredDefault, clap_default_value};
 pub(crate) use discovery_attrs::{DiscoveryAttrs, MergeStrategy, parse_prefix};

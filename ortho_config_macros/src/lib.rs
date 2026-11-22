@@ -192,6 +192,13 @@ pub fn derive_subcommand_docs(input_tokens: TokenStream) -> TokenStream {
 /// lives.
 #[derive(Clone)]
 pub(crate) struct CliFieldInfo {
+    /// The Rust member name used by the generated CLI struct's serialization.
+    ///
+    /// The synthetic CLI struct keeps the source field's identifier and does
+    /// not copy a `#[serde(rename)]`, so this is the key the parsed CLI object
+    /// carries. It can differ from both [`Self::arg_id`] and
+    /// [`Self::serialized_key`].
+    pub field_name: String,
     /// The field name used by serde during serialization.
     ///
     /// This respects `#[serde(rename = "...")]` and `#[serde(rename_all = "...")]`
