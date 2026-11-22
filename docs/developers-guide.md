@@ -4804,7 +4804,7 @@ edit is overwritten on the next run. When a run changes the tracked
 `typos.toml`, commit the regenerated file; if the change is unrelated to the
 work in hand, commit it in a separate base pull request and stack the branch on
 it. `TYPOS_CONFIG_BUILDER_VERSION` in the `Makefile` pins the release the gate
-runs (currently `v0.1.3`); raise it together with the regenerated `typos.toml`,
+runs (currently `v0.1.4`); raise it together with the regenerated `typos.toml`,
 never on its own.
 
 Generic Oxford stems and corrections belong in the shared dictionary maintained
