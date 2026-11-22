@@ -3122,7 +3122,7 @@ mark that the alphanumeric test rejects.
 injection-shaped values, asserting the diagnostic and the absence of the
 payload's marker file.
 
-#### The `syn` dependency
+#### The parser dependencies
 
 `cargo-orthohelp/Cargo.toml` declares the parser with its default features
 disabled:
@@ -3137,11 +3137,17 @@ validated path itself, from the segmented syntax tree, so nothing here turns a
 tree back into tokens. Leaving the printer out also removes the easy route back
 to the caller's spelling, which is what the boundary above requires.
 
+The oracle needs one further crate: `unicode-ident = "1"`, a dev-dependency
+that supplies `is_xid_start` and `is_xid_continue` for
+`root_type_proptests.rs`. It is a dev-dependency because only the property
+oracle asks which characters may appear in an identifier; the parser hands the
+text to `syn` and never inspects character classes itself.
+
 The dependency sits inside that boundary, so it reaches the
 [bridge cache key](#the-bridge-cache-key) and the
 [bridge build environment](#bridge-build-environment) only through the rendered
 value those steps receive. The grammar it implements is specified in
-[`cargo-orthohelp` design §6.1.1](cargo-orthohelp-design.md#611-root_type-grammar).
+[`cargo-orthohelp` design §6.1.2](cargo-orthohelp-design.md#612-root_type-grammar).
 No ADR records the dependency: it implements a grammar the design document
 already fixes and introduces no boundary or invariant of its own.
 

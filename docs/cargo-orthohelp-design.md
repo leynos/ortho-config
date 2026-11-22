@@ -829,7 +829,7 @@ split_subcommands_into_functions = false
 help_info_uri = "https://example.com/help/MyApp"
 ```
 
-#### 6.1.1 `root_type` grammar
+#### 6.1.2 `root_type` grammar
 
 `root_type` is spliced into the generated bridge source, so both the
 `--root-type` flag and `package.metadata.ortho_config.root_type` must parse as
@@ -869,7 +869,7 @@ re-parsing or re-qualifying the caller's text.
 1. Discover the package with `cargo metadata`.
 2. Determine the root type from CLI or metadata. If missing, emit an error
    with remediation guidance. Parse the value as the restricted type path in
-   §6.1.1 and reject any other form before generating source.
+   §6.1.2 and reject any other form before generating source.
 3. Select the ephemeral bridge's IR cache entry under
    `target/orthohelp/<hash>/`, then create invocation-private bridge inputs:
    - Dependencies: `user_crate`, `ortho_config`.

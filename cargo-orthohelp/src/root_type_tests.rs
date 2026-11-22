@@ -1,4 +1,15 @@
-//! Unit tests for the metadata root type parser.
+//! Example-based tests for the root type grammar.
+//!
+//! `root_type.rs` owns `parse_root_type`, and this module is its companion
+//! table: small, complete and readable. `parses_root_type` pins the accepted
+//! forms and the rendering each produces — a bare name, a `crate` prefix, an
+//! already-qualified path, whitespace variants, raw identifiers and Unicode
+//! identifiers — and `rejects_unsupported_root_type` pins the diagnostic for
+//! every form the grammar refuses.
+//!
+//! `root_type_proptests.rs`, included beside this module, covers the open-ended
+//! remainder of the input space with properties. A new named form belongs in
+//! this table; a new invariant over many inputs belongs there.
 
 use super::*;
 use rstest::rstest;
