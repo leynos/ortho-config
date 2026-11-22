@@ -2031,12 +2031,13 @@ configuration type in the package's `Cargo.toml` with
 `[package.metadata.ortho_config] root_type = "crate::path::Type"` (or pass
 `--root-type`), keep that type public, and make its documentation metadata
 available from the selected library or binary target. The value must be a plain
-type path; generics, tuples, references, qualified self types, global paths, a
-bare `crate`, `crate`, `self`, `super`, or `Self` in any other position, and
-statement- or expression-shaped values are rejected before the bridge is
-generated. The default format is `ir`. `--format agent-context` writes
-`agent-context.json` and also emits the same compact JSON document to standard
-output, so a pipeline can consume it directly.
+type path, with an optional leading `crate::` that is rewritten to the package
+crate name; generics, tuples, references, qualified self types, global paths, a
+bare `crate`, a leading `self`, `super`, or `Self`, `crate`, `self`, `super`, or
+`Self` in any later segment, and statement- or expression-shaped values are
+rejected before the bridge is generated. The default format is `ir`.
+`--format agent-context` writes `agent-context.json` and also emits the same
+compact JSON document to standard output, so a pipeline can consume it directly.
 
 ## Collect bridge-cache metrics
 
