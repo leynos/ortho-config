@@ -66,10 +66,14 @@ CLI ledger is keyed by the identifier.
       passed except `cargo-orthohelp --test compile_time :: must_use_compile_tests`,
       which hit its unchanged 900 s child deadline. A standalone build of that
       child took 17 m 45 s under a ~500-deep admission queue, beyond the
-      deadline before any UI case ran; the first UI case then passed. This is
-      host-load evidence, not a branch defect.
-- [ ] Clear CodeRabbit findings and record the composite test evidence in the
-      pull request.
+      deadline before any UI case ran.
+- [x] (2026-11-22) Ran the same trybuild child directly with no deadline: all
+      six UI cases passed (`test result: ok. 1 passed`, 3643 s, almost entirely
+      admission queueing). The suite's assertions are green; only the fixed
+      deadline is defeated by host load.
+- [x] (2026-11-22) `coderabbit review --agent --base main` reported 0 findings
+      across 36 reviewed files.
+- [x] (2026-11-22) Draft pull request #725 opened with the composite evidence.
 - [ ] Push the branch and open the draft pull request.
 
 ## Surprises & discoveries
@@ -133,7 +137,19 @@ CLI ledger is keyed by the identifier.
 
 ## Outcomes & retrospective
 
-Pending completion of the gates and review.
+Delivered the single serde-visible key model and wired it into the generated
+CLI and defaults structs, `CliValueExtractor`, `cli_default_as_absent` pruning,
+profile collision checks, file documentation, and declarative collection
+strategies. Renamed scalars now override correctly from the command line, and
+renamed vectors append across defaults, file, environment, and CLI.
+
+Lessons: `parse_input` is shared with `RequiredConfigSchema`, so flatten
+rejection had to be conditional; the hidden CLI does not replay `#[arg(long)]`,
+so a fixture needs `cli_long` when manual and generated parsers must agree; a
+directional rename needs both a serialization key for extraction and a
+deserialization key for layering. The only red gate was a fixed 900 s trybuild
+deadline in an unchanged package, and running the child without the deadline
+passed all cases, confirming host capacity rather than a branch defect.
 
 ## Conformance basis
 
