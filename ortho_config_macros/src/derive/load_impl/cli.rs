@@ -12,18 +12,38 @@ use quote::quote;
 use syn::LitStr;
 
 /// Generate CLI parsing that retains clap's value-source metadata for layering.
-pub(super) fn build_cli_parse_tokens(krate: &TokenStream) -> TokenStream {
+///
+/// `retain_parsed_values` selects whether the parsed struct and `ArgMatches`
+/// are bound for the CLI layer. A struct with no option field cannot form a
+/// layer, so its parse is validation-only: errors are still reported, but no
+/// bindings are emitted for values nothing would read.
+pub(super) fn build_cli_parse_tokens(
+    krate: &TokenStream,
+    retain_parsed_values: bool,
+) -> TokenStream {
+    if !retain_parsed_values {
+        return quote! {
+            let args: Vec<std::ffi::OsString> = iter.into_iter().map(Into::into).collect();
+            let program_label = #krate::program_label_from_args(&args);
+            if let Err(error) = Self::command()
+                .try_get_matches_from_mut(args)
+                .and_then(|matches| Self::from_arg_matches(&matches))
+            {
+                errors.push(std::sync::Arc::new(error.into()));
+            }
+        };
+    }
+
     quote! {
         let args: Vec<std::ffi::OsString> = iter.into_iter().map(Into::into).collect();
         let program_label = #krate::program_label_from_args(&args);
-        let (cli, matches) = match Self::command().try_get_matches_from_mut(args) {
-            Ok(matches) => match Self::from_arg_matches(&matches) {
-                Ok(cli) => (Some(cli), Some(matches)),
-                Err(error) => {
-                    errors.push(std::sync::Arc::new(error.into()));
-                    (None, None)
-                }
-            },
+        let parsed = Self::command()
+            .try_get_matches_from_mut(args)
+            .and_then(|matches| {
+                Self::from_arg_matches(&matches).map(|cli| (cli, matches))
+            });
+        let (cli, matches) = match parsed {
+            Ok((cli, matches)) => (Some(cli), Some(matches)),
             Err(error) => {
                 errors.push(std::sync::Arc::new(error.into()));
                 (None, None)
@@ -103,12 +123,9 @@ fn build_sparse_cli_layer_tokens(
     explicit_source: ExplicitSource,
 ) -> TokenStream {
     if cli_field_info.is_empty() {
-        // No configuration field can enter a CLI layer, but the parse bindings
-        // still exist in the generated method. Reading them keeps the emitted
-        // code warning-free under `-D warnings`. The name is underscore-
-        // prefixed so the binding itself is exempt from the unused-variable
-        // lint, without relying on `let _` and its `must_use` interaction.
-        return quote! { let _parsed = (cli.as_ref(), matches.as_ref()); };
+        // No configuration field can enter a CLI layer. The declarative parse
+        // is validation-only in this case, so there are no bindings to read.
+        return TokenStream::new();
     }
 
     let source_pattern = explicit_source.tokens();
@@ -278,21 +295,27 @@ mod tests {
         );
     }
 
-    /// A struct with no CLI field still reads the parse bindings.
+    /// A struct with no CLI field parses for validation only.
     ///
-    /// Otherwise the generated method would carry unused `cli` and `matches`
-    /// bindings and fail the caller's `-D warnings` build. No layer is emitted
-    /// because no configuration value can enter one.
+    /// No layer is emitted because no configuration value can enter one, and
+    /// the parse must not bind `cli` or `matches`: nothing would read them, and
+    /// artificial reads would hide that fact from the unused-variable lint.
     #[test]
-    fn empty_field_list_keeps_parse_bindings_read() {
-        let rendered = build_cli_layer_tokens(&quote! { ::ortho_config }, &[]).to_string();
+    fn empty_field_list_uses_a_validation_only_parse() {
+        let layer = build_cli_layer_tokens(&quote! { ::ortho_config }, &[]).to_string();
         assert!(
-            rendered.contains("cli . as_ref") && rendered.contains("matches . as_ref"),
-            "the empty case must read both parse bindings: {rendered}"
+            layer.is_empty(),
+            "the empty field list must emit no CLI layer: {layer}"
+        );
+
+        let parse = build_cli_parse_tokens(&quote! { ::ortho_config }, false).to_string();
+        assert!(
+            parse.contains("try_get_matches_from_mut") && parse.contains("errors . push"),
+            "the validation-only parse must still report parse errors: {parse}"
         );
         assert!(
-            !rendered.contains("push_cli"),
-            "the empty case must not push a CLI layer: {rendered}"
+            !parse.contains("let (cli") && !parse.contains("_parsed"),
+            "the validation-only parse must not bind values nothing reads: {parse}"
         );
     }
 
