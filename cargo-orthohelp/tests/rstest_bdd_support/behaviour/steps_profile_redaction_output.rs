@@ -27,7 +27,7 @@ use super::steps::{OrthoHelpContext, StepResult};
 ///
 /// The table is the positive half of the disclosure contract: these identities
 /// stay visible, each with the classification its author declared.
-const EXPECTED_REDACTION: [RedactionExpectation; 5] = [
+const EXPECTED_REDACTION: [RedactionExpectation; 6] = [
     RedactionExpectation {
         command_path: &["redaction_fixture"],
         field: "token",
@@ -47,6 +47,11 @@ const EXPECTED_REDACTION: [RedactionExpectation; 5] = [
         command_path: &["redaction_fixture"],
         field: "credential_file",
         exposure: "reference_only",
+    },
+    RedactionExpectation {
+        command_path: &["redaction_fixture"],
+        field: "inferred_secret",
+        exposure: "secret",
     },
     RedactionExpectation {
         command_path: &["redaction_fixture", "rotate"],
@@ -285,7 +290,7 @@ fn no_unsupported_sentinel_in_any_artefact(
 fn redaction_list_names_both_fields(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
     let context = read_stdout_json(orthohelp_context)?;
     let records = redaction_records(&context)?;
-    let hidden = ["api_key", "credential_file"];
+    let hidden = ["api_key", "inferred_secret", "credential_file"];
     for expected in EXPECTED_REDACTION
         .iter()
         .filter(|expected| hidden.contains(&expected.field))
@@ -306,7 +311,7 @@ fn hidden_and_file_only_fields_are_not_invocable(
         .ok_or("commands missing from context")?;
     require(!commands.is_empty(), "the context must expose commands")?;
     for command in commands {
-        for field in ["api_key", "credential_file"] {
+        for field in ["api_key", "inferred_secret", "credential_file"] {
             require(
                 context_input(command, field).is_none(),
                 format!("{field} must not be an invocable input"),

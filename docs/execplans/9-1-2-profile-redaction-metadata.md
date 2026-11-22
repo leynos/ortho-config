@@ -451,9 +451,10 @@ the documented production mapping. Reuse PR #651's existing checksum-pinned
 `tools/verus/VERSION` and `tools/verus/SHA256SUMS`, shared runner pin, and
 `make verus` recipe. The current Verus pin is `0.2026.01.30.44ebdee`; the
 shared package is pinned to `592558f7183b554fc749696246984c5d7300d029` and runs
-with Python 3.14 through `uv`. The repository script baseline remains Python
-3.13. Do not introduce a second installer, runner, solver pin, or replacement
-Make target.
+with Python 3.14 through `uv`. New scripts target Python 3.14, as
+`docs/scripting-standards.md` requires; an older interpreter is allowed only
+where an integration constraint applies and is documented inline. Do not
+introduce a second installer, runner, solver pin, or replacement Make target.
 
 Register `verus/profile_redaction.rs` in the existing `VERUS_PROOF_FILES`
 Makefile inventory. Before registration, an explicit focused invocation is:
@@ -1113,14 +1114,22 @@ M1 discoveries, 2026-11-15:
 
 M2 discoveries, 2026-11-16:
 
-- Only `#[ortho_config(default = ...)]` literals reach the macro-modelled
-  `FieldMetadata::default` slot. A `#[arg(long, default_value = ...)]` literal
-  is clap-only and never appears in any generated artefact, even before the
-  projection. The sentinel catalogue therefore over-states what the default
-  clearing actually removes; `credential_file` is the one protected field whose
-  default the projection has to clear, and it is the literal the seeded fault
-  exposed. Enum members and examples are modelled for both classifications, so
-  those slots do exercise every field.
+- An explicit `#[ortho_config(default = ...)]` literal reaches the
+  macro-modelled `FieldMetadata::default` slot. A plain
+  `#[arg(long, default_value = ...)]` literal stays clap-only and never appears
+  in any generated artefact, even before the projection. The exception is a
+  field that also carries `#[ortho_config(cli_default_as_absent)]` and no
+  explicit `ortho_config(default)`: the derive then models the clap literal as
+  the field's `DefaultValue`, so the projection is the only thing removing it
+  from a published artefact. The sentinel catalogue previously over-stated what
+  the default clearing removes, because every protected default in the fixture
+  was clap-only except `credential_file`, the one literal the seeded fault
+  exercised. The fixture now also declares `inferred_secret`, a protected field
+  with `cli_default_as_absent`, so the catalogue's `INFERRED-DEFAULT-SENTINEL`
+  is published before projection and must be cleared by it; a unit test in the
+  docs emitter pins that the inferred default becomes the documentation default
+  in the first place. Enum members and examples are modelled for both
+  classifications, so those slots do exercise every field.
 - `cargo test --test <target>` does not rebuild the package's binary target, so
   a golden test that spawns `target/debug/cargo-orthohelp` can execute a stale
   binary. The fault experiment only became observable in the subprocess suites
@@ -1406,6 +1415,23 @@ point's prose still implied the slot assertions catch any mistake the oracle
 shares; it now says they catch a shared mistake about a preserved or cleared
 slot, but not a shared `model_has_protected` decision, which drives the
 command-example expectation on both sides.
+
+2026-11-22, formal review round: the two findings against this head were both
+documentation-accuracy issues with a coverage consequence, and both are
+actioned. The first corrected the plan's Python baseline: new scripts target
+3.14, as `docs/scripting-standards.md` requires, and an older interpreter is
+allowed only for a documented integration constraint. The second corrected the
+claim that a clap `default_value` never reaches generated documentation. That
+holds for a plain `#[arg]`, but a field with `cli_default_as_absent` and no
+explicit `ortho_config(default)` models the clap literal as its `DefaultValue`,
+so the projection is the only thing that removes it. The fixture now declares
+`inferred_secret`, protected and hidden from help, whose
+`INFERRED-DEFAULT-SENTINEL` is in the shared catalogue; the derive's docs
+emitter has three unit tests pinning that the inferred default reaches the
+documentation default and that an explicit default wins; the behavioural
+expectation table and the hidden-field lists include the new record; and the
+two golden snapshots show the field's public descriptor present with no
+default, which is the projection doing its job.
 
 ## Outcomes & retrospective
 

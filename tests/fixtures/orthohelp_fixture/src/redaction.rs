@@ -62,6 +62,22 @@ pub struct RedactionFixtureConfig {
     )]
     pub api_key: String,
 
+    /// Confidential default that clap would otherwise publish.
+    ///
+    /// `cli_default_as_absent` makes the derive read this clap literal as the
+    /// field's documentation default before projection, unlike the fields
+    /// above whose `default_value` never leaves clap. The projection is
+    /// therefore the only thing standing between this literal and a published
+    /// artefact.
+    #[arg(long, default_value = "INFERRED-DEFAULT-SENTINEL")]
+    #[ortho_config(
+        profile_field = "secret",
+        cli_default_as_absent,
+        cli(hide_in_help),
+        example(code = "redaction-fixture --inferred-secret INFERRED-EXAMPLE-SENTINEL")
+    )]
+    pub inferred_secret: String,
+
     /// Reference only configurable through a file.
     #[ortho_config(
         skip_cli,

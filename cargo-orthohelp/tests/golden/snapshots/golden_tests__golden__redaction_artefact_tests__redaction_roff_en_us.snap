@@ -37,6 +37,9 @@ Confidential API key. Equivalent to \fB\--api-key\fR.
 \fBREDACTION_FIXTURE_CREDENTIAL_FILE\fR
 Credential file reference.
 .TP
+\fBREDACTION_FIXTURE_INFERRED_SECRET\fR
+Confidential inferred default. Equivalent to \fB\--inferred-secret\fR.
+.TP
 \fBREDACTION_FIXTURE_LOCATOR\fR
 Locator resolved elsewhere. Equivalent to \fB\--locator\fR.
 .TP
@@ -66,6 +69,9 @@ Locator resolved elsewhere.
 .TP
 \fBapi_key\fR
 Confidential API key.
+.TP
+\fBinferred_secret\fR
+Confidential inferred default.
 .TP
 \fBcredential_file\fR
 Credential file reference.

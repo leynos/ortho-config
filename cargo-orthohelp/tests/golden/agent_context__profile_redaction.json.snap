@@ -198,6 +198,14 @@ expression: snapshot
         "command_path": [
           "redaction_fixture"
         ],
+        "field_name": "inferred_secret",
+        "key_path": "inferred_secret",
+        "exposure": "secret"
+      },
+      {
+        "command_path": [
+          "redaction_fixture"
+        ],
         "field_name": "locator",
         "key_path": "locator",
         "exposure": "reference_only"

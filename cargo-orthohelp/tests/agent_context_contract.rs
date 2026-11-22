@@ -83,8 +83,26 @@ fn redaction_keeps_protected_values_out_of_streams_and_artefact() -> TestResult 
         .and_then(|profiles| profiles.get("redaction"))
         .and_then(Value::as_array)
         .ok_or("profiles.redaction should be an array")?;
-    if redaction.len() != 5 {
-        return Err(format!("expected 5 redaction records, got {}", redaction.len()).into());
+    // Comparing identities rather than a count keeps this contract from
+    // passing when the fixture drops a record and adds an unrelated one.
+    // Records are ordered by `(command_path, field_name)`, so the root's
+    // fields precede the nested command's.
+    let expected_fields = [
+        "api_key",
+        "credential_file",
+        "inferred_secret",
+        "locator",
+        "token",
+        "replacement",
+    ];
+    let actual: Vec<&str> = redaction
+        .iter()
+        .filter_map(|record| record.get("field_name").and_then(Value::as_str))
+        .collect();
+    if actual != expected_fields {
+        return Err(
+            format!("expected protected fields {expected_fields:?}, got {actual:?}").into(),
+        );
     }
     // Non-vacuity: the same document keeps the public description and default.
     for expected in ["Redaction fixture command tree.", "eu-west"] {
