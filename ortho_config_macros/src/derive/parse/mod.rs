@@ -179,4 +179,3 @@ pub(crate) struct FieldAttrs {
     /// Disclosure classification declared by `profile_field = "..."`.
     pub profile_field: Option<ProfileFieldAnnotation>,
 }
-// weave: run 'weave explain ortho_config_macros/src/derive/parse/mod.rs' for per-hunk detail, 'weave check' to verify your resolution

@@ -947,7 +947,7 @@ exclusion as it stood at that milestone; it no longer applies.
   selector-group passes). The direct-entry localization fixture gained a
   non-empty protected field example, so its assertion can detect a retained
   one, with an explicit precondition that the raw fixture carries it. The
-  "preorder" wording in ADR-0024, the design documents, and the developers'
+  "preorder" wording in ADR-0026, the design documents, and the developers'
   guide now describes the parent-before-child encoding the invariant actually
   admits or names it as production's one permitted order. The M2 pre-change
   cache evidence is settled by the 2026-11-21 decision entry, and the
@@ -977,7 +977,7 @@ exclusion as it stood at that milestone; it no longer applies.
   ignored) are recorded. The Verus entry point's first mapping claim said every
   production slot has a model counterpart while the same section says preserved
   slots are collapsed; it now claims a counterpart only for slots the
-  projection can change, matching the table and ADR-0024.
+  projection can change, matching the table and ADR-0026.
 
 - [x] (2026-11-21) Clear the CodeScene duplication advisory. The hosted
   `CodeScene Code Health Review` failed on `Code Duplication` between
@@ -1346,6 +1346,40 @@ behaviour is unchanged and both halves are already pinned by
 `available_names_do_not_opt_an_unsupported_declaration_in` and
 `redaction_on_an_unsupported_declaration_is_rejected`; the method's rustdoc now
 states the reason.
+
+2026-11-22, rebased for delivery: replay `0dbd7bd7..79e91e5c` onto `main` at
+`9a2012ad`, which added the 7.3.1 required-values feature (#589) and a
+developers' guide section (#720). Four files conflicted semantically. The
+derive's field-attribute parser took main's extracted `set_*` helper shape, with
+`profile_field` routed through it, and main's `skip_cli` now sets
+`CliFieldMode::Skipped` rather than a removed `skip_cli` flag.
+`discard_unknown` keeps this branch's one-token-at-a-time scan instead of main's
+`Expr` parse, because the branch's version also survives a following bare
+`flatten`. Both sides had added `serde_field_is_flattened`; main's helper-based
+body is kept with this branch's rationale. The migration guide gained main's
+sections 12–13, so the branch's two sections moved to 14 and 15 and the
+CHANGELOG and users-guide anchors follow. The redaction ADR was numbered 0018
+when main already had an ADR-0018, and main has since taken through 0025, so it
+is now ADR-0026 everywhere; two design-document links that a replayed
+intermediate commit had left pointing at a nonexistent
+`adr-0024-profile-field-redaction.md` were repaired at the tip. Three
+replay-only commits (the setter routing and the two earlier renumber attempts)
+are superseded by the resolutions and by later commits: what remains of them in
+the series is partly redundant churn, and the tip's tree, not their individual
+diffs, is the reviewed artefact. They are retained rather than rewritten a
+third time, so the series stays a complete record of how the branch reached
+this state.
+
+The rebased candidate passed ten of the eleven gates on `98e236de`. `make test`
+failed only in `cargo-orthohelp`'s `must_use_compile_tests`: its trybuild child
+was killed at the 900 s deadline twice, from a cold and then a fully warm main
+build, with zero rustc or clippy diagnostics and the admission queue 426 deep.
+The branch does not touch `cargo-orthohelp/tests/compile_time.rs`, the same
+target passed locally before the rebase on a warm scratch tree, and the hosted
+`build-test` legs for Linux and Windows are green on this head, so the failure
+is attributed to host compile-admission saturation rather than to the change.
+The hosted legs are the authoritative environment for that suite; the local
+residual is recorded here rather than treated as a passing gate.
 
 ## Outcomes & retrospective
 

@@ -493,7 +493,7 @@ The accepted labels, the slots each removes, and the projection that applies
 them are described in
 [the users' guide](users-guide.md#keep-profile-values-out-of-generated-documentation),
 and the contract and its boundaries are recorded in
-[ADR-0024](adrs/adr-0024-profile-field-redaction.md).
+[ADR-0026](adrs/adr-0026-profile-field-redaction.md).
 
 Upgrading code that consumes the metadata:
 

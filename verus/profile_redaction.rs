@@ -106,5 +106,3 @@ mod profile_redaction_noninterference;
 fn main() {}
 
 }
-// weave: run 'weave explain verus/profile_redaction.rs' for per-hunk detail, 'weave check' to verify your resolution
-// weave: run 'weave explain verus/profile_redaction.rs' for per-hunk detail, 'weave check' to verify your resolution

@@ -568,7 +568,7 @@ variant vocabulary:
   own right: it projects the whole group of nodes it returns with
   `DocMetadata::redacted_group_for_output`, deciding the command-example rule
   once over the group rather than trusting each member. See
-  [ADR-0024](adrs/adr-0024-profile-field-redaction.md).
+  [ADR-0026](adrs/adr-0026-profile-field-redaction.md).
 - **Unit variants** (`Start`, `Stop`, `Status`) emit a minimal `DocMetadata`
   node: command label, generated `about_id`, default heading identifiers, and
   empty `fields` and `subcommands`. A service or daemon CLI is built from
