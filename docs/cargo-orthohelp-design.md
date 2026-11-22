@@ -852,10 +852,11 @@ source receive.
 Generics and parenthesized path arguments (`Config<T>`, `Fn(A) -> B`), tuples
 (`(A, B)`), references (`&Config`), qualified self types
 (`<Config as Trait>::Assoc`), global paths (`::my_app::Config`), paths starting
-with `self`, `super`, or `Self`, a bare `crate`, and any statement- or
-expression-shaped input are rejected with an `InvalidRootType` diagnostic.
-Parsing rather than pattern matching is essential: the value must never reach
-the generated source as text the caller controls.
+with `self`, `super`, or `Self`, `crate`, `self`, `super`, or `Self` in any
+later segment, a bare `crate`, and any statement- or expression-shaped input
+are rejected with an `InvalidRootType` diagnostic. Parsing rather than pattern
+matching is essential: the value must never reach the generated source as text
+the caller controls.
 
 The grammar, its rejections, and the canonical renderer live in
 `cargo-orthohelp/src/root_type.rs`. `metadata::select_package` is the only

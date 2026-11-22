@@ -48,6 +48,22 @@ fn parses_root_type(#[case] raw: &str, #[case] crate_ident: &str, #[case] expect
 #[case::relative_self("self::Config", "`self` cannot start a root type path")]
 #[case::relative_super("super::Config", "`super` cannot start a root type path")]
 #[case::assoc_self("Self::Config", "`Self` cannot start a root type path")]
+#[case::mid_path_crate(
+    "demo::crate::Config",
+    "`crate` cannot appear after the first segment of a root type path"
+)]
+#[case::mid_path_self(
+    "demo::self::Config",
+    "`self` cannot appear after the first segment of a root type path"
+)]
+#[case::mid_path_super(
+    "demo::super::Config",
+    "`super` cannot appear after the first segment of a root type path"
+)]
+#[case::mid_path_self_type(
+    "demo::Self::Config",
+    "`Self` cannot appear after the first segment of a root type path"
+)]
 #[case::injection(
     "Config as OrthoConfigDocs>::get_doc_metadata(); std::process::exit(1); let _ = <Config",
     "failed to parse root type"

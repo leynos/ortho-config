@@ -84,9 +84,10 @@ pub struct Args {
     /// Root configuration type path (for example, `my_crate::Config`).
     ///
     /// Accepts a plain type path only. Generics, tuples, references,
-    /// qualified self types, global paths, a bare `crate`, module-relative
-    /// starts (`self`, `super`, `Self`), and statement- or expression-shaped
-    /// values are rejected before the bridge is generated.
+    /// qualified self types, global paths, a bare `crate`, and `crate`,
+    /// `self`, `super`, or `Self` in any later segment or at the start, and
+    /// statement- or expression-shaped values are rejected before the bridge
+    /// is generated.
     #[arg(long, value_name = "path::Type")]
     pub root_type: Option<String>,
     /// Locale to render (repeat for multiple locales).

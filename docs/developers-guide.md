@@ -3100,10 +3100,14 @@ its parsed segments. Two rules keep the boundary narrow:
   survive parsing, however it is spelled.
 
 Rejected forms are a qualified self type, a leading `::`, generic or
-parenthesized path arguments, a bare `crate`, and a leading `self`, `super`, or
-`Self`. Each reports `OrthohelpError::InvalidRootType`, which carries the
-caller's original spelling alongside the reason. Adding a form to the grammar
-means adding its rejection message here and a case to the `rstest` table.
+parenthesized path arguments, a bare `crate`, a leading `self`, `super`, or
+`Self`, and any `crate`, `self`, `super`, or `Self` segment after the first.
+That last rule is why the parser inspects the whole path: `syn` accepts those
+keywords in any position, while Rust allows them only at the start, so
+`demo::crate::Config` would otherwise fail in the bridge instead of here. Each
+rejection reports `OrthohelpError::InvalidRootType`, which carries the caller's
+original spelling alongside the reason. Adding a form to the grammar means
+adding its rejection message here and a case to the `rstest` table.
 
 `cargo-orthohelp/src/root_type_tests.rs` pins the named accepted and rejected
 forms with an `rstest` table. `cargo-orthohelp/src/root_type_proptests.rs`

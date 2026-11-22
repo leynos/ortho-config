@@ -22,8 +22,8 @@ use crate::error::OrthohelpError;
 ///
 /// Returns [`OrthohelpError::InvalidRootType`] when the value does not parse as
 /// a type path, or when it carries a qualified self type, a leading `::`,
-/// generic or parenthesized path arguments, or a leading segment that cannot
-/// name a type in the bridge crate.
+/// generic or parenthesized path arguments, or a `crate`, `self`, `super`, or
+/// `Self` segment that cannot name a type in the bridge crate.
 pub(crate) fn parse_root_type(raw: &str, crate_ident: &str) -> Result<String, OrthohelpError> {
     let parsed = syn::parse_str::<syn::TypePath>(raw)
         .map_err(|error| invalid_root_type(raw, error.to_string()))?;
@@ -62,7 +62,44 @@ fn ensure_supported_root_type(parsed: &syn::TypePath, raw: &str) -> Result<(), O
         ));
     }
 
+    ensure_no_relative_keyword_after_first(parsed, raw)?;
     ensure_type_path_start(parsed, raw)
+}
+
+/// Rejects `crate`, `self`, `super`, and `Self` outside the first segment.
+///
+/// Rust allows these keywords only at the start of a path. `syn` parses them
+/// in any position, so `demo::crate::Config` would otherwise reach the bridge
+/// and fail there with a rustc diagnostic instead of this one.
+fn ensure_no_relative_keyword_after_first(
+    parsed: &syn::TypePath,
+    raw: &str,
+) -> Result<(), OrthohelpError> {
+    let Some(segment) = parsed
+        .path
+        .segments
+        .iter()
+        .skip(1)
+        .find(|segment| is_relative_keyword(&segment.ident))
+    else {
+        return Ok(());
+    };
+
+    Err(invalid_root_type(
+        raw,
+        format!(
+            "`{}` cannot appear after the first segment of a root type path",
+            segment.ident
+        ),
+    ))
+}
+
+/// Reports whether `ident` is one of Rust's path-relative keywords.
+fn is_relative_keyword(ident: &syn::Ident) -> bool {
+    matches!(
+        ident.to_string().as_str(),
+        "crate" | "self" | "super" | "Self"
+    )
 }
 
 /// Rejects leading segments that name a module or the bridge's own crate.

@@ -9,8 +9,8 @@ All notable changes to this project will be documented in this file.
 - **Bridge source injection through `root_type`.** `cargo-orthohelp` now
   parses `--root-type` and `package.metadata.ortho_config.root_type` as a
   restricted type path before splicing the value into generated bridge source.
-  Generics, tuples, references, qualified self types, global paths,
-  module-relative starts (`self`, `super`, `Self`), a bare `crate`, and
+  Generics, tuples, references, qualified self types, global paths, a bare
+  `crate`, `crate`, `self`, `super`, or `Self` in any other position, and
   statement- or expression-shaped values are rejected with an `InvalidRootType`
   diagnostic instead of being compiled and run
   ([#430](https://github.com/leynos/ortho-config/issues/430)).
