@@ -838,11 +838,13 @@ that initialization - receiving its cached `Result` afterwards, which is why
 six of them print one identical 1,180-byte tail. That contract's own clock
 started at `Budget::new`, so a packaging invocation bounded by what is left is
 cut at the remainder. Under nextest the same arithmetic applies, but there the
-spender can also be the packaging lease, because each contract is its own
-process and each one does reach `prepare`. The baseline reported the allowance
-as exhausted before `cargo package` could start at all, so the lease changed
-the failure from "never ran" to "ran and was cut at a named remainder", not
-from red to green.
+spender is first the run guard: each contract is its own process, and
+`build_packaged_set` calls `hold_run` before `prepare`, so a process arriving
+while another holds the guard waits there and never reaches the lease. Only a
+process that wins the guard goes on to `prepare`, where the lease can then be
+the wait. The baseline reported the allowance as exhausted before
+`cargo package` could start at all, so the lease changed the failure from
+"never ran" to "ran and was cut at a named remainder", not from red to green.
 
 **Not delivered: D3.** Recorded rather than claimed. The survey above shows the
 suite already asserts every graph property from `cargo metadata`; the only

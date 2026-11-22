@@ -37,6 +37,14 @@ use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::fs_utf8::Dir;
 use rstest::{fixture, rstest};
 
+/// The packaging callee's name, assembled rather than written as a literal.
+///
+/// The tree-wide scan reads this module too, so a literal here would be counted
+/// as a packaging call site and the assertion would report its own text.
+fn package_sources_name() -> String {
+    ["package", "_sources"].concat()
+}
+
 /// The suite packages once per run, not once per contract.
 ///
 /// Four separate shape claims, each about a different way the duplication
@@ -71,7 +79,13 @@ fn the_packaging_boundary_is_entered_once_per_run() -> Result<()> {
     // scope is exactly what may call it, so a scan of `package_set` would miss
     // the very bypass it is meant to catch. `boundary_tests` cannot reach it,
     // and is not part of this tree.
-    let packaging = count_in_tree(&sources.join("boundary"), Callee::named("package_sources"))?;
+    // Assembled, because this file is inside the tree being scanned: a bare
+    // callee literal would make the scanner count its own assertion and report
+    // a second packaging site.
+    let packaging = count_in_tree(
+        &sources.join("boundary"),
+        Callee::named(&package_sources_name()),
+    )?;
     ensure!(
         packaging == 1,
         "the packaging boundary is invoked from {packaging} places under \
@@ -159,7 +173,10 @@ fn a_call_outside_package_set_is_counted(scratch_sources: Result<ScratchSources>
         )
         .with_context(|| format!("plant a bypass call at {bypass}"))?;
 
-    let counted = count_in_tree(&sources.join("boundary"), Callee::named("package_sources"))?;
+    let counted = count_in_tree(
+        &sources.join("boundary"),
+        Callee::named(&package_sources_name()),
+    )?;
     ensure!(
         counted == 1,
         "a packaging call planted at boundary/consumer/mod.rs was counted {counted} \

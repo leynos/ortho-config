@@ -50,7 +50,12 @@ pub(super) fn count_in_roots(sources: &Utf8Path) -> Result<usize> {
     let source = directory
         .read_to_string("roots.rs")
         .context("read roots.rs")?;
-    Ok(count_calls(&source, Callee::named("package_sources")))
+    // Assembled rather than literal: the tree-wide scan reads this file, and a
+    // bare callee literal here would be counted as a packaging call site - the
+    // scanner reporting itself. The shape cases pin the count, so this must not
+    // create a site it would report.
+    let packaging = ["package", "_sources"].concat();
+    Ok(count_calls(&source, Callee::named(&packaging)))
 }
 
 /// How many call expressions to `name` appear in `source`.
@@ -96,7 +101,10 @@ fn is_call_line(line: &str, name: Callee<'_>) -> bool {
     let after_callee = after.strip_prefix("::<").map_or(after, |tail| {
         tail.split_once('>').map_or("", |(_generics, rest)| rest)
     });
-    after_callee.starts_with('(')
+    // Rust allows whitespace between the callee and its argument list, so
+    // `package_sources (&repository, ..)` is a valid call and must count. An
+    // earlier version required the `(` immediately and would have missed it.
+    after_callee.trim_start().starts_with('(')
 }
 
 /// `source` with comment lines removed.
@@ -197,4 +205,66 @@ fn is_rust_source(entry_name: &str) -> bool {
     Utf8Path::new(entry_name)
         .extension()
         .is_some_and(|extension| extension.eq_ignore_ascii_case("rs"))
+}
+
+#[cfg(test)]
+mod matcher_tests {
+    //! The call matcher counts every valid call spelling, and only calls.
+    //!
+    //! The positive cases are the spellings that a first-argument or
+    //! immediate-parenthesis matcher would miss; each one is a call that would
+    //! otherwise hide a second packaging path from the shape assertions. The
+    //! negative cases are the near-misses that must not count, so the matcher
+    //! is not simply "contains the name".
+    //!
+    //! A default matcher may use a mod-level test block; see the harness use.
+
+    use super::{Callee, count_calls};
+    use rstest::rstest;
+
+    /// The callee these cases count.
+    ///
+    /// Assembled rather than written as a literal so this module's own
+    /// fixtures are not counted as calls by the tree scan: the scan reads this
+    /// file too, and a literal here would be a false positive in the very
+    /// assertion it describes.
+    fn callee() -> String {
+        ["package", "_sources"].concat()
+    }
+
+    /// Count that callee's calls in `source`.
+    fn counted(source: &str) -> usize {
+        count_calls(source, Callee::named(&callee()))
+    }
+
+    #[rstest]
+    #[case::borrowed_first_argument(&format!("{}(&repository, target)", callee()), 1)]
+    #[case::complete_borrowed_call(
+        &format!("{}(&repository, target, invocation, budget)?;", callee()),
+        1
+    )]
+    #[case::space_before_parenthesis(&format!("{} (&repository, target)", callee()), 1)]
+    #[case::newline_before_argument(&format!("{}(\n        repository,", callee()), 1)]
+    #[case::turbofish(&format!("{}::<Budget>(repository,", callee()), 1)]
+    #[case::in_a_match_arm(&format!("=> {}(repository, target)", callee()), 1)]
+    fn a_call_is_counted_whatever_its_spelling(#[case] source: &str, #[case] expected: usize) {
+        assert_eq!(
+            counted(source),
+            expected,
+            "counting calls in {source:?} did not match the expected {expected}"
+        );
+    }
+
+    #[rstest]
+    #[case::declaration(&format!("    pub(super) fn {}(", callee()), 0)]
+    #[case::import(&format!("use super::{{PACKAGING_INVOCATIONS, {}}};", callee()), 0)]
+    #[case::prose_mention(&format!("// {} is pub(super) of package_set", callee()), 0)]
+    #[case::other_callee("package_all(repository, target)", 0)]
+    fn a_non_call_is_not_counted(#[case] source: &str, #[case] expected: usize) {
+        assert_eq!(
+            counted(source),
+            expected,
+            "counting calls in {source:?} did not match the expected {expected}"
+        );
+    }
 }
