@@ -57,26 +57,38 @@ fn is_identifier(ident: &str) -> bool {
     }
 }
 
-/// Generates an identifier the grammar accepts in any segment position.
+/// Reports whether `ident` is a bare name the grammar accepts as a segment.
 ///
-/// A bare `_` is excluded because it is a pattern, not an identifier, and the
-/// reserved path starts are excluded because they are rejected wherever they
-/// appear first. Generating either here would test the rejection path rather
-/// than the rendering.
+/// Keywords are rejected because `syn` parses them as keywords rather than
+/// identifiers — `do` and `gen` are reserved in the editions `syn` supports —
+/// and a path segment must be an identifier. A bare `_` is a pattern rather
+/// than an identifier. `syn` itself is the authority, so the generator asks it
+/// rather than keeping a keyword list that would drift.
+fn is_bare_ident(ident: &str) -> bool {
+    syn::parse_str::<syn::Ident>(ident).is_ok()
+}
+
+/// Generates a segment the grammar accepts in any position but the first.
+///
+/// The reserved path starts are excluded because they are rejected wherever
+/// they appear first, and generating them here would test the rejection path
+/// rather than the rendering.
 fn generated_ident() -> impl Strategy<Value = String> {
     "[A-Za-z_][A-Za-z0-9_]{0,8}".prop_filter(
-        "an identifier must not be a reserved path start or a bare `_`",
-        |ident| !matches!(ident.as_str(), "_" | "crate" | "self" | "super" | "Self"),
+        "a segment must be an accepted identifier and not a reserved path start",
+        |ident| {
+            is_bare_ident(ident) && !matches!(ident.as_str(), "crate" | "self" | "super" | "Self")
+        },
     )
 }
 
 /// Generates a crate name for the qualification the renderer applies.
 ///
-/// The name starts with a letter so it is always an identifier, and it avoids
-/// keywords because it is spliced into the rendered text as a path segment.
+/// The name is spliced into the rendering as a path segment, so it must be an
+/// identifier in its own right.
 fn generated_crate_ident() -> impl Strategy<Value = String> {
-    "[A-Za-z][A-Za-z0-9_]{0,8}".prop_filter("a crate name must not be a keyword", |ident| {
-        !matches!(ident.as_str(), "crate" | "self" | "super" | "Self")
+    "[A-Za-z][A-Za-z0-9_]{0,8}".prop_filter("a crate name must be an identifier", |ident| {
+        is_bare_ident(ident)
     })
 }
 

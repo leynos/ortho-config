@@ -6,3 +6,4 @@
 # everyone who runs the test benefits from these saved cases.
 cc 9e9ca367c16476b1dbd99dfebbde715b2655705c58e2aea77bf2378fba7d83ff # shrinks to raw = "º", crate_ident = "a"
 cc 2030b5f9592d846a743f2ae4b285fd796000a1ccce71699e67194211085b665a # shrinks to path = "_A", crate_ident = "a"
+cc 831f9f1b38ca8ce294277a68543108954faf3fcaf3fa4c0337857cbf29ef6edd # shrinks to path = "do"
