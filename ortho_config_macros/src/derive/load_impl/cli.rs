@@ -32,6 +32,30 @@ pub(super) fn build_cli_parse_tokens(krate: &TokenStream) -> TokenStream {
     }
 }
 
+/// The clap value sources that count as explicit input for a compose path.
+#[derive(Clone, Copy)]
+enum ExplicitSource {
+    /// Only values typed on the command line.
+    CommandLine,
+    /// Command-line values and values filled from a clap `env` binding.
+    CommandLineOrEnvironment,
+}
+
+impl ExplicitSource {
+    /// Render the `matches!` pattern that recognises this policy.
+    fn tokens(self) -> TokenStream {
+        match self {
+            Self::CommandLine => quote! { Some(clap::parser::ValueSource::CommandLine) },
+            Self::CommandLineOrEnvironment => quote! {
+                Some(
+                    clap::parser::ValueSource::CommandLine
+                        | clap::parser::ValueSource::EnvVariable
+                )
+            },
+        }
+    }
+}
+
 /// Generate the declarative CLI layer.
 ///
 /// Only fields whose clap value source is the command line enter the layer. An
@@ -44,8 +68,7 @@ pub(super) fn build_cli_layer_tokens(
     krate: &TokenStream,
     cli_field_info: &[CliFieldInfo],
 ) -> TokenStream {
-    let command_line = quote! { Some(clap::parser::ValueSource::CommandLine) };
-    build_sparse_cli_layer_tokens(krate, cli_field_info, &command_line)
+    build_sparse_cli_layer_tokens(krate, cli_field_info, ExplicitSource::CommandLine)
 }
 
 /// Generate the profile-enabled CLI layer.
@@ -59,13 +82,11 @@ pub(super) fn build_profile_cli_layer_tokens(
     krate: &TokenStream,
     cli_field_info: &[CliFieldInfo],
 ) -> TokenStream {
-    let explicit_source = quote! {
-        Some(
-            clap::parser::ValueSource::CommandLine
-                | clap::parser::ValueSource::EnvVariable
-        )
-    };
-    build_sparse_cli_layer_tokens(krate, cli_field_info, &explicit_source)
+    build_sparse_cli_layer_tokens(
+        krate,
+        cli_field_info,
+        ExplicitSource::CommandLineOrEnvironment,
+    )
 }
 
 /// Emit a CLI layer containing only fields clap attributes to `explicit_source`.
@@ -79,7 +100,7 @@ pub(super) fn build_profile_cli_layer_tokens(
 fn build_sparse_cli_layer_tokens(
     krate: &TokenStream,
     cli_field_info: &[CliFieldInfo],
-    explicit_source: &TokenStream,
+    explicit_source: ExplicitSource,
 ) -> TokenStream {
     if cli_field_info.is_empty() {
         // No configuration field can enter a CLI layer, but the parse bindings
@@ -90,19 +111,20 @@ fn build_sparse_cli_layer_tokens(
         return quote! { let _parsed = (cli.as_ref(), matches.as_ref()); };
     }
 
+    let source_pattern = explicit_source.tokens();
     let arg_ids: Vec<LitStr> = cli_field_info
         .iter()
         .map(|field| LitStr::new(&field.arg_id, proc_macro2::Span::call_site()))
         .collect::<Vec<_>>();
     let sparse_insertions: Vec<TokenStream> = cli_field_info
         .iter()
-        .map(|field| sparse_insertion(field, explicit_source))
+        .map(|field| sparse_insertion(field, &source_pattern))
         .collect();
 
     quote! {
         if let (Some(cli), Some(matches)) = (cli.as_ref(), matches.as_ref()) {
             let has_explicit_cli_value = false
-                #( || matches!(matches.value_source(#arg_ids), #explicit_source) )*;
+                #( || matches!(matches.value_source(#arg_ids), #source_pattern) )*;
             if has_explicit_cli_value {
                 match #krate::sanitize_value(cli) {
                     Ok(#krate::serde_json::Value::Object(mut values)) => {
