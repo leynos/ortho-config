@@ -237,7 +237,6 @@ mod tests {
         let fields = [crate::CliFieldInfo {
             serialized_key: "port".to_owned(),
             arg_id: "port".to_owned(),
-            is_bool: false,
             is_default_as_absent: true,
         }];
         let rendered = generate_cli_value_extractor_impl(&ident, &fields, &quote! { ortho_config })

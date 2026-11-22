@@ -185,7 +185,11 @@ pub fn derive_subcommand_docs(input_tokens: TokenStream) -> TokenStream {
     }
 }
 
-/// Metadata about a field used for `CliValueExtractor` generation.
+/// Metadata about a configuration field's CLI and Serde spellings.
+///
+/// The value extractor and the generated sparse CLI layer both use these
+/// spellings to decide whether a field was supplied and where its parsed value
+/// lives.
 #[derive(Clone)]
 pub(crate) struct CliFieldInfo {
     /// The field name used by serde during serialization.
@@ -198,13 +202,6 @@ pub(crate) struct CliFieldInfo {
     /// This is the `id = "..."` override from `#[arg(...)]`/`#[clap(...)]` when
     /// present, otherwise the field identifier (`snake_case`).
     pub arg_id: String,
-    /// Whether the field's declared type is `bool` (or `Option<bool>`).
-    ///
-    /// Selects optional boolean-value parsing: absence remains `None`, a bare
-    /// flag means `true`, and an explicit `=false` remains user input. Layer
-    /// builders also use this classification to prune actual clap defaults
-    /// without mistaking an explicit `false` for an absent value.
-    pub is_bool: bool,
     /// Whether this field has the `cli_default_as_absent` attribute.
     pub is_default_as_absent: bool,
 }

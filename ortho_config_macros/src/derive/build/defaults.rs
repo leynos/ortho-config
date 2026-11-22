@@ -52,9 +52,6 @@ pub(crate) struct DefaultStructInit {
     /// Initializer entries in source-field order, with explicit defaults taking
     /// precedence over inferred Clap defaults.
     pub fields: Vec<proc_macro2::TokenStream>,
-    /// Field names whose parser defaults must be treated as absent when the
-    /// user did not explicitly supply a CLI value.
-    pub cli_default_as_absent_fields: Vec<syn::LitStr>,
 }
 
 /// Resolves field defaults in the same order as runtime configuration loading.
@@ -68,7 +65,6 @@ pub(crate) fn build_default_struct_init(
 ) -> DefaultStructInit {
     let mut resolutions = Vec::new();
     let mut default_fields = Vec::new();
-    let mut cli_default_as_absent_fields = Vec::new();
     fields
         .iter()
         .zip(field_attrs.iter())
@@ -81,9 +77,6 @@ pub(crate) fn build_default_struct_init(
                     return;
                 }
             };
-            if attr.cli_default_as_absent {
-                cli_default_as_absent_fields.push(syn::LitStr::new(&name.to_string(), name.span()));
-            }
             if let Some(expr) = &attr.default {
                 default_fields.push(quote! { #name: Some(#expr) });
                 return;
@@ -123,7 +116,6 @@ pub(crate) fn build_default_struct_init(
     DefaultStructInit {
         resolutions,
         fields: default_fields,
-        cli_default_as_absent_fields,
     }
 }
 

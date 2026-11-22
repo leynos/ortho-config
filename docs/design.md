@@ -1582,6 +1582,20 @@ generated documentation, generated agent context, and enforceable CLI policy.
   build, and reports `FORMAL-EMPTY` when no production inputs are registered.
   Fixture acceptance and rejection demonstrate the runners, not OrthoConfig
   behaviour. ADR-0017 records the boundary and its limits.
+- **Derive CLI-layer presence per field from clap value sources (2026-11-21):**
+  The generated compose body now builds a sparse CLI layer containing only
+  fields whose `ArgMatches::value_source` reports an explicit origin. The
+  profile-enabled path previously kept whole-object equality as one arm of its
+  push condition, so a load that supplied no configuration argument still added
+  an empty CLI layer because the sanitized CLI object differed from the
+  defaults object. Presence therefore depended on clap's default-filling
+  behaviour rather than on user input. Per-field membership also makes the
+  `cli_default_as_absent` and boolean-default pruning lists redundant in the
+  loader: a parser default is simply absent from the sparse layer, while an
+  explicit value equal to the default remains. The declarative path accepts only
+  `CommandLine`; the profile path also accepts `EnvVariable`, preserving the
+  existing contract that an environment-filled argument keeps outranking the
+  profile layer.
 
 [^hello-world-feedback]: `docs/feedback-from-hello-world-example.md`.
 [^behavioural-testing]: `docs/behavioural-testing-in-rust-with-cucumber.md`.

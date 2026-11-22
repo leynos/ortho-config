@@ -53,10 +53,10 @@ pub(super) fn option_type_tokens(ty: &Type) -> proc_macro2::TokenStream {
 
 /// Whether a declared field type is `bool`, unwrapping a single `Option`.
 ///
-/// Shared with the derive's CLI-info builder so optional boolean parsing and
-/// its value-arity metadata use the same type classification. Independent
-/// predicates could otherwise describe a different CLI from the one emitted.
-pub(crate) fn is_bool_type(ty: &Type) -> bool {
+/// Shared by the generated CLI field and its documentation metadata so both
+/// describe the same optional-value boolean surface. Independent predicates
+/// could otherwise describe a different CLI from the one emitted.
+fn is_bool_type(ty: &Type) -> bool {
     let inner = option_inner(ty).unwrap_or(ty);
     matches!(
         inner,

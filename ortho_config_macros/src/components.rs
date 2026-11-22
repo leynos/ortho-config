@@ -107,7 +107,6 @@ fn build_discovery_tokens(
 /// Bundles the struct-level attributes, optional discovery settings, and
 /// whether a `config_path` field was supplied so helper functions can reason
 /// about discovery without a long parameter list.
-#[derive(Clone)]
 struct LoadImplConfig<'a> {
     /// Parsed settings shared with legacy and explicit discovery generation.
     struct_attrs: &'a derive::parse::StructAttrs,
@@ -115,16 +114,14 @@ struct LoadImplConfig<'a> {
     discovery_tokens: Option<&'a DiscoveryTokens>,
     /// Whether the parser struct includes a user or generated config-path flag.
     has_config_path: bool,
-    /// Config-field Clap IDs used to detect explicit inputs, excluding the
-    /// generated `profile` and `config_path` selectors.
-    cli_arg_ids: Vec<String>,
-    /// `(arg_id, serialized_key)` for every bool config field.
+    /// Per-field clap and serde spellings for the configuration fields,
+    /// excluding the generated `profile` and `config_path` selectors.
     ///
-    /// Both halves are needed: the arg ID is what `ArgMatches::value_source`
-    /// is keyed by, while the serialized key is what the sanitized CLI JSON
-    /// object is keyed by. A field with `#[serde(rename)]` differs between the
-    /// two, and removing the wrong key would leave the default in place.
-    cli_bool_fields: Vec<(String, String)>,
+    /// Both spellings are needed: the arg ID is what
+    /// `ArgMatches::value_source` is keyed by, while the serialized key is what
+    /// the sanitized CLI JSON object is keyed by. A field with
+    /// `#[serde(rename)]` differs between the two.
+    cli_field_info: &'a [CliFieldInfo],
 }
 
 /// Inputs shared by the independent derive output generators.
@@ -161,7 +158,7 @@ pub(super) struct MacroComponentArgs<'a> {
 fn build_load_impl_args<'a>(
     idents: LoadImplIdents<'a>,
     token_refs: LoadTokenRefs<'a>,
-    config: LoadImplConfig<'a>,
+    config: &LoadImplConfig<'a>,
     krate: &'a proc_macro2::TokenStream,
 ) -> LoadImplArgs<'a> {
     let legacy_app_name = config
@@ -193,29 +190,8 @@ fn build_load_impl_args<'a>(
         has_config_path: config.has_config_path,
         profiles: config.struct_attrs.profiles,
         profile_env_var: compute_profile_env_var(config.struct_attrs),
-        cli_arg_ids: config.cli_arg_ids,
-        cli_bool_fields: config.cli_bool_fields,
+        cli_field_info: config.cli_field_info,
     }
-}
-
-/// Derives the CLI layer's lookup keys from the emitted field metadata.
-///
-/// The first element lists config-field argument IDs for the "was this supplied
-/// explicitly" test, excluding generated selectors. The second lists
-/// `(arg_id, serialized_key)` for bool
-/// fields alone, allowing the profile-enabled CLI layer to remove values that
-/// clap actually reports as `DefaultValue`. Ordinary absence is `None`, while
-/// an explicit `=false` is command-line input and must survive. Both keys are
-/// needed: the argument ID answers `value_source`, and the serialized key names
-/// the JSON member to remove.
-fn build_cli_layer_keys(field_info: &[CliFieldInfo]) -> (Vec<String>, Vec<(String, String)>) {
-    let cli_arg_ids = field_info.iter().map(|info| info.arg_id.clone()).collect();
-    let cli_bool_fields = field_info
-        .iter()
-        .filter(|info| info.is_bool)
-        .map(|info| (info.arg_id.clone(), info.serialized_key.clone()))
-        .collect();
-    (cli_arg_ids, cli_bool_fields)
 }
 
 /// Build all components required for macro output.
@@ -257,17 +233,20 @@ pub(super) fn build_macro_components(
         config_env_var: &config_env_var,
         dotfile_name: &dotfile_name,
     };
-    let (cli_arg_ids, cli_bool_fields) = build_cli_layer_keys(&cli_build_result.field_info);
-    let load_impl_config = LoadImplConfig {
-        struct_attrs,
-        discovery_tokens: discovery_tokens.as_ref(),
-        has_config_path,
-        cli_arg_ids,
-        cli_bool_fields,
+    let load_impl = {
+        // The field-info slice is borrowed from `cli_build_result`, which is
+        // moved into `MacroComponents` below. Keep the borrow inside this
+        // block so the move happens after its last use.
+        let load_impl_config = LoadImplConfig {
+            struct_attrs,
+            discovery_tokens: discovery_tokens.as_ref(),
+            has_config_path,
+            cli_field_info: &cli_build_result.field_info,
+        };
+        let load_impl_args =
+            build_load_impl_args(load_impl_idents, load_token_refs, &load_impl_config, krate);
+        build_load_impl(&load_impl_args)
     };
-    let load_impl_args =
-        build_load_impl_args(load_impl_idents, load_token_refs, load_impl_config, krate);
-    let load_impl = build_load_impl(&load_impl_args);
     let prefix_fn = struct_attrs.prefix.as_ref().map(|prefix| {
         quote! {
             fn prefix() -> &'static str {
