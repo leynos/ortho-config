@@ -8,6 +8,39 @@
 
 use crate::error::OrthohelpError;
 
+/// The root type exactly as the caller spelled it.
+///
+/// Diagnostics quote this value, so it is kept apart from the parsed path and
+/// from the rendering: only the parser ever reads it.
+#[derive(Clone, Copy)]
+pub(crate) struct RawRootType<'a>(&'a str);
+
+impl<'a> RawRootType<'a> {
+    /// Wraps the caller's spelling.
+    pub(crate) const fn new(value: &'a str) -> Self {
+        Self(value)
+    }
+
+    /// Returns the caller's spelling.
+    const fn as_str(self) -> &'a str {
+        self.0
+    }
+}
+
+/// The package crate name that a root type is qualified with.
+///
+/// The bridge is a separate crate, so a `crate`-prefixed or bare root type
+/// has to be rewritten to this name.
+#[derive(Clone, Copy)]
+pub(crate) struct CrateIdent<'a>(&'a str);
+
+impl<'a> CrateIdent<'a> {
+    /// Wraps the package crate name.
+    pub(crate) const fn new(value: &'a str) -> Self {
+        Self(value)
+    }
+}
+
 /// Parses and canonicalizes the root configuration type path.
 ///
 /// The root type is spliced into generated bridge source, so this accepts only
@@ -24,15 +57,21 @@ use crate::error::OrthohelpError;
 /// a type path, or when it carries a qualified self type, a leading `::`,
 /// generic or parenthesized path arguments, or a `crate`, `self`, `super`, or
 /// `Self` segment that cannot name a type in the bridge crate.
-pub(crate) fn parse_root_type(raw: &str, crate_ident: &str) -> Result<String, OrthohelpError> {
-    let parsed = syn::parse_str::<syn::TypePath>(raw)
+pub(crate) fn parse_root_type(
+    raw: RawRootType<'_>,
+    crate_ident: CrateIdent<'_>,
+) -> Result<String, OrthohelpError> {
+    let parsed = syn::parse_str::<syn::TypePath>(raw.as_str())
         .map_err(|error| invalid_root_type(raw, error.to_string()))?;
     ensure_supported_root_type(&parsed, raw)?;
     Ok(render_root_type(&parsed, crate_ident))
 }
 
 /// Rejects parsed type paths that fall outside the supported root type grammar.
-fn ensure_supported_root_type(parsed: &syn::TypePath, raw: &str) -> Result<(), OrthohelpError> {
+fn ensure_supported_root_type(
+    parsed: &syn::TypePath,
+    raw: RawRootType<'_>,
+) -> Result<(), OrthohelpError> {
     if parsed.qself.is_some() {
         return Err(invalid_root_type(
             raw,
@@ -73,7 +112,7 @@ fn ensure_supported_root_type(parsed: &syn::TypePath, raw: &str) -> Result<(), O
 /// and fail there with a rustc diagnostic instead of this one.
 fn ensure_no_relative_keyword_after_first(
     parsed: &syn::TypePath,
-    raw: &str,
+    raw: RawRootType<'_>,
 ) -> Result<(), OrthohelpError> {
     let Some(segment) = parsed
         .path
@@ -107,7 +146,10 @@ fn is_relative_keyword(ident: &syn::Ident) -> bool {
 /// `crate::Config` is accepted here and rewritten by [`render_root_type`], but
 /// a bare `crate` and any `self`, `super`, or `Self` start cannot resolve to a
 /// configuration type from the separately compiled bridge.
-fn ensure_type_path_start(parsed: &syn::TypePath, raw: &str) -> Result<(), OrthohelpError> {
+fn ensure_type_path_start(
+    parsed: &syn::TypePath,
+    raw: RawRootType<'_>,
+) -> Result<(), OrthohelpError> {
     let Some(first) = parsed.path.segments.first() else {
         return Err(invalid_root_type(raw, "root type path is empty"));
     };
@@ -135,7 +177,7 @@ fn ensure_type_path_start(parsed: &syn::TypePath, raw: &str) -> Result<(), Ortho
 /// Qualification is decided from the parsed segments, so spacing variants such
 /// as `crate :: Config` and a leading space qualify exactly like their compact
 /// spellings.
-fn render_root_type(parsed: &syn::TypePath, crate_ident: &str) -> String {
+fn render_root_type(parsed: &syn::TypePath, crate_ident: CrateIdent<'_>) -> String {
     let mut segments = parsed
         .path
         .segments
@@ -144,8 +186,8 @@ fn render_root_type(parsed: &syn::TypePath, crate_ident: &str) -> String {
         .collect::<Vec<_>>();
 
     match segments.as_mut_slice() {
-        [first, ..] if first.as_str() == "crate" => crate_ident.clone_into(first),
-        [only] => *only = format!("{crate_ident}::{only}"),
+        [first, ..] if first.as_str() == "crate" => crate_ident.0.clone_into(first),
+        [only] => *only = format!("{}::{only}", crate_ident.0),
         _ => {}
     }
 
@@ -153,9 +195,9 @@ fn render_root_type(parsed: &syn::TypePath, crate_ident: &str) -> String {
 }
 
 /// Builds a diagnostic that preserves the caller's original spelling.
-fn invalid_root_type(value: &str, message: impl Into<String>) -> OrthohelpError {
+fn invalid_root_type(value: RawRootType<'_>, message: impl Into<String>) -> OrthohelpError {
     OrthohelpError::InvalidRootType {
-        value: value.to_owned(),
+        value: value.as_str().to_owned(),
         message: message.into(),
     }
 }

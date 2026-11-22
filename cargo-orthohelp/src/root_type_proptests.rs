@@ -135,7 +135,7 @@ proptest! {
         raw in ".*",
         crate_ident in generated_crate_ident(),
     ) {
-        if let Ok(rendered) = parse_root_type(&raw, &crate_ident) {
+        if let Ok(rendered) = parse_root_type(RawRootType::new(&raw), CrateIdent::new(&crate_ident)) {
             prop_assert!(
                 is_identifier_path(&rendered),
                 "{:?} rendered as {:?}, which is not identifier path syntax",
@@ -152,8 +152,8 @@ proptest! {
     /// that still depended on the crate it was produced in would be rewritten.
     #[test]
     fn accepted_root_type_rendering_is_stable(raw in ".*") {
-        if let Ok(rendered) = parse_root_type(&raw, "demo") {
-            let reparsed = parse_root_type(&rendered, "other")
+        if let Ok(rendered) = parse_root_type(RawRootType::new(&raw), CrateIdent::new("demo")) {
+            let reparsed = parse_root_type(RawRootType::new(&rendered), CrateIdent::new("other"))
                 .expect("a canonical rendering should parse");
             prop_assert_eq!(reparsed, rendered);
         }
@@ -166,7 +166,7 @@ proptest! {
         path in supported_root_type(),
         crate_ident in generated_crate_ident(),
     ) {
-        let rendered = parse_root_type(&path, &crate_ident).map_err(|error| {
+        let rendered = parse_root_type(RawRootType::new(&path), CrateIdent::new(&crate_ident)).map_err(|error| {
             TestCaseError::fail(format!("{path:?} should parse, but: {error}"))
         })?;
         prop_assert!(
@@ -181,10 +181,10 @@ proptest! {
     /// whatever crate it is parsed in.
     #[test]
     fn supported_root_type_rendering_is_stable(path in supported_root_type()) {
-        let rendered = parse_root_type(&path, "demo").map_err(|error| {
+        let rendered = parse_root_type(RawRootType::new(&path), CrateIdent::new("demo")).map_err(|error| {
             TestCaseError::fail(format!("{path:?} should parse, but: {error}"))
         })?;
-        let reparsed = parse_root_type(&rendered, "other").map_err(|error| {
+        let reparsed = parse_root_type(RawRootType::new(&rendered), CrateIdent::new("other")).map_err(|error| {
             TestCaseError::fail(format!("canonical rendering {rendered:?} should parse, but: {error}"))
         })?;
         prop_assert_eq!(reparsed, rendered);

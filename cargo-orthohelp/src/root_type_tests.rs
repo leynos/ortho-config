@@ -27,7 +27,8 @@ use rstest::rstest;
 #[case::combining_mark("crate::q\u{301}", "demo", "demo::q\u{301}")]
 #[case::ordinal_indicator("º", "demo", "demo::º")]
 fn parses_root_type(#[case] raw: &str, #[case] crate_ident: &str, #[case] expected: &str) {
-    let parsed = parse_root_type(raw, crate_ident).expect("root type should parse");
+    let parsed = parse_root_type(RawRootType::new(raw), CrateIdent::new(crate_ident))
+        .expect("root type should parse");
     assert_eq!(
         parsed, expected,
         "{raw:?} should render as {expected:?} in crate {crate_ident:?}"
@@ -69,7 +70,8 @@ fn parses_root_type(#[case] raw: &str, #[case] crate_ident: &str, #[case] expect
     "failed to parse root type"
 )]
 fn rejects_unsupported_root_type(#[case] raw: &str, #[case] expected_message: &str) {
-    let error = parse_root_type(raw, "demo").expect_err("root type should be rejected");
+    let error = parse_root_type(RawRootType::new(raw), CrateIdent::new("demo"))
+        .expect_err("root type should be rejected");
     let message = error.to_string();
     assert!(
         message.contains(expected_message),

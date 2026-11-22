@@ -8,7 +8,7 @@ use crate::cli::Args;
 use crate::error::OrthohelpError;
 use crate::policy::config::PolicyConfigMetadata;
 use crate::powershell::{ExportAlias, HelpInfoUri, ModuleName};
-use crate::root_type::parse_root_type;
+use crate::root_type::{CrateIdent, RawRootType, parse_root_type};
 use crate::schema::WindowsMetadata;
 
 /// Deserialized `package.metadata.ortho_config` defaults.
@@ -194,7 +194,10 @@ pub fn select_package(
         .clone()
         .or_else(|| metadata_defaults.root_type.clone())
         .ok_or(OrthohelpError::MissingRootType)?;
-    let root_type = parse_root_type(&raw_root_type, &crate_ident)?;
+    let root_type = parse_root_type(
+        RawRootType::new(&raw_root_type),
+        CrateIdent::new(&crate_ident),
+    )?;
 
     ensure_library_target(package)?;
     if let Some(bin) = args.bin.as_ref() {
