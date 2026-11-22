@@ -114,12 +114,12 @@ fn is_call_position(site: &Site<'_>) -> bool {
     if line.trim_start().starts_with("use ") {
         return false;
     }
-    if before
-        .split_whitespace()
-        .rev()
-        .take(4)
-        .any(|word| word == "fn")
-    {
+    // A declaration is `fn <name>(`, so `fn` must be the word *immediately*
+    // before the callee. Testing the last four words instead rejected a call
+    // that happens to be the first statement in a function, whose preceding
+    // words include the enclosing `fn`.
+    let preceding_word = line.trim_end().rsplit(' ').next().unwrap_or("");
+    if preceding_word == "fn" {
         return false;
     }
     let after_callee = after.strip_prefix("::<").map_or(after, |tail| {
@@ -269,6 +269,11 @@ mod matcher_tests {
     #[case::newline_before_parenthesis(&format!("{}\n(&repository, target)", callee()), 1)]
     #[case::turbofish(&format!("{}::<Budget>(repository,", callee()), 1)]
     #[case::in_a_match_arm(&format!("=> {}(repository, target)", callee()), 1)]
+    #[case::first_statement_in_a_fn(
+        &format!("fn bypass(args: Args) {{\n    {}(args.repository, args.target)", callee()),
+        1
+    )]
+    #[case::declaration_with_visibility(&format!("    pub(super) fn {}(", callee()), 0)]
     fn a_call_is_counted_whatever_its_spelling(#[case] source: &str, #[case] expected: usize) {
         assert_eq!(
             counted(source),
@@ -278,7 +283,7 @@ mod matcher_tests {
     }
 
     #[rstest]
-    #[case::declaration(&format!("    pub(super) fn {}(", callee()), 0)]
+    #[case::declaration(&format!("    fn {}(", callee()), 0)]
     #[case::import(&format!("use super::{{PACKAGING_INVOCATIONS, {}}};", callee()), 0)]
     #[case::prose_mention(&format!("// {} is pub(super) of package_set", callee()), 0)]
     #[case::other_callee("package_all(repository, target)", 0)]
