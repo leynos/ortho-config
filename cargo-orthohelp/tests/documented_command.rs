@@ -19,10 +19,18 @@ mod orthohelp_workflow;
 #[path = "../../ortho_config/tests/documentation_examples/process_runner_state_support.rs"]
 mod process_runner;
 
+/// Bridge-cache entry lookup shared by the cache lanes.
+#[path = "documented_command/cache_entries.rs"]
+mod cache_entries;
+
 /// Bridge-cache metric contracts, which need the binary's `metrics` recorder.
 #[cfg(feature = "metrics")]
 #[path = "documented_command/cache_metrics.rs"]
 mod cache_metrics;
+
+/// Publish-path contracts for runs that meet a pre-seeded cache entry.
+#[path = "documented_command/cache_publish.rs"]
+mod cache_publish;
 
 use anyhow::{Context, Result, ensure};
 use cap_std::{ambient_authority, fs::Dir};
