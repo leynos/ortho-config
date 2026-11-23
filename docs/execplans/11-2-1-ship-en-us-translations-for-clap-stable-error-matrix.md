@@ -1473,6 +1473,110 @@ stopping and reporting.
       `origin` directly, the lint stays denied, and the re-taken certificate
       covers all three lint stages.
 
+- [x] (2026-11-21) Round-22 replay onto `origin/main` `1c6faeb7`, the landing
+      of PR #589 ("Enumerate missing required configuration values with supply
+      routes", 7.3.1). The branch was 61 commits ahead and one behind, with no
+      merge commits in the range, so the replay used the linear form: `git -c
+      core.attributesFile=/dev/null -c merge.conflictStyle=zdiff3 rebase
+      --merge --no-fork-point --no-update-refs --no-autostash
+      --reapply-cherry-picks --keep-empty --empty=stop --onto 1c6faeb7
+      0dbd7bd7`. Weave was bypassed deliberately: no tracked `.gitattributes`
+      rule selects it here, and the only selection came from the host's
+      ambient global attributes file, which is not repository consent. Old head
+      `0b755383` is preserved at `refs/recovery/<branch>-old-head-20261121`
+      and the target at `refs/recovery/<branch>-target-20261121`. New head is
+      `4fab1719`; `git range-diff 0dbd7bd7..0b755383 1c6faeb7..4fab1719`
+      matches all 61 commits, twelve of them carrying only the resolutions
+      below, with no added, missing or empty commit.
+
+- [x] (2026-11-23) Round-23 replay onto `origin/main` `6ec295f4`. Main
+      advanced by seven commits while the Round-22 gates ran — the latest
+      documentation style guide, root-type validation for the bridge source,
+      the `cargo-orthohelp` IR-cache bounds, a `trybuild` bump, the phrase
+      checker at v0.1.4, the `bumpy_road_function` policy note and the
+      superseded-run cancellation — and GitHub reported the PR conflicting.
+      The same linear procedure replayed the now 62 commits with one conflict:
+      both sides had added an `## Unreleased` section, so the resolution keeps a
+      single `## Unreleased` and orders this branch's `### Added (clap error
+      translations)` and `### Changed (clap error behaviour)` before main's
+      `### Fixed (root type validation)`. The Round-22 head `74a38f94` is
+      preserved at
+      `refs/recovery/11-2-1-replay-1c6faeb7-head-20261123`. The final head is
+      `31ba5716`, and `git range-diff` over the two ranges `1c6faeb7` to `74a38f94`
+      and `6ec295f4` to `31ba5716` matches every commit except the one carrying
+      that resolution.
+
+- [x] (2026-11-21) Round-22 conflict dispositions. Five paths conflicted, and
+      every one was resolved by preserving both sides' intent rather than by
+      choosing a side wholesale:
+      - `docs/contents.md` conflicted three times as both sides appended
+        entries; main's ADR-0024 and ADR-0025 entries stay, and this branch's
+        gate ADR is indexed as ADR-0026.
+      - `ortho_config/tests/documentation_examples/simple_runs.rs` took a
+        union of the two `SimpleRun` entries in id order, because both sides
+        inserted into the same slot.
+      - `docs/v0-11-0-migration-guide.md` conflicted three times. Main's
+        released text and its new nested-requirement section are kept; this
+        branch's clap sections were already moved to the v0.12.0 guide by the
+        re-version commit, so they are not restored here.
+      - `CHANGELOG.md` keeps this branch's `## Unreleased` clap entries above
+        main's `## [0.11.0] - 2026-11-15` section and drops the duplicate clap
+        sections that the re-version commit had moved.
+      - The ExecPlan's Outcomes paragraph took the newer Round-21 wording.
+
+- [x] (2026-11-21) The gate ADR moved from 0022 to **ADR-0026** during the
+      replay of `02c37347`, because main published ADR-0022 (coverage target
+      root), ADR-0023 (explicit structured-output declarations), ADR-0024
+      (enumerated missing required values) and ADR-0025 (selected-subcommand
+      enumeration) while this branch held 0022. The file was renamed with
+      `git mv`, its H1 and every inbound reference were swept in the same
+      commit — the design, the developers' guide, both migration guides, the
+      `docs/contents.md` index, the `CHANGELOG`, the `ortho_config` manifest
+      comment, the gate and fixture module docs, and the ExecPlan — and that
+      commit's message was rewritten to name 0026. Main's own ADR-0024 and
+      ADR-0025 references were left untouched. Two bare "ADR-0024
+      negative-control paragraph" references in this plan's round records were
+      missed by the first sweep and corrected in the final replayed commit.
+
+- [x] (2026-11-23) Round-22 certificate on the frozen tree, HEAD `4fab1719`,
+      working tree clean, branch reflog showing no commit after the rebase.
+      `make check-fmt` (116 files unchanged), `make typecheck`, `make lint`
+      (rustdoc, Clippy and Whitaker clean; docstring coverage 1044/1044,
+      100.0%), `make markdownlint` (spelling gate clean and `typos.toml`
+      current), `make nixie`, `make test-workflow-contracts` (729 passed,
+      1 skipped) and the standalone `make boundary` (44 passed, 0 failed, 10
+      ignored) all pass, run sequentially.
+
+- [x] (2026-11-23) The test lane was certified in pieces because the host was
+      saturated throughout: compile admission held all four slots with 140-640
+      requests waiting, and a `cargo test` build of the test profile alone took
+      35m39s. Two full-suite attempts therefore failed or were cut short
+      without a diagnostic, and one harness kill left a documentation-cache
+      `build.in-progress` marker whose recorded pid (3037493) was verified dead
+      before the owner removed it. The failures were all deadline or cache
+      artefacts, never an assertion or a compiler diagnostic:
+      - `cargo-orthohelp --test compile_time::must_use_compile_tests` exceeded
+        main's own 900 s child budget twice. This branch does not touch
+        `cargo-orthohelp/tests/compile_time.rs` at all, and the isolated rerun
+        spent its whole deadline with up to 292 requests queued ahead of its
+        trybuild fixtures, so the failure is host load on a main-owned budget.
+      - `clap_error_cli` hit its 600 s fixture-build budget. After warming the
+        same `cargo build -p clap_error_matrix_fixture` without a deadline, the
+        suite passed 9/9 in 0.63 s.
+      - A `--no-fail-fast` run certified 28 targets green (including every
+        `cargo-orthohelp` and `hello_world` target and the `ortho_config`
+        library's 378 tests) and reproduced only the `compile_time` deadline.
+      - The targets this branch changes were then run directly and all pass:
+        `clap_error_coverage` 87 (up from 83), `clap_error_matrix` 24,
+        `clap_error_translations` 25, `compile_fail` 2 harness cases covering
+        all 65 `trybuild` and `ui` fixtures — including the two new
+        `clap_error_matrix_length` and `clap_error_translation_non_exhaustive`
+        cases — `localized_parse` 12, `rstest_bdd` 102,
+        `documentation_examples_rust_tests` 65 and
+        `documentation_examples_tests` 15. The Python suite passes 128 with
+        5 skipped. Hosted CI, on unsaturated runners, remains the arbiter for
+        the full `make test` form.
+
 ## Surprises & discoveries
 
 The plan first incorporated merged PR #651 at
@@ -2721,3 +2825,15 @@ rebinds, record the two refusal fixtures and the two declaration classes that
 evidence it, and move the header's status to one permitted bare value. The
 change narrows what the publication gate accepts; it does not alter the matrix,
 the runtime consultation, or the reviewed total.
+
+Revision note (2026-11-21): replay the branch onto `origin/main` `1c6faeb7`,
+the landing of PR #589, and renumber the gate ADR to 0026 because main
+published ADR-0022 through ADR-0025. The replay changes no gate behaviour: it
+preserves both sides' documentation intent at each conflict, keeps the reviewed
+count and the matrix untouched, and records why the test lane was certified
+target-by-target under host saturation.
+
+Revision note (2026-11-23): replay once more onto `origin/main` `6ec295f4`
+after main advanced by seven commits during the Round-22 gates. The only
+conflict is the `## Unreleased` add/add pair in `CHANGELOG.md`, resolved by
+keeping one section with both sides' subsections; no source file changes.
