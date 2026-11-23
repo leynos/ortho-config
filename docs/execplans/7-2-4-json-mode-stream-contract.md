@@ -5,7 +5,8 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Outcomes & retrospective`, `Conformance basis`, and `Verification plan` must
 be kept up to date as work proceeds.
 
-Status: DRAFT (awaiting design review and user approval)
+Status: DRAFT (community-of-experts design review applied; awaiting user
+approval of the plan and of decisions A1–A5)
 
 Branch: `7-2-4-json-mode-stream-contract`
 
@@ -26,12 +27,12 @@ Roadmap item 7.2.3 taught that metadata to say whether a command supports
 exit classes it documents. It deliberately stopped short of saying how JSON
 mode uses the two output streams. An agent that runs `app report --json`
 therefore still cannot tell whether stdout will hold one JSON document, a
-stream of JSON lines, or a pointer to a file; whether a failure arrives as one
-JSON diagnostic on stderr or as several; or whether a child process such as a
-compiler or `git` may spray its own text into stdout and corrupt the parse.
-Cargo's own documentation warns its JSON consumers to expect non-JSON lines on
-stdout from other processes; this item exists so an OrthoConfig application can
-promise and be linted against the opposite.
+stream of JSON lines, or a reference to a file; whether a failure arrives as
+one JSON diagnostic on stderr or as several; or whether a child process such as
+a compiler may write its own text into stdout and corrupt the parse. Cargo's
+own documentation warns consumers of its JSON messages to expect non-JSON lines
+on stdout from other processes. This item lets an OrthoConfig application
+promise the opposite and be linted against that promise.
 
 After this change an author can write:
 
@@ -70,12 +71,16 @@ and the generated agent context for that command will contain:
 }
 ```
 
+The three members together say where every byte of stdout and stderr goes in
+JSON mode: the stdout framing on success, the stderr framing on failure, and
+where any child process's output goes instead of stdout.
+
 A new reusable policy API,
 `cargo_orthohelp::policy::rules::json_mode::check_json_mode`, reports every
-command that claims JSON support but cannot state where every byte of stdout
-and stderr goes, and every command whose stream contract contradicts its other
-declarations (for example, a machine renderer that lets child output pass
-straight through while JSON mode promises to capture it).
+command that claims (or implies) JSON support but cannot state where every byte
+goes, and every command whose stream contract contradicts another explicit
+declaration (for example, declining JSON support while declaring a JSON stream
+contract).
 
 Existing behaviour is preserved: undeclared commands acquire no stream
 contract, no claim is inferred from names, verbs, flags, renderers, or locales,
@@ -83,9 +88,58 @@ the documentation IR stays at version `2.0`, the agent-context schema stays at
 version `1`, and the policy-report schema stays at version `1`.
 
 This work closes the outstanding decision recorded in ADR-0023 ("Stream framing
-and the `JsonModeContract`-style shape remain with roadmap 7.2.4") and the §6.2
-"JSON mode must be stricter than mostly JSON" contract in
+and the `JsonModeContract`-style shape remain with roadmap 7.2.4") and realizes
+the §6.2 "JSON mode must be stricter than mostly JSON" contract in
 `docs/agent-native-cli-design.md`.
+
+## Decisions requiring approval
+
+The design review surfaced five choices that change what is built. Each has a
+recommendation; approving the plan approves the recommendation unless the user
+says otherwise.
+
+- A1. Strict JSON-mode stderr. The design's vocabulary offers only
+  `one_json_diagnostic` and `jsonl_diagnostics`, so in JSON mode stderr may
+  carry only JSON diagnostics. `cargo-orthohelp` today passes Cargo's stderr
+  straight through (`cargo-orthohelp/src/bridge_build_process.rs:62`,
+  `Stdio::inherit()`) and prints a human summary on stderr, so it could not
+  truthfully declare either token. Recommendation: keep the design's strict
+  vocabulary, and add a roadmap 8.1.1 sub-bullet requiring `cargo-orthohelp` to
+  capture Cargo and bridge child output in JSON mode and verify its real
+  streams against its declared contract. Alternative: add a third stderr token
+  such as `text_diagnostics` (amends design §6.2; more tokens, weaker promise).
+- A2. An agreed artefact reference. The roadmap requires child output to
+  reach a consumer only "via an agreed artefact path", and `artifact_path`
+  needs a path an agent can find without application-specific knowledge.
+  Recommendation: ADR-0026 fixes one minimal reference shape — a top-level
+  `files` member holding an array of `{"path": …, "role": …}` objects, where
+  `path` is a UTF-8 string (absolute, or relative to the invocation's working
+  directory) and `role` is `result`, `log`, or another application-defined
+  snake-case token. Metadata does not validate payloads; this is the agreed
+  convention a declaration promises. Alternative: leave reference fields
+  application-owned and drop the claim that the path is agreed.
+- A3. Where a captured preview may appear. Recommendation: under
+  `capture_preview_and_log`, a bounded preview of child output may appear only
+  inside the JSON diagnostic document on stderr; the full output is reachable
+  only through a `log` reference. This follows the roadmap's "never leaks to
+  stdout … except via an agreed artefact path" literally. Alternative: also
+  allow an escaped preview inside the stdout result document.
+- A4. Member names. The design publishes `success_stdout` and
+  `failure_stderr`, yet `success_stdout` also governs stdout on failure and
+  `failure_stderr` also governs stderr on success. Recommendation: keep the
+  published wire names (the roadmap bullets use the same words), publish an
+  outcome-by-member table in ADR-0026, and name the Rust types after the concept
+  (`StdoutFraming`, `StderrFraming`). Alternative: rename the wire members to
+  `stdout_framing` and `stderr_framing` before anything ships and amend design
+  §6.2.
+- A5. Cross-layer consistency deferred. The draft compared the stream
+  contract with the machine renderer's `subprocess_inheritance` and with
+  `stdout = "none"`. Review showed both comparisons depend on unstated bindings
+  (ADR-0016 says machine output "need not be JSON"; ADR-0023's `stdout` purpose
+  is mode-independent), so they would infer. Recommendation: drop both
+  conditions now and record, as an outstanding decision in ADR-0026, that a
+  later item may bind `--json` to a renderer role and to `stdout` purpose
+  before such checks are added.
 
 ## Constraints
 
@@ -95,14 +149,15 @@ and the `JsonModeContract`-style shape remain with roadmap 7.2.4") and the §6.2
   ADR-0023). Never derive a stream contract, JSON support, or a subprocess
   policy from a command name, verb, flag, output format token, renderer
   default, locale, or parent command. A child never inherits its parent's
-  `json_mode` record.
+  `json_mode` record. Consistency conditions compare only explicit declarations
+  whose meanings already bind them to the same mode.
 - Preserve schema ownership (ADR-0003): `ortho_config::docs` owns the strict
   IR; `ortho_config::agent_context` owns the tolerant wire;
   `cargo-orthohelp/src/schema` owns the IR mirror; the bridge mapping in
   `cargo-orthohelp/src/agent_context/` is the only code that crosses from
   mirror to wire. No schema module imports another.
-- Keep `ORTHO_DOCS_IR_VERSION` at `"2.0"` (`ortho_config/src/docs/mod.rs`
-  and `cargo-orthohelp/src/schema/mod.rs`),
+- Keep `ORTHO_DOCS_IR_VERSION` at `"2.0"` (`ortho_config/src/docs/mod.rs:21`
+  and `cargo-orthohelp/src/schema/mod.rs:36`),
   `ORTHO_AGENT_CONTEXT_SCHEMA_VERSION` at `"1"`, and
   `ORTHO_POLICY_REPORT_SCHEMA_VERSION` at `"1"`. The addition is optional and
   additive.
@@ -111,40 +166,48 @@ and the `JsonModeContract`-style shape remain with roadmap 7.2.4") and the §6.2
   `output.stderr_diagnostics`, `output.exit_classes`, every `renderer` member,
   and `output_modes`.
 - Do not change the `agent-native.output.json-missing` rule, its predicate,
-  its messages, or `check_output`'s signature and report.
+  its messages, `check_output`'s signature, its rule tests, or its report
+  snapshots.
 - Do not wire the new rules into `cargo orthohelp --check-agent-native`. That
-  path is bridge-free and has no command metadata (ADR-0023 and the 7.2.3
-  plan's decision on bridge builds). Composition into the future
+  path is bridge-free and has no command metadata. Composition into the future
   `cargo orthohelp check` belongs to roadmap 7.2.8.
 - Do not implement `cargo-orthohelp --json` (roadmap 8.1.1), numeric exit-code
   mappings or diagnostic class/code consistency lints (roadmap 7.2.5), or a
   runtime checker that inspects real process output. This item models and lints
   declarations; a declaration is not a certificate.
-- Protocol tokens (`one_json_document`, `jsonl_stream`, `artifact_path`,
-  `one_json_diagnostic`, `jsonl_diagnostics`, `capture_preview_and_log`,
-  `inherit_only_in_human_mode`, `forbidden`) are ASCII, snake case, and never
-  localized. `artifact_path` keeps the design's American spelling because it is
-  a wire token; prose uses "artefact".
-- Public API change authorized: `OutputMetadata` (IR) and `OutputContract`
-  (wire) each gain `json_mode: Option<…>`; new public types listed under
-  `Interfaces and dependencies`; new public function `check_json_mode`. These
-  are pre-1.0 APIs, so every exhaustive struct literal in the workspace,
-  fixtures, examples, and doctests is updated in the same commit. No alias,
-  facade, or deprecated entry point is added.
-- Authorized dependencies: none at runtime. `googletest` and
-  `pretty_assertions` (workspace versions `0.14.3` and `1.4.1`, caret
-  requirements, `workspace = true`) may be added as dev-dependencies to
-  `ortho_config_macros` if its new tests use them. No other dependency.
-- Repository limits (`AGENTS.md`): no code file above 400 lines; every module
-  starts with a `//!` comment; every `assert!`/`assert_eq!`/`assert_ne!`
+- A token's meaning, once published in ADR-0026, never changes. A different
+  meaning requires a new token.
+- Protocol tokens are ASCII, snake case, and never localized. The wire token
+  `artifact_path` keeps the design's American spelling; prose uses "artefact".
+  In spellcheck-scanned Markdown write the token only as its own inline code
+  span or inside a fenced block (`typos.local.toml` allow-lists exactly the
+  stand-alone span).
+- Public API change authorized: `OutputMetadata` (IR, both owners) and
+  `OutputContract` (wire) each gain `json_mode: Option<…>`; the new public
+  types listed under `Interfaces and dependencies`; the new public function
+  `check_json_mode`. These are pre-1.0 APIs, so every exhaustive struct literal
+  in the workspace, fixtures, examples, doctests, and live Markdown examples is
+  updated in the same commit. No alias, facade, or deprecated entry point is
+  added.
+- Authorized dependencies: none. Existing dev-dependencies (`rstest`,
+  `rstest-bdd`, `proptest`, `insta`, `trybuild`, and, in `ortho_config` and
+  `cargo-orthohelp`, `googletest` and `pretty_assertions`) are sufficient.
+  `ortho_config_macros` tests use plain assertions with messages.
+- Repository limits (`AGENTS.md`, `clippy.toml`): no code file above 400
+  lines; every module starts with a `//!` comment; every `assert!` family macro
   carries a diagnostic message; no `.expect()` outside tests; lint suppressions
   only as item-scoped `#[expect(…, reason = "…")]` as a last resort;
-  en-GB-oxendict spelling in prose and comments.
+  `excessive-nesting-threshold = 4`, `too-many-arguments-threshold = 4`,
+  `too-many-lines-threshold = 70`, and denied `integer_division` and
+  `indexing_slicing`; en-GB-oxendict spelling in prose and comments.
 - Tests inject the environment; no new process-wide environment mutation, no
-  `serial_test`, no isolated `CARGO_HOME`.
-- Completed ExecPlans (including
-  `docs/execplans/7-2-3-structured-output-and-exit-metadata.md`) are historical
-  and must not be edited.
+  `serial_test`, no isolated `CARGO_HOME`, no new test binary that spawns
+  nested Cargo (see `D16`).
+- Historical documents stay untouched: completed ExecPlans (including
+  `docs/execplans/7-2-3-structured-output-and-exit-metadata.md`), released
+  migration guides (`docs/v0-11-0-migration-guide.md` and older), and the
+  bodies of accepted ADRs, which change only through the amendment process in
+  `docs/documentation-style-guide.md`.
 - Run formatting, linting, and tests sequentially; never bypass compile
   admission (`RUSTC_WRAPPER`); never build in `/tmp`.
 
@@ -155,7 +218,7 @@ conflict in `Decision log`, set the status to `BLOCKED`, and escalate.
 
 Comparison base: the merge base with `origin/main` (currently
 `6ec295f4730003a74b131a40526ea47548d3f1db`). Count net lines (additions minus
-deletions) with:
+deletions) per file with:
 
 ```sh
 git diff --numstat "$(git merge-base origin/main HEAD)" -- . \
@@ -165,7 +228,10 @@ git diff --numstat "$(git merge-base origin/main HEAD)" -- . \
 Classify each file by purpose, whole-file:
 
 - Code: `*.rs` (production and tests, including trybuild fixtures),
-  `*.stderr`, `*.snap`, `*.feature`, and `proptest-regressions/*`.
+  `*.stderr`, `*.snap`, `*.feature`, test-fixture `*.json` and `*.txt`, and
+  `proptest-regressions/*`. Production Rust is every `*.rs` file outside
+  `tests/` directories, `*_tests.rs`, `tests_*.rs`, `*_proptests*.rs`, and
+  files compiled only under `#[cfg(test)]`.
 - Configuration: `Cargo.toml`, `Cargo.lock`, `typos.local.toml`, generated
   `typos.toml`, and anything under `.github/` or `.config/`.
 - Documentation: every other `*.md` file. This ExecPlan is excluded from every
@@ -173,98 +239,128 @@ Classify each file by purpose, whole-file:
 
 Budget survey. The closest precedent is 7.2.3, which added the same kind of
 record across the same layers and squash-merged as `ef46b48d`. Measured with
-the classification above, it changed 97 files: about 1,006 net lines of
-production Rust, 3,236 of test Rust, 205 of snapshots, 28 of fixtures, 15 of
-configuration, and 763 of documentation (excluding its plan). Its plan set no
-numeric budget, so no revision history exists. 7.2.1 is the only plan in this
+the classification above, it changed 97 files (96 excluding its plan): about
+1,006 net lines of production Rust, 3,236 of test Rust, 205 of snapshots, 28 of
+fixtures, 15 of configuration, and 763 of documentation. Its plan set no
+numeric budget, so it has no revision history. 7.2.1 is the only plan in this
 family with a measured overrun: it set 30 files and about 1,500 net Rust lines,
 then delivered 89 files and 2,838 net Rust lines, with tests at 73 percent of
-the Rust. That overrun was missed scope (tests and trybuild fixtures were not
+the Rust; that was missed scope (tests and trybuild fixtures were not
 estimated), not approved growth. 7.2.2 recorded no size. This plan therefore
-budgets tests explicitly and sets limits near the 7.2.3 measurement, with
-contingency for the extra policy rule and the exhaustive table test.
+budgets tests explicitly and sets limits a little above the 7.2.3 measurement,
+because it adds a second rule, a pure verdict kernel with an exhaustive table,
+and documentation-example inventory updates, while review removed one test
+binary and two consistency conditions.
 
-The 7.2.4 estimate is: about 700 net production lines (three enums and one
-record in each of three schema owners, derive parsing and emission, bridge
-mapping, and one rule module) and about 2,800 net test lines (parser tables,
-wire and IR decoding, bridge mapping, property tests, the exhaustive rule
-table, BDD steps, the end-to-end test, snapshots, and one trybuild fixture).
+The estimate is about 800 net production lines (three enums and one record in
+each of three schema owners, derive parsing and emission, bridge mapping, and
+one rule module with its kernel) and about 3,400 net code lines of tests,
+snapshots, and fixtures.
 
-- Files: if more than 90 non-ExecPlan files change, stop and escalate.
-- Code: if net code lines exceed 4,600 in total, or net production Rust
-  (files outside `tests/`, `*_tests.rs`, `*_proptests*.rs`, `tests_*.rs`,
-  `tests/` modules, and `#[cfg(test)]`-only files) exceeds 1,200, stop and
-  escalate.
+- Files: if more than 105 non-ExecPlan files change, stop and escalate.
+- Code: if net code lines exceed 5,400 in total, or net production Rust
+  exceeds 1,300, stop and escalate.
 - Configuration: if net configuration lines exceed 60, stop and escalate.
 - Documentation: if net documentation lines exceed 1,000, stop and escalate.
 - Interface: if a public API change beyond those authorized in `Constraints`
   is needed (for example, changing `check_output`, adding a field to
-  `AgentCommand` or `DocMetadata` directly, or bumping a schema version), stop
-  and escalate.
-- Dependencies: if any dependency beyond those authorized in `Constraints` is
-  needed, stop and escalate.
+  `AgentCommand` or `DocMetadata` directly, exposing the verdict kernel
+  publicly, or bumping a schema version), stop and escalate.
+- Dependencies: if any dependency change is needed, stop and escalate.
 - Architecture: if the work requires a bridge build in policy-only execution,
-  wiring rules into `--check-agent-native`, changing renderer semantics, or a
-  runtime stream checker, stop and escalate. If roadmap 7.2.8 has landed an
-  orchestrator that composes `check_output` before this work is implemented,
-  stop and agree with the user whether this item also composes
-  `check_json_mode` there.
+  wiring rules into `--check-agent-native`, changing renderer semantics, a
+  runtime stream checker, or a new nested-Cargo test binary, stop and escalate.
+  If roadmap 7.2.8 has landed an orchestrator that composes `check_output`
+  before this work is implemented, stop and agree with the user whether this
+  item also composes `check_json_mode` there.
 - Iterations: if the same gate still fails after three diagnosed repair
   attempts, stop and escalate with the captured log.
 - Time: no wall-clock limit applies (`AGENTS.md`); record timestamps in
   `Progress` so slow milestones are visible.
-- Ambiguity: if review or implementation exposes more than one defensible
-  meaning for a token (see `D3`–`D6`), stop and present the options.
+- Ambiguity: if implementation exposes more than one defensible meaning for a
+  token or condition beyond those settled in `D3`–`D9`, stop and present the
+  options.
 
 Each category is enforced independently; spare capacity in one cannot offset
 another.
 
 ## Risks
 
-- Risk: the new subprocess policy duplicates 7.2.2's per-renderer
-  `subprocess_inheritance` (`allowed | forbidden`), creating two sources of
-  truth. Severity: high. Likelihood: high. Mitigation: `D6` and `D9` give the
-  two fields distinct jobs (the renderer says whether child output passes
-  through in each renderer; `json_mode` says where it goes in JSON mode) and
-  the inconsistency rule reports explicit disagreements. Neither field is
-  defaulted from the other.
-- Risk: `artifact_path` overlaps 7.2.3's `stdout = "path"`. Severity: medium.
-  Likelihood: medium. Mitigation: `D3` defines `artifact_path` as stream
-  framing (the result document lives in a file; stdout carries one JSON
-  manifest) and leaves `stdout` as semantic purpose. The ADR states the
-  combinations explicitly.
-- Risk: the machine renderer is not necessarily the JSON renderer, so the
-  renderer reconciliation in `D9` could flag a command whose machine renderer
-  is, say, tab-separated text. Severity: medium. Likelihood: low. Mitigation:
-  the design review must confirm or reject this reading of ADR-0016; until then
-  the plan treats a declared JSON mode as a machine rendering. If rejected,
-  drop conditions C4 and C5 and record the change.
+- Risk: the subprocess policy duplicates 7.2.2's per-renderer
+  `subprocess_inheritance` (`allowed | forbidden`). Severity: medium.
+  Likelihood: medium. Mitigation: `D6` gives the fields distinct jobs. The
+  renderer is authoritative for whether child output may pass through in each
+  renderer role; `subprocess_output_policy` says only where child output goes
+  instead of stdout in JSON mode, plus (for two tokens) a human-mode permission
+  that must agree with `renderer.human`. Two named conditions report explicit
+  human-mode disagreement; nothing compares JSON mode with the machine renderer
+  (A5).
+- Risk: `artifact_path` overlaps 7.2.3's `stdout = "path"`. Severity: low.
+  Likelihood: medium. Mitigation: `D3` makes `artifact_path` stream framing and
+  leaves `stdout` as semantic purpose; ADR-0026 publishes an informative
+  purpose-by-framing table (no lint).
+- Risk: adoption ratchet. `check_output`'s remedy text tells authors to add
+  `supports_json = true`; once 7.2.8 composes the new rule, that edit produces
+  a deny-mode `json_mode_contract_incomplete` finding. Severity: medium.
+  Likelihood: high. Mitigation: the incomplete message includes a complete,
+  paste-able `json_mode(...)` template; CHANGELOG, the users' guide, and the
+  check-gen design note warn 7.2.3 adopters; the check-gen note recommends that
+  7.2.8 roll the new rule out in warn mode first.
 - Risk: struct-literal sweep misses a target that compiles only in some
   configurations (7.2.2 missed fixture literals; 7.2.3 missed a doctest).
   Severity: medium. Likelihood: medium. Mitigation: run
-  `cargo test --workspace --doc` and `cargo test --all-targets --all-features`
-  in EP-M1, and search with
-  `grep -rn "OutputMetadata {\|OutputContract {" --include=*.rs --include=*.md`.
+  `cargo test --workspace --doc` and the full `make test` in EP-M1, and search
+  with the command below, excluding completed ExecPlans and released migration
+  guides from its results.
+
+  ```sh
+  grep -rn "OutputMetadata {\|OutputContract {" --include=*.rs --include=*.md .
+  ```
+
 - Risk: near-cap files. `cargo-orthohelp/src/policy/rules/output_tests.rs`
   (385 lines), `ortho_config/tests/docs_ir_output.rs` (376),
-  `cargo-orthohelp/src/schema/tests/mod.rs` (352), and
-  `ortho_config/src/agent_context/mod.rs` (345). Severity: low. Likelihood:
-  high. Mitigation: put every new type and test in new sibling modules named in
-  `Plan of work`; add at most a `mod` line and a `pub use` line to near-cap
-  roots, and check `wc -l` before each commit.
-- Risk: fixture churn. Adding stream contracts to the nested fixture changes
-  golden agent-context snapshots in `cargo-orthohelp/tests/golden/`, which
-  other crates' tests also read. Severity: low. Likelihood: high. Mitigation:
-  review every snapshot diff line by line; accept only diffs that add the
-  declared `json_mode` blocks.
+  `ortho_config/src/agent_context/tests.rs` (371),
+  `cargo-orthohelp/src/schema/tests/mod.rs` (352),
+  `tests/fixtures/orthohelp_fixture/src/lib.rs` (348),
+  `ortho_config/src/agent_context/mod.rs` (345), and
+  `cargo-orthohelp/tests/rstest_bdd_support/behaviour/steps_agent_context.rs`
+  (394, do not touch). Severity: low. Likelihood: high. Mitigation: new types
+  and tests go in new sibling modules named in `Plan of work`; near-cap roots
+  gain at most a `mod` line and a `pub use` line; check `wc -l` before each
+  commit.
+- Risk: documentation fences are executable contracts. Every tested fence in
+  `docs/users-guide.md` and `docs/cargo-orthohelp-api-guide.md` carries a
+  `<!-- tested-example: id -->` marker whose ID appears in four inventories
+  (`ortho_config/tests/documentation_examples_tests.rs` lines 18 and 230,
+  `STANDARD_RUST_EXAMPLES` in
+  `ortho_config/tests/documentation_examples_rust_tests.rs`, and the expected
+  stdout in `ortho_config/tests/documentation_examples/simple_runs.rs`).
+  Severity: medium. Likelihood: high. Mitigation: extend the existing
+  `guide-output-metadata` fence and its `SimpleRun` stdout instead of adding a
+  users' guide fence; add at most one API-guide example and register it in
+  every inventory in the same commit.
+- Risk: nested-Cargo test targets must be listed in `.config/nextest.toml`
+  test-group and warm-up filters, enforced only by
+  `tests/workflow_contracts/child_cargo_tier_test.py`, which `make test` does
+  not run; 7.2.3 failed CI this way. Severity: high. Likelihood: high if a new
+  binary is added. Mitigation: `D16` extends the existing
+  `agent_context_output_end_to_end` target instead. If a nested-Cargo test ever
+  fails intermittently, check test-group membership before attributing the
+  failure to load.
+- Risk: BDD step-text collisions. Both feature files run in one
+  `rstest_bdd` binary; 7.2.3 already binds
+  `a command named "get" with no output declaration` and an
+  `exactly one "…" finding has severity "…"` pattern in
+  `cargo-orthohelp/tests/rstest_bdd_support/output_policy.rs`. Severity:
+  medium. Likelihood: high. Mitigation: every new step starts with the unique
+  prefix "a JSON-mode" or "the JSON-mode", patterns stay literal where a
+  placeholder could match 7.2.3's text, and the module comment in
+  `rstest_bdd_support/behaviour/scenarios.rs` (which counts feature files) is
+  updated.
 - Risk: the rolling Whitaker suite or compile-admission saturation moves a
   gate verdict without a source change. Severity: medium. Likelihood: medium.
   Mitigation: record the suite revision and `build-limits-status` beside any
-  surprising verdict; treat nested-Cargo deadline expiries as load until proven
-  otherwise.
-- Risk: an exhaustive enumeration test is slow. Severity: low. Likelihood:
-  low. The domain is 261,792 pure evaluations of small structs; measure it in
-  EP-M2 and split by mode only if it exceeds a few seconds in a debug build.
+  surprising verdict.
 
 ## Progress
 
@@ -276,157 +372,234 @@ another.
 - [x] (2026-11-23 11:00Z) Prior-art research: JSON Lines, RFC 7464 JSON text
   sequences, the Command Line Interface Guidelines, Cargo
   `--message-format json`, and rustc `--error-format=json`.
-- [x] (2026-11-23 11:40Z) Initial draft written.
-- [ ] Community-of-experts design review applied.
-- [ ] Plan approved by the user.
+- [x] (2026-11-23 11:40Z) Initial draft written and committed.
+- [x] (2026-11-23 13:10Z) Community-of-experts design review (contracts and
+  structure; alternatives and viability; failure modes and delivery;
+  verification rigour) completed; verdicts ranged from "Revise" to "Proceed
+  with conditions".
+- [x] (2026-11-23 14:00Z) Review findings applied (see `Decision log` and the
+  revision note); approval decisions A1–A5 stated.
+- [ ] Plan and decisions A1–A5 approved by the user.
 - [ ] `EP-M1` JSON-mode stream contract carried from derive to agent context.
 - [ ] `EP-M2` byte-accounting policy rules delivered as a library API.
 - [ ] `EP-M3` documentation reconciled and roadmap 7.2.4 marked done.
 
 ## Surprises & discoveries
 
-- Observation: `NestedGreetCommand` in
-  `tests/fixtures/orthohelp_fixture/src/lib.rs` already declares
-  `supports_json = true` and a machine renderer with
-  `subprocess_inheritance = "allowed"`. Evidence: lines 164–211 at `6ec295f4`.
-  Impact: once it gains a stream contract it is a natural, realistic witness
-  for the renderer inconsistency condition C4; its fixture comment explains
-  that its human and machine inheritance values deliberately differ, so they
-  must not be "fixed" to silence the finding.
-- Observation: `cargo-orthohelp` already keeps every child's stdout off its
-  own stdout: Cargo's stdout is piped into the protocol reader
-  (`cargo-orthohelp/src/bridge_build_process.rs`, `spawn_cargo`), Cargo's
-  stderr is inherited to stderr, and the bridge executable's streams are
-  captured with `Command::output()` (`bridge_execution.rs`, `run_bridge`).
-  Evidence: Wyvern policy reconnaissance. Impact: roadmap 8.1.1 can declare
-  `capture_preview_and_log` or a stricter policy truthfully; nothing in this
-  item changes that code.
-- Observation: no Verus or Kani proof exists in the repository; the
-  `make verus` and `make kani` targets exit 2 with `FORMAL-EMPTY` when no proof
-  files are named. Evidence: `Makefile` lines 266–291 and
-  `docs/developers-guide.md` "Production proof inventory". Impact: selecting
-  Verus here would create the first production proof; see the formal
-  verification decision.
+- Observation: `cargo-orthohelp` keeps child stdout off its own stdout, but
+  not child stderr. Cargo's stdout is piped into the protocol reader
+  (`cargo-orthohelp/src/bridge_build_process.rs:62`, `spawn_cargo`), Cargo's
+  stderr is inherited and its retained diagnostics are forwarded to stderr
+  (`bridge_build_diagnostics.rs`, `forward_cargo_diagnostics`), and the bridge
+  executable's streams are captured with `Command::output()`
+  (`bridge_execution.rs`, `run_bridge`). Evidence: design review, correcting
+  this plan's first draft, which wrongly said 8.1.1 could declare a capture
+  policy truthfully today. Impact: decision A1 and an 8.1.1 roadmap sub-bullet.
+- Observation: the 7.2.3 end-to-end assertion in
+  `cargo-orthohelp/tests/fixtures/output_assertions.rs`
+  (`expected_greet_output`, `assert_greet_output`) compares greet's whole
+  output block for equality. Evidence: lines 20–46 at `6ec295f4`. Impact: adding
+  `json_mode` to the greet fixture requires updating that literal in EP-M1.
+- Observation: `NestedGreetCommand` declares a machine renderer with
+  `subprocess_inheritance = "allowed"` and a human renderer with
+  `subprocess_inheritance = "forbidden"`, deliberately different so a swapped
+  pair is visible (fixture comment, lines 157–162). Impact: after A5, greet can
+  carry a complete, consistent `capture_preview_and_log` contract; its renderer
+  values must not be changed.
+- Observation: no Verus or Kani proof exists in the repository; `make verus`
+  and `make kani` exit 2 with `FORMAL-EMPTY` when no proof files are named.
+  Evidence: `Makefile` lines 153–156 and 266–300, and
+  `docs/developers-guide.md` "Production proof inventory". Impact: see the
+  formal verification decision.
 
 ## Decision log
 
 - D1. Decision: extend 7.2.3's `output` block with one nested optional record,
   `json_mode`, rather than flat keys on `output` or new keys on `renderer`.
   Rationale: ADR-0023 reserved room for exactly this inside `output` and gave
-  it a single presence rule. A nested record keeps "no JSON-mode contract
-  declared" distinct from "contract partly declared", which flat keys cannot
-  express, and it keeps framing separate from the renderer's presentation
-  vocabulary (ADR-0016). Rejected: renderer keys (would make the renderer's
-  `stdout` mean two things); flat `output` keys (no presence rule for the
-  group). Date/Author: 2026-11-23, planning agent.
-- D2. Decision: use the design's member names and tokens verbatim:
+  it a single presence rule. A nested record keeps "no contract declared"
+  distinct from "contract partly declared", which flat keys cannot express, and
+  keeps framing separate from the renderer's presentation vocabulary
+  (ADR-0016). Rejected: renderer keys (the renderer's `stdout` would mean two
+  things); flat `output` keys (no presence rule); defaulting a contract when
+  `supports_json = true` (would attach claims never made, which ADR-0023
+  forbids); a single combined enum (18 combinations). Date/Author: 2026-11-23,
+  planning agent; confirmed by design review.
+- D2. Decision: keep the design's wire member names and tokens:
   `success_stdout` ∈ {`one_json_document`, `jsonl_stream`, `artifact_path`},
   `failure_stderr` ∈ {`one_json_diagnostic`, `jsonl_diagnostics`},
   `subprocess_output_policy` ∈ {`capture_preview_and_log`,
-  `inherit_only_in_human_mode`, `forbidden`}. Rationale: the tokens are already
-  published in `docs/agent-native-cli-design.md` §6.2 and allow-listed for
-  spelling; renaming them would create drift with no benefit. Date/Author:
-  2026-11-23, planning agent.
-- D3. Decision: `artifact_path` means the command writes its JSON result
-  document to a file artefact and writes exactly one JSON manifest document to
-  stdout naming each delivered artefact path. On failure stdout is empty unless
-  at least one artefact was delivered before the failure, in which case stdout
-  holds exactly one manifest naming only the delivered artefacts. Rationale:
-  this keeps the invariant "in JSON mode stdout contains only complete JSON
-  documents" uniform across all three tokens, and it makes the design's
-  exception ("failure writes no stdout unless an explicit artefact has already
-  been delivered") precise. Rejected: a bare path line on stdout (would make
-  stdout non-JSON in JSON mode). The manifest's field names are
-  application-owned; OrthoConfig does not fix them. Date/Author: 2026-11-23,
-  planning agent; open to design review.
-- D4. Decision: `jsonl_stream` follows JSON Lines (UTF-8, one complete JSON
-  value per line, each terminated by LF, no blank lines). On success stdout
-  holds zero or more records; on failure stdout may hold the records already
-  streamed, but never a partial (torn) record. Rationale: a streaming command
-  cannot retract delivered records, and JSON Lines is the convention Cargo and
-  rustc already use. RFC 7464 record-separator framing was considered and
-  rejected because no tool in the estate emits it and line tools cannot split
-  it. Date/Author: 2026-11-23, planning agent.
+  `inherit_only_in_human_mode`, `forbidden`}. Name the Rust enums
+  `StdoutFraming`, `StderrFraming`, and `SubprocessOutputPolicy`. Rationale:
+  the names are published in design §6.2 and used by the roadmap; an
+  outcome-by-member table in ADR-0026 removes the scope ambiguity. Subject to
+  approval decision A4. Date/Author: 2026-11-23, planning agent; revised after
+  design review (type names).
+- D3. Decision: `artifact_path` means the result is not inline: the command
+  writes its result to one or more file artefacts, and success stdout is
+  exactly one JSON text that references them through the agreed `files` shape
+  (A2). On failure, stdout is empty unless an artefact was already delivered,
+  in which case stdout holds at most one such JSON text. Rationale: keeps
+  "JSON-mode stdout contains only complete JSON texts" uniform across tokens
+  and makes design §6.2's exception ("unless an explicit artefact has already
+  been delivered") precise. Review removed the draft's "at least one artefact"
+  and failure-time accounting requirements as over-specified. Rejected: a bare
+  path line on stdout (non-JSON in JSON mode). Date/Author: 2026-11-23,
+  planning agent; revised after design review.
+- D4. Decision: single-document tokens (`one_json_document`,
+  `one_json_diagnostic`) require exactly one RFC 8259 JSON text, optionally
+  surrounded by whitespace, so pretty-printed output conforms. Stream tokens
+  (`jsonl_stream`, `jsonl_diagnostics`) follow JSON Lines: UTF-8 without a byte
+  order mark, one JSON value per line with no raw line feed inside it, each
+  record terminated by LF; consumers tolerate CRLF; records may be any JSON
+  value. Under `jsonl_stream`, failure stdout may hold complete records already
+  delivered but never a partial record; this is an explicit amendment of design
+  §6.2's "failure writes no stdout" default, recorded in ADR-0026, and only the
+  exit status distinguishes a complete stream from a truncated one. RFC 7464
+  record-separator framing was considered and rejected: nothing in the estate
+  emits it and line tools cannot split it. Date/Author: 2026-11-23, planning
+  agent; revised after design review (whitespace).
 - D5. Decision: under `one_json_diagnostic`, success writes nothing to stderr
-  and failure writes exactly one JSON diagnostic document followed by LF. Under
-  `jsonl_diagnostics`, stderr is a JSON Lines stream on both outcomes, success
-  may carry zero or more records (for example warnings), and failure carries at
-  least one. Rationale: this matches the design's default contract and rustc's
-  JSON-lines-on-stderr precedent. Diagnostic record fields (class and code) are
-  7.2.5's concern. Date/Author: 2026-11-23, planning agent.
-- D6. Decision: the subprocess tokens state where child stdout and stderr go
-  in JSON mode. `capture_preview_and_log`: the parent captures child output; a
-  bounded preview may appear only as an escaped string inside the result or
-  diagnostic document, and the full output may be written only to a log
-  artefact whose path appears inside that document (the "agreed artefact path"
-  of the roadmap). `inherit_only_in_human_mode`: in human mode the child
-  inherits the parent's streams; in JSON mode child output is discarded.
-  `forbidden`: child output never reaches the parent's streams in any mode.
-  Under every token, raw child bytes never appear on the parent's stdout or
-  stderr in JSON mode. Rationale: each token then names a destination for every
-  child byte, which is what the design's "state where every byte of stdout and
-  stderr goes" lint needs. Date/Author: 2026-11-23, planning agent; open to
-  design review.
-- D7. Decision: deliver the new checks as a separate public function,
-  `check_json_mode(context: &AgentContext, mode: PolicyMode) -> PolicyReport`,
-  in a new module `cargo-orthohelp/src/policy/rules/json_mode.rs`, rather than
-  adding them to `check_output`. Rationale: `check_output` is 7.2.3's stable
-  consumer interface for 7.2.8; changing its report would invalidate 7.2.3's
-  exhaustive table and the 7.2.8 cross-over contract. The split matches the
-  existing `check_behaviour`/`check_output` precedent. The cost is one extra
-  composition call in 7.2.8, recorded in
-  `docs/cargo-orthohelp-check-gen-design.md`. Date/Author: 2026-11-23, planning
-  agent.
-- D8. Decision: rule `agent-native.output.json-mode-incomplete`, code
-  `json_mode_contract_incomplete`, applies only when
-  `output.supports_json == Some(true)`. It fires when `json_mode` is absent, or
-  when any of its three members is undeclared or is the wire `unknown`
-  fallback. One finding per command occurrence names every missing member in
-  declaration order. Rationale: only an explicit JSON claim makes the
-  byte-accounting question applicable (no inference); an unrecognized token
-  cannot be shown to account for every byte, so it counts as unstated.
+  and failure writes exactly one JSON diagnostic text. Under
+  `jsonl_diagnostics`, stderr is a JSON Lines stream on both outcomes; success
+  may carry zero or more records, failure at least one. Diagnostic fields
+  (class and code) belong to 7.2.5. Subject to approval decision A1.
   Date/Author: 2026-11-23, planning agent.
+- D6. Decision: `subprocess_output_policy` governs only where child process
+  output goes instead of the parent's stdout in JSON mode; every stderr byte is
+  accounted for by `failure_stderr`, so child bytes on stderr are allowed only
+  when they conform to that framing (in practice, only by being wrapped in the
+  parent's own diagnostic). The tokens mean: `capture_preview_and_log` — the
+  parent captures child output; the full output is reachable through a `log`
+  entry in the `files` reference of the result or diagnostic document, and a
+  bounded preview may appear only inside the diagnostic document (A3);
+  `inherit_only_in_human_mode` — child output is never connected to stdout in
+  JSON mode, and in human mode the child may inherit the parent's streams (a
+  permission, which must agree with `renderer.human.subprocess_inheritance`);
+  `forbidden` — child output is never connected to stdout in any mode, and this
+  is the correct declaration for a command that spawns no subprocess. Retaining
+  child output elsewhere (for example in an unreferenced cache log) is
+  unconstrained. Rationale: the roadmap and design §6.2 limit the subprocess
+  rule to stdout; scoping it so removes double accounting of stderr.
+  Date/Author: 2026-11-23, planning agent; revised after design review.
+- D7. Decision: deliver the checks as a separate public function,
+  `check_json_mode(context: &AgentContext, mode: PolicyMode) -> PolicyReport`,
+  in `cargo-orthohelp/src/policy/rules/json_mode.rs`, rather than adding them to
+  `check_output`. Rationale: `check_output` is 7.2.3's stable consumer
+  interface for 7.2.8; the incomplete rule would fire on every existing
+  `supports_json = true` command and change that report, invalidating 7.2.3's
+  tables and the 7.2.8 cross-over contract. Matches the
+  `check_behaviour`/`check_output` precedent. Consequence: 7.2.8 composes one
+  more call, and its coverage counts need an applicability signal; this plan
+  records that as a 7.2.8 interface requirement in
+  `docs/cargo-orthohelp-check-gen-design.md` rather than adding a speculative
+  public predicate. Date/Author: 2026-11-23, planning agent; confirmed by
+  design review.
+- D8. Decision: rule `agent-native.output.json-mode-incomplete`, code
+  `json_mode_contract_incomplete`. A command is applicable when `supports_json`
+  is `true`, or when `supports_json` is undeclared and its `json_mode` record
+  declares at least one member. An applicable command is incomplete when
+  `supports_json` is undeclared, or when `json_mode` is absent, or when any
+  member is undeclared or is the wire `unknown` fallback. One finding per
+  command occurrence lists, in schema order, the missing members (including
+  `supports_json` when undeclared) and, separately, the members carrying
+  unrecognized tokens, whose remedy is to upgrade the checker rather than to
+  declare the member. The message embeds a complete paste-able `json_mode(...)`
+  template. Rationale: only an explicit or implied JSON claim makes byte
+  accounting applicable; reporting an undeclared `supports_json` beside a
+  declared stream contract reports a missing declaration without inferring one
+  (the precedent is `check_output`'s treatment of undeclared support).
+  Date/Author: 2026-11-23, planning agent; revised after design review (implied
+  applicability, unrecognized tokens, template).
 - D9. Decision: rule `agent-native.output.json-mode-inconsistent`, code
   `json_mode_contract_inconsistent`, fires once per command occurrence when any
-  of these explicit declarations disagree, listing every condition that holds
-  in this order: C1 `supports_json == Some(false)` and `json_mode` declares any
-  member; C2 `stdout == Some(none)` and `success_stdout` is `one_json_document`
-  or `artifact_path`; C3 `stderr_diagnostics == Some(false)` and
-  `failure_stderr` is declared and known; C4
-  `renderer.machine.subprocess_inheritance == Some(allowed)` and
-  `subprocess_output_policy` is declared and known; C5
-  `subprocess_output_policy == forbidden` and
-  `renderer.human.subprocess_inheritance == Some(allowed)`; C6
-  `subprocess_output_policy == inherit_only_in_human_mode` and
-  `renderer.human.subprocess_inheritance == Some(forbidden)`. Undeclared values
-  and `unknown` tokens never trigger a condition. Rationale: each condition is
-  a pair of explicit claims that cannot both be true under `D3`–`D6` and
-  ADR-0016/ADR-0023 semantics, so the rule never infers. Date/Author:
-  2026-11-23, planning agent; C4 and C5 depend on the reading recorded in
-  `Risks`.
-- D10. Decision: the derive performs no cross-field validation of
-  `json_mode`; it validates grammar only (unknown keys, unknown tokens,
-  repeated leaves, wrong literal kinds). Rationale: ADR-0023 assigns claim
-  consistency to policy, and a derive error cannot be downgraded to a warning
-  by the project's policy mode. Date/Author: 2026-11-23, planning agent.
-- D11. Decision: no schema version bumps. Rationale: the field is optional
-  and additive under the §8.2 additive-field policy; 7.2.2 and 7.2.3 made the
-  same choice. Date/Author: 2026-11-23, planning agent.
-- D12. Decision: record the accepted surface in a new ADR (the next free
-  number; `docs/adrs/adr-0026-json-mode-stream-contract.md` at the base
-  revision) and add an `Amended by ADR-0026` banner plus an `## Amendments`
-  section to ADR-0023 recording that its stream-framing outstanding decision is
-  resolved. Rationale: the token semantics are substantive and hard to reverse
-  once agents depend on them; the style guide's amendment process preserves
-  ADR-0023's text. Date/Author: 2026-11-23, planning agent.
-- D13. Decision: no Verus or Kani milestone. See
-  `Formal verification decision`. Date/Author: 2026-11-23, planning agent.
+  of these named conditions holds, listing every holding condition in this
+  order: `json_declined` — `supports_json` is `false` and `json_mode` declares
+  at least one known token; `diagnostics_declined` — `stderr_diagnostics` is
+  `false` and `failure_stderr` is a known token; `human_inheritance_permitted` —
+  `subprocess_output_policy` is `forbidden` and
+  `renderer.human.subprocess_inheritance` is `allowed`;
+  `human_inheritance_forbidden` — `subprocess_output_policy` is
+  `inherit_only_in_human_mode` and `renderer.human.subprocess_inheritance` is
+  `forbidden`. Undeclared values and `unknown` tokens never trigger a
+  condition. Each condition pairs two explicit claims about the same mode that
+  cannot both be true under `D3`–`D6`, ADR-0016, and ADR-0023; ADR-0026 gives a
+  one-line argument for each. The draft's machine-renderer and
+  `stdout = "none"` conditions are dropped (A5). Date/Author: 2026-11-23,
+  planning agent; revised after design review.
+- D10. Decision: the derive validates grammar only (unknown keys, unknown
+  tokens, repeated leaves, wrong literal kinds); it performs no cross-field
+  validation. Rationale: ADR-0023 assigns claim consistency to policy, and a
+  derive error cannot be downgraded by the project's policy mode. Date/Author:
+  2026-11-23, planning agent.
+- D11. Decision: no schema version bumps. Rationale: the field is optional and
+  additive under the §8.2 additive-field policy, as in 7.2.2 and 7.2.3.
+  Date/Author: 2026-11-23, planning agent.
+- D12. Decision: record the accepted surface in a new ADR,
+  `docs/adrs/adr-0026-json-mode-stream-contract.md` (re-check the next free
+  number at implementation time), drafted in EP-M1 and finalized at the end of
+  EP-M2 once the rule semantics are exercised. Add an `Amended by ADR-0026`
+  banner and an `## Amendments` section to ADR-0023 recording that its
+  stream-framing outstanding decision is resolved. ADR-0026 states: the scope
+  definitions (`D13`), the token table with outcome-by-member semantics, the
+  `files` reference shape, the purpose-by-framing table, the condition
+  arguments, the rule that a meaning change needs a new token, and the
+  outstanding decisions (A5's mode binding; additional stderr tokens for tools
+  that write human text in JSON mode). Date/Author: 2026-11-23, planning agent;
+  revised after design review.
+- D13. Decision: define the contract's scope. JSON mode is an invocation that
+  requested the command's JSON output (the `--json` capability asserted by
+  `supports_json`) and whose arguments parsed. Success is exit status 0;
+  failure is any non-zero status. Usage errors raised before JSON mode is
+  established (Clap status 2), help and version output, termination by a
+  signal, and operator-enabled diagnostic logging (for example through
+  `RUST_LOG`) are outside the contract; an application that writes log lines to
+  stderr in JSON mode by default cannot declare `one_json_diagnostic`.
+  Rationale: without these definitions two implementations would disagree on
+  what the tokens promise. Date/Author: 2026-11-23, planning agent; added after
+  design review.
 - D14. Decision: no runtime stream conformance checker in this item.
   Rationale: the roadmap asks to model the contract; the first executable
-  consumer is roadmap 8.1.1 (`cargo-orthohelp --json`), whose end-to-end tests
-  will verify real streams. A reusable checker needs a concrete second consumer
-  before it earns a public API (`AGENTS.md` abstraction policy). Date/Author:
-  2026-11-23, planning agent; open to design review.
+  consumer is roadmap 8.1.1 (`cargo-orthohelp --json`), which gains a
+  sub-bullet to capture child output and verify its real streams against its
+  declared contract. A reusable checker needs that concrete consumer before it
+  earns a public API (`AGENTS.md` abstraction policy). Date/Author: 2026-11-23,
+  planning agent; confirmed by design review.
+- D15. Decision: structure `check_json_mode` around a pure per-command kernel:
+  a private `JsonModeView` projection of an `AgentCommand` (the four inputs the
+  rules read), a total `verdict` function returning a structured
+  `JsonModeVerdict` (ordered missing members, ordered unrecognized members,
+  ordered condition labels), and a thin rendering layer that sorts commands,
+  projects, judges, and builds findings. Rationale: the verification review
+  showed that exhaustive enumeration is complete only for such a kernel; with
+  the split, the kernel cannot read fields it must ignore, so the frame
+  condition holds by construction and the enumeration claim is honest.
+  Date/Author: 2026-11-23, planning agent; added after design review.
+- D16. Decision: extend the existing
+  `cargo-orthohelp/tests/agent_context_output_end_to_end.rs` target (180 lines)
+  with a `#[path]` helper module
+  `cargo-orthohelp/tests/fixtures/json_mode_assertions.rs` and one policy test,
+  rather than adding a new nested-Cargo test binary. Rationale: avoids
+  `.config/nextest.toml` test-group and warm-up filter edits, an extra bridge
+  build per locale, and a race with BDD scenarios that clear
+  `target/orthohelp`. Date/Author: 2026-11-23, planning agent; added after
+  design review.
+- D17. Decision: fixture witnesses use existing commands without changing
+  their existing declarations. `NestedGreetCommand` gains a complete,
+  consistent contract (`one_json_document`, `one_json_diagnostic`,
+  `capture_preview_and_log`), so the 7.2.8 cross-over's supported-data command
+  stays clean under the new rule. `NestedGrantAccessCommand` (a `submit`
+  command that plausibly returns a one-document JSON summary) gains a JSON
+  claim whose stream contract omits the subprocess policy, as the incomplete
+  witness. Inconsistent witnesses are exercised at unit, table, and BDD level,
+  which suffices because the rules are pure functions of the decoded context.
+  Rationale: adding a new subcommand would ripple through nested fixture
+  mirrors and snapshots; the draft's prune and `jsonl_stream` witnesses were
+  unrealistic for their commands. Date/Author: 2026-11-23, planning agent;
+  added after design review.
+- D18. Decision: no Verus or Kani milestone. See
+  `Formal verification decision`. Date/Author: 2026-11-23, planning agent;
+  confirmed by verification review.
 
 ## Outcomes & retrospective
 
@@ -457,9 +630,11 @@ The 7.2.3 output pipeline that this item extends:
 - Parsing: `ortho_config_macros/src/derive/parse/doc_attrs.rs:77` routes the
   `output` key to `parse_output_meta` in
   `ortho_config_macros/src/derive/parse/output_attrs.rs` (263 lines). That file
-  defines `STDOUT_VALUES` (line 27), `group_is_empty` (line 81, accepts
-  `output()`), `unknown_output_key` (line 92), `parse_exit_class` (line 108),
-  and `set_once` (line 249, rejects repeated leaves across groups). Leaf helpers
+  defines `STDOUT_VALUES` (line 27), the private helpers `group_is_empty` (line
+  81, accepts `output()`) and `set_once` (line 249, rejects repeated leaves
+  across groups), and `unknown_output_key` (line 92), whose message lists the
+  accepted keys and is pinned by
+  `ortho_config_macros/src/derive/parse/tests/output_attrs.rs:165`. Leaf helpers
   `parse_bool` and `parse_token` live in
   `ortho_config_macros/src/derive/parse/renderer_values.rs`.
 - Parsed types: `OutputAttrs` and `ExitClassAttr` in
@@ -475,16 +650,23 @@ The 7.2.3 output pipeline that this item extends:
   no `Unknown` variant: unknown tokens are decode errors. IR `null` reads as
   absence.
 - Mirror: `cargo-orthohelp/src/schema/output.rs` (52 lines) must serialize
-  exactly like the IR.
+  exactly like the IR; `cargo-orthohelp/src/schema/tests/output_snapshots.rs`
+  pins it.
 - Wire: `OutputContract`, `StdoutPurpose` (`#[non_exhaustive]`, with
   `#[serde(other)] Unknown`), `ExitClass`, `deserialize_present`, and
   `deserialize_contract` in `ortho_config/src/agent_context/output.rs` (125
   lines), attached as `AgentCommand::output`
   (`ortho_config/src/agent_context/mod.rs:179`) and re-exported at line 44. A
-  present `null` is a decode error in agent context.
+  present `null` is a decode error in agent context. Wire tests live in
+  `ortho_config/src/agent_context/tests_output_wire.rs`, registered with
+  `#[path]` in `ortho_config/src/agent_context/tests.rs:28`. The canonical wire
+  fixture is
+  `ortho_config/src/agent_context/fixtures/agent_context_wire_contract.json`.
 - Bridge: `map_output` and `map_stdout` (one explicit arm per variant) in
   `cargo-orthohelp/src/agent_context/output.rs` (48 lines), called from
-  `cargo-orthohelp/src/agent_context/mod.rs:243`.
+  `cargo-orthohelp/src/agent_context/mod.rs:243`; property tests in
+  `cargo-orthohelp/src/agent_context/output_proptests.rs` with generators in
+  `output_proptests/generators.rs`.
 - Policy: `check_output` in `cargo-orthohelp/src/policy/rules/output.rs`
   (155 lines), rule `agent-native.output.json-missing`, code
   `json_support_missing`, severity `warn` in warn mode and `deny` otherwise,
@@ -494,45 +676,44 @@ The 7.2.3 output pipeline that this item extends:
   live in `cargo-orthohelp/src/policy/rules/tests.rs` (`context_with`,
   `command`, `ctx_for_command`).
 
-Renderer metadata (7.2.2, ADR-0016) already carries, per renderer role (`human`
-and `machine`), `stdout` and `stderr` content categories
+Renderer metadata (7.2.2, ADR-0016) carries, per renderer role (`human` and
+`machine`), `stdout` and `stderr` content categories
 (`none | text | structured | mixed`) and `progress_inheritance` and
 `subprocess_inheritance` (`allowed | forbidden`, wire `unknown` fallback). The
 wire types are `RendererContract` and `RendererRecord` with `InheritancePolicy`
 in `ortho_config/src/agent_context/renderer.rs` (`InheritancePolicy` at line
-290). `AgentCommand::renderer` is not optional: it carries role defaults, but
-`subprocess_inheritance` itself stays `None` unless declared.
+290). `AgentCommand::renderer` is not optional and carries role defaults, but
+`subprocess_inheritance` stays `None` unless declared.
 
-`cargo-orthohelp`'s own stdout writers are `write_json_stdout`
-(`cargo-orthohelp/src/output/mod.rs:104`) for the policy report and the agent
-context. The `--check-agent-native` path (`main.rs:112`,
+`cargo-orthohelp`'s `--check-agent-native` path (`main.rs:112`,
 `policy/check/mod.rs:71`) runs configuration-sanity rules only and never calls
 `policy::rules`. Neither `check`/`gen` (roadmap 7.2.8) nor `--json` (roadmap
 8.1.1) exists yet; `docs/cargo-orthohelp-check-gen-design.md` §§4 and 6
-describe how 7.2.8 will compose rule reports and states that 7.2.8 does not
-implement stream framing or new completeness rules.
+describe how 7.2.8 will compose rule reports with per-rule-group coverage
+counts and state that 7.2.8 does not implement stream framing or new
+completeness rules.
 
 Tests and tooling. Workspace dev-dependencies (`Cargo.toml` lines 29–38):
 `rstest 0.28.0`, `rstest-bdd 0.6.0`, `rstest-bdd-macros 0.6.0`,
 `proptest 1.11.0`, `googletest 0.14.3`, `pretty_assertions 1.4.1`.
-`ortho_config` and `cargo-orthohelp` also use `insta` and `trybuild`;
-`ortho_config_macros` lacks `googletest`, `pretty_assertions`, and `insta`.
+`ortho_config` and `cargo-orthohelp` also use `insta` and `trybuild`.
 `make test` runs `cargo test --all-targets --all-features` (not nextest) and
-then pytest; it does not run doctests, so doctests need
-`cargo test --workspace --doc` explicitly. BDD scenarios for `cargo-orthohelp`
-live in `cargo-orthohelp/tests/features/` and bind through
-`cargo-orthohelp/tests/rstest_bdd.rs` with step modules under
-`cargo-orthohelp/tests/rstest_bdd_support/` (7.2.3's
+then pytest; it does not run doctests or `tests/workflow_contracts`.
+`cargo-orthohelp` BDD scenarios live in `cargo-orthohelp/tests/features/`,
+bound through `cargo-orthohelp/tests/rstest_bdd.rs` with step modules under
+`cargo-orthohelp/tests/rstest_bdd_support/`; 7.2.3's
 `structured_output.feature` is bound in
-`rstest_bdd_support/behaviour/scenarios.rs` around line 56). Compile-fail tests
-run `ortho_config/tests/compile_fail.rs` over `tests/ui/*.rs` with committed
-`.stderr` files. Golden agent-context snapshots live in
-`cargo-orthohelp/tests/golden/` (for example
-`agent_context__nested_fixture.json.snap`). The real-binary end-to-end
-precedent is `cargo-orthohelp/tests/agent_context_output_end_to_end.rs` with
-helpers in `cargo-orthohelp/tests/fixtures/output_assertions.rs`. Prover targets
-`make kani`, `make kani-full`, and `make verus VERUS_PROOF_FILES='…'` exist
-but have no production inputs.
+`rstest_bdd_support/behaviour/scenarios.rs` near line 56. rstest-bdd's
+`scenarios!` input is not tracked by Cargo, so after editing a `.feature` file
+touch the binding module. Compile-fail tests run
+`ortho_config/tests/compile_fail.rs` over `ortho_config/tests/ui/*.rs` with
+committed `.stderr` files. Golden agent-context snapshots live in
+`cargo-orthohelp/tests/golden/` (only `agent_context__nested_fixture.json.snap`
+reads the nested fixture's output metadata; roff and PowerShell goldens use
+handwritten IR). The real-binary precedent is
+`cargo-orthohelp/tests/agent_context_output_end_to_end.rs`, a member of the
+`orthohelp_cache` nextest group. Prover targets `make kani`, `make kani-full`,
+and `make verus VERUS_PROOF_FILES='…'` exist but have no production inputs.
 
 Relevant documentation and skills. Read `docs/agent-native-cli-design.md`
 §§6.2, 6.2.1, 6.2.2, 8.1, and 8.2; ADR-0003, ADR-0016, and ADR-0023;
@@ -540,26 +721,28 @@ Relevant documentation and skills. Read `docs/agent-native-cli-design.md`
 `docs/cargo-orthohelp-design.md`; `docs/users-guide.md` sections "Declare
 structured output and exit classes" (line 2397) and "Lint declared structured
 output" (line 2780); `docs/developers-guide.md` "Structured output metadata
-ownership" (line 847); `docs/rust-testing-with-rstest-fixtures.md`;
-`docs/rstest-bdd-users-guide.md`;
+ownership" (line 847) and "Kani and Verus verification tools" (line 55);
+`docs/rust-testing-with-rstest-fixtures.md`; `docs/rstest-bdd-users-guide.md`;
 `docs/reliable-testing-in-rust-via-dependency-injection.md`;
 `docs/rust-doctest-dry-guide.md`;
-`docs/complexity-antipatterns-and-refactoring-strategies.md`;
+`docs/complexity-antipatterns-and-refactoring-strategies.md`; and
 `docs/documentation-style-guide.md` (ADR amendments, line 545). The
 localization documents (`docs/cli-localization-design.md` and
 `docs/localizable-rust-libraries-with-fluent.md`) matter only to confirm that
-tokens stay non-localized. `docs/clap-dispatch-and-ortho-config-integration.md`
-and `docs/scripting-standards.md` need no change. Load the `rust-router` skill
+tokens stay non-localized; `docs/improved-error-message-design.md` informs the
+finding messages; `docs/clap-dispatch-and-ortho-config-integration.md` and
+`docs/scripting-standards.md` need no change. Load the `rust-router` skill
 first, then `rust-types-and-apis` (public types), `rust-unit-testing` (rstest,
 googletest, insta), `proptest`, `rust-verification` (method selection),
-`arch-decision-records` (ADR-0026), `execplans`, and `en-gb-oxendict-style` for
-prose. Load `verus` only if the formal verification decision is reopened.
+`arch-decision-records` (ADR-0026), `execplans`, `mapsplice` (for the roadmap
+sub-bullet), and `en-gb-oxendict-style` for prose. Load `verus` only if the
+formal verification decision is reopened.
 
 ## Conformance basis
 
 Upstream artefacts, all at revision `6ec295f4`:
 
-- `docs/roadmap.md` item 7.2.4 and its three bullets.
+- `docs/roadmap.md` item 7.2.4 and its three bullets; item 8.1.1.
 - `docs/agent-native-cli-design.md` §6.2 (structured output and the
   `JsonModeContract`-style shape), §6.2.1 (renderer metadata), §8.1
   (defaulting), §8.2 (schema compatibility).
@@ -593,109 +776,129 @@ Requirements derived from those artefacts:
 
 Gaps observed at the base revision:
 
-- `GAP-fields`: `OutputMetadata` and `OutputContract` have no stream
-  contract members.
+- `GAP-fields`: `OutputMetadata` and `OutputContract` have no stream contract
+  members.
 - `GAP-rule`: no rule checks byte accounting or stream-contract consistency.
-- `GAP-renderer`: no rule reconciles renderer `subprocess_inheritance` with a
-  JSON-mode subprocess policy.
+- `GAP-renderer`: nothing reconciles the human renderer's
+  `subprocess_inheritance` with a subprocess output policy.
 - `GAP-docs`: §6.2, §8.1, §8.2, ADR-0023, the users' guide, and the
   developers' guide describe stream contracts as future work; §8.1 still lists
-  the delivered renderer rows as "planned".
+  the delivered renderer rows as "planned"; roadmap 8.1.1 does not require
+  `cargo-orthohelp` to honour a declared stream contract.
 
 Trace links:
 
 ```plaintext
-roadmap 7.2.4 bullet 1 -> REQ-success-stdout -> GAP-fields -> EP-M1 -> agent_context_json_mode_end_to_end::declared_stream_contract_survives_to_both_artefacts
+roadmap 7.2.4 bullet 1 -> REQ-success-stdout -> GAP-fields -> EP-M1 -> agent_context_output_end_to_end::declared_stream_contract_survives_to_both_artefacts
 roadmap 7.2.4 bullet 2 -> REQ-failure-stderr -> GAP-fields -> EP-M1 -> tests_json_mode_wire::known_tokens_decode
-roadmap 7.2.4 bullet 3 -> REQ-subprocess -> GAP-fields, GAP-renderer -> EP-M1, EP-M2 -> json_mode_table_tests::rules_match_the_specification_exhaustively
+roadmap 7.2.4 bullet 3 -> REQ-subprocess -> GAP-fields, GAP-renderer -> EP-M1, EP-M2 -> json_mode_kernel_tests::verdict_matches_the_specification_exhaustively
 design §6.2 lint sentence -> REQ-byte-accounting -> GAP-rule -> EP-M2 -> json_mode_stream_contract.feature
-ADR-0023 no-inference -> REQ-no-inference -> EP-M1, EP-M2 -> json_mode_tests::undeclared_command_is_not_inferred
+ADR-0023 no-inference -> REQ-no-inference -> EP-M1, EP-M2 -> json_mode_proptests::projection_ignores_unrelated_fields
 ADR-0003 -> REQ-ownership -> EP-M1 -> schema json_mode mirror parity snapshots
-design §8.2 -> REQ-additive -> EP-M1 -> legacy context without json_mode decodes unchanged
-design §6.2 -> REQ-nonlocalized -> EP-M1 -> end-to-end test in two locales
-ADR-0023 outstanding decision -> GAP-docs -> EP-M3 -> ADR-0026 and amended ADR-0023
+design §8.2 -> REQ-additive -> EP-M1 -> tests_json_mode_wire::context_without_json_mode_decodes_unchanged
+design §6.2 -> REQ-nonlocalized -> EP-M1 -> agent_context_output_end_to_end, second locale
+ADR-0023 outstanding decision -> GAP-docs -> EP-M1 to EP-M3 -> ADR-0026 and amended ADR-0023
+roadmap 8.1.1 -> A1 -> GAP-docs -> EP-M3 -> roadmap sub-bullet
 ```
 
 ## Verification plan
 
 ### Abstract model
 
-A command's JSON-mode stream contract is a partial record `J = (σ, φ, π)` where
-each member is either undeclared (written `⊥`), a known token, or (in agent
-context only) `unknown`:
+A command's JSON-mode stream contract is a partial record `J = (σ, φ, π)`. Each
+member is undeclared (written `⊥`), a known token, or (in agent context only)
+`unknown`. Write `known(x)` for "x is a known token" and `declared(x)` for
+`x ≠ ⊥`.
 
-- `σ`, the success stdout framing, is one of `one_json_document`,
-  `jsonl_stream`, or `artifact_path`;
-- `φ ∈ {one_json_diagnostic, jsonl_diagnostics}` (failure stderr);
-- `π ∈ {capture_preview_and_log, inherit_only_in_human_mode, forbidden}`
-  (subprocess output policy).
+- `σ`, the stdout framing, ranges over `one_json_document`, `jsonl_stream`,
+  `artifact_path`, `⊥`, and `unknown` (5 states).
+- `φ`, the stderr framing, ranges over `one_json_diagnostic`,
+  `jsonl_diagnostics`, `⊥`, and `unknown` (4 states).
+- `π`, the subprocess output policy, ranges over `capture_preview_and_log`,
+  `inherit_only_in_human_mode`, `forbidden`, `⊥`, and `unknown` (5 states).
 
-`J` itself may be absent. The surrounding 7.2.3 declarations are
-`S ∈ {⊥, false, true}` (`supports_json`),
-`P ∈ {⊥, data, path, summary, none, unknown}` (`stdout`), and
-`D ∈ {⊥, false, true}` (`stderr_diagnostics`). The 7.2.2 renderer supplies
-`H, M ∈ {⊥, allowed, forbidden, unknown}`, the human and machine
-`subprocess_inheritance` values.
+`J` itself may be absent (written `J = absent`), so `J` has 1 + 5 × 4 × 5 = 101
+states. The other inputs the rules read are `S ∈ {⊥, false, true}`
+(`output.supports_json`), `D ∈ {⊥, false, true}` (`output.stderr_diagnostics`),
+and `H ∈ {⊥, allowed, forbidden, unknown}`
+(`renderer.human.subprocess_inheritance`). A command with `output` absent has
+`S = D = ⊥` and `J = absent`. The per-command view is therefore the tuple
+`(S, D, J, H)`, with 3 × 3 × 101 × 4 = 3,636 states.
 
-Semantics (normative for the ADR, not executed by this item). Let `enc(v)` be
-the compact JSON encoding of a value `v`, `LF` a line feed, and `ε` the empty
-byte string. In JSON mode, for outcome `o ∈ {success, failure}`:
-
-- `σ = one_json_document`: success stdout is `enc(v)·LF` for exactly one `v`;
-  failure stdout is `ε`.
-- `σ = jsonl_stream`: success stdout is `enc(v₁)·LF·…·enc(vₙ)·LF` with
-  `n ≥ 0` and no `LF` inside any `enc(vᵢ)`; failure stdout is such a sequence
-  of already-delivered records, never ending in a partial record.
-- `σ` is `artifact_path`: the result document is written to an artefact file;
-  success stdout is `enc(m)·LF` for one manifest `m` naming at least one
-  delivered artefact; failure stdout is `ε` if nothing was delivered, otherwise
-  `enc(m)·LF` naming only delivered artefacts.
-- `φ = one_json_diagnostic`: success stderr is `ε`; failure stderr is
-  `enc(d)·LF` for exactly one diagnostic `d`.
-- `φ = jsonl_diagnostics`: stderr is a JSON Lines sequence; on failure it has
-  at least one record.
-- For every `π`, raw child bytes never appear on the parent's stdout or
-  stderr in JSON mode. Under `capture_preview_and_log` they may appear only as
-  an escaped string inside a document or in a log artefact whose path a
-  document names; under the other two tokens they are discarded in JSON mode.
-  `inherit_only_in_human_mode` lets the child inherit streams in human mode;
-  `forbidden` never connects child output to the parent's streams.
-
-`J` is complete when it is present and all three members are known tokens.
-
-The policy specification, written independently of the implementation (`m` is
-the policy mode):
+Stream semantics (normative for ADR-0026; not executed by this item), within
+the scope of `D13`. Let a JSON text be an RFC 8259 text, a record be a JSON
+value encoded without a raw line feed followed by LF, and `ε` the empty byte
+string.
 
 ```plaintext
-applicable(c)  = S(c) = true
-incomplete(c)  = applicable(c) and not complete(J(c))
-C1(c) = S = false and J present with any member not ⊥
-C2(c) = P = none and σ ∈ {one_json_document, artifact_path}
-C3(c) = D = false and φ is a known token
-C4(c) = M = allowed and π is a known token
-C5(c) = π = forbidden and H = allowed
-C6(c) = π = inherit_only_in_human_mode and H = forbidden
-inconsistent(c) = C1 or C2 or C3 or C4 or C5 or C6
-results(off, cs)  = []
-results(warn, cs) = for each c in stable path order:
-                      [incomplete finding if incomplete(c)]
-                      ++ [inconsistent finding if inconsistent(c)],
-                    each with severity warn
-results(deny, cs) = same, severity deny
+stdout, success:
+  one_json_document  -> exactly one JSON text, optional surrounding whitespace
+  jsonl_stream       -> zero or more records
+  artifact_path      -> exactly one JSON text referencing result files ("files")
+stdout, failure:
+  one_json_document  -> ε
+  jsonl_stream       -> zero or more complete records already delivered
+  artifact_path      -> ε, or at most one JSON text referencing delivered files
+stderr, success:
+  one_json_diagnostic -> ε
+  jsonl_diagnostics   -> zero or more records
+stderr, failure:
+  one_json_diagnostic -> exactly one JSON text
+  jsonl_diagnostics   -> one or more records
+child output, JSON mode (never connected to stdout under any π):
+  capture_preview_and_log    -> captured; full output via a "log" file reference
+                                in the result or diagnostic document; bounded
+                                preview only inside the diagnostic document
+  inherit_only_in_human_mode -> not connected to stdout; may be inherited in
+                                human mode only
+  forbidden                  -> not connected to stdout in any mode
+```
+
+`complete(J)` holds when `J` is present and `known(σ) ∧ known(φ) ∧ known(π)`.
+`declares(J)` holds when `J` is present and some member is declared.
+
+Policy specification, written independently of the implementation:
+
+```plaintext
+applicable(v)  = S = true  or  (S = ⊥ and declares(J))
+incomplete(v)  = applicable(v) and (S = ⊥ or not complete(J))
+missing(v)     = [supports_json if S = ⊥] ++ [each member of (σ, φ, π), in that
+                 order, that is ⊥ or J absent]          -- when incomplete(v)
+unrecognized(v)= [each member of (σ, φ, π), in that order, that is unknown]
+json_declined(v)               = S = false and J present and
+                                 (known(σ) or known(φ) or known(π))
+diagnostics_declined(v)        = D = false and known(φ)
+human_inheritance_permitted(v) = π = forbidden and H = allowed
+human_inheritance_forbidden(v) = π = inherit_only_in_human_mode and H = forbidden
+conflicts(v) = the holding conditions, in the order listed above
+verdict(v)   = (incomplete(v), missing(v), unrecognized(v), conflicts(v))
+
+check_json_mode(ctx, off)  = report with no results
+check_json_mode(ctx, m)    = for each command c of ctx in stable path order:
+                               [incomplete finding  if incomplete(view(c))]
+                               ++ [inconsistent finding if conflicts(view(c)) ≠ []]
+                             each with severity warn if m = warn, deny if m = deny
 ```
 
 Malformed authoring input (unknown key, unknown token, wrong literal kind,
 repeated leaf) is a derive error with a span. Malformed IR JSON (unknown token)
-is a decode error. Malformed agent-context JSON (present `null`) is a decode
-error; an unknown token decodes to `unknown`.
+is a decode error. Malformed agent-context JSON (present `null` for the record
+or a member) is a decode error; an unknown token decodes to `unknown`.
+
+Representation relation. `view : AgentCommand → (S, D, J, H)` reads exactly
+`output.supports_json`, `output.stderr_diagnostics`, `output.json_mode`, and
+`renderer.human.subprocess_inheritance`, mapping `output: None` to
+`(⊥, ⊥, absent)` for the first three. Every other `AgentCommand` field,
+`renderer.machine`, every other `renderer.human` field, and every
+`AgentContext` field other than `commands` are outside the view.
 
 ### Invariants and lemmas
 
 - `INV-preserve` (REQ-success-stdout, REQ-failure-stderr, REQ-subprocess,
-  REQ-ownership): for every command independently, the declared `json_mode`
-  members survive derive → IR → mirror → wire unchanged, an absent record stays
-  absent, an empty `json_mode()` stays a present empty record, and no command
-  acquires a parent's record.
+  REQ-ownership): for every command independently, declared `json_mode` members
+  survive derive → IR → mirror → wire unchanged, an absent record stays absent,
+  an empty `json_mode()` stays a present empty record, and no command acquires
+  a parent's record.
 - `INV-presence` (REQ-additive): an agent context or IR document without
   `json_mode` decodes exactly as before; serialization omits absent members and
   the absent record; a present `null` is rejected in agent context and read as
@@ -703,214 +906,269 @@ error; an unknown token decodes to `unknown`.
 - `INV-unknown` (REQ-additive): each wire enum maps an unrecognized token to
   `unknown` and leaves the rest of the document readable; each IR enum and each
   derive token list rejects an unrecognized token.
+- `INV-variants` (REQ-additive): the variant lists the verification enumerates
+  equal the variant lists the crates define; adding a variant fails a test in
+  the defining crate.
 - `INV-nonlocalized` (REQ-nonlocalized): the stream contract is identical in
   agent context generated under two locales.
-- `L-incomplete` (REQ-byte-accounting): `check_json_mode` emits an
-  `json_mode_contract_incomplete` finding for a command occurrence if and only
-  if `m ≠ off` and `incomplete(c)`.
-- `L-inconsistent` (REQ-byte-accounting, REQ-subprocess): it emits a
-  `json_mode_contract_inconsistent` finding if and only if `m ≠ off` and
-  `inconsistent(c)`, and the message lists exactly the conditions that hold.
-- `INV-report` (REQ-byte-accounting): findings follow stable command-path
-  order, equal paths are not deduplicated, reports are additive over disjoint
-  command sets, checking does not mutate the context, and off-mode and empty
-  reports still advertise the canonical vocabulary.
-- `INV-no-inference` (REQ-no-inference): changing a command's path, verb,
-  flags, `output_modes`, locale, or any renderer member other than
-  `subprocess_inheritance` never changes the report.
-- `L-no-leak` (REQ-subprocess, semantic): for every complete `J`, outcome,
-  and child stream, the model routes no raw child byte to stdout in JSON mode,
-  and stdout holds only complete JSON documents. This is a property of the
-  token definitions in ADR-0026, not of executable code in this item.
+- `L-view` (REQ-no-inference): `view` agrees with the representation relation
+  for every concrete combination of `output` (absent or present, with every
+  member state) and `renderer.human.subprocess_inheritance`.
+- `L-verdict` (REQ-byte-accounting, REQ-subprocess): for every one of the
+  3,636 views, the production `verdict` equals the specification's `verdict`
+  exactly (flags, ordered member lists, and ordered condition labels).
+- `L-render` (REQ-byte-accounting): for a one-command context and every mode,
+  `check_json_mode` emits exactly the findings the verdict determines, with the
+  stable rule IDs and codes, severity from the mode, and `location: None`; off
+  mode emits none.
+- `L-decompose` (REQ-byte-accounting): for any context, the report equals the
+  stable-path-ordered concatenation of per-command renderings; reports are
+  additive over disjoint command sets, equal paths are not deduplicated,
+  checking does not mutate the context, and empty and off reports advertise the
+  canonical vocabulary.
+- `INV-no-inference` (REQ-no-inference): each command's verdict is invariant
+  under changes to its path, canonical verb, inputs, summary, flags,
+  `output_modes`, `output.stdout`, `output.exit_classes`, every
+  `renderer.machine` field, every `renderer.human` field other than
+  `subprocess_inheritance`, and every context-level field (`policy`, `profiles`,
+  `skill_manifests`); a parent command with a complete record never changes a
+  child's verdict.
+- `L-cond-sound` (REQ-byte-accounting): each of the four conditions pairs two
+  explicit claims that cannot both hold under `D3`–`D6`, ADR-0016, and
+  ADR-0023, and each "consistent by decision" pairing listed below is
+  deliberately not a condition.
+- `DEF-routing` (REQ-subprocess): ADR-0026's table assigns a destination to
+  every (policy token, mode ∈ {human, JSON}, child stream ∈ {stdout, stderr}),
+  and no JSON-mode destination is the parent's stdout. This is a definition
+  reviewed for totality, not a theorem; nothing in this item executes it.
 
 ### Axioms (trusted, not verified here)
 
 - `AXIOM-serde`: Serde's documented behaviour for `default`,
   `skip_serializing_if`, `deserialize_with`, `rename_all`, and
   `#[serde(other)]`. Exercised by the round-trip and decode tests.
-- `AXIOM-syn`: `syn` parses nested attribute groups as documented, including
-  rejection of empty groups before the callback (handled by the existing
-  `group_is_empty`). Exercised by parser tests and the trybuild fixture.
+- `AXIOM-syn`: `syn` parses nested attribute groups as documented; empty
+  groups are handled by the existing `group_is_empty`. Exercised by parser
+  tests and the trybuild fixture.
+- `AXIOM-sort`: the standard library's `sort_by` is stable. Relied on by
+  `L-decompose`; exercised by the equal-path property.
 - `AXIOM-bridge`: the bridge binary transports the IR faithfully as JSON.
   Exercised by the real-binary end-to-end test.
-- `AXIOM-jsonlines`: JSON Lines as specified at jsonlines.org (UTF-8, one
-  value per line, `LF` terminator). Used only in ADR prose.
+- `AXIOM-jsonlines`: JSON Lines as specified at jsonlines.org, and RFC 8259
+  JSON texts. Used only in ADR prose.
 - `AXIOM-declaration`: a downstream application's declarations are claims.
-  Nothing here verifies that a real process honours them.
+  Nothing here verifies that a real process honours them; roadmap 8.1.1 is the
+  first place real streams are checked.
 
 ### Methods per obligation
 
 - Obligation: `INV-preserve`.
   Method: `rstest` tables for the grammar plus `proptest` round trips.
-  Rationale: the input space (three optional enums inside an optional record,
-  nested command trees) is broad but shallow; this mirrors 7.2.3's proven
-  approach. Domain: every token of every member, absent/empty/partial/full
-  records, bounded command trees of depth 0–4 with up to 32 commands. Artefacts:
+  Rationale: three optional enums inside an optional record, over nested
+  command trees, is a broad but shallow space; 7.2.3 used the same approach.
+  Domain: every token of every member; absent, empty, partial, and full
+  records; bounded command trees of depth 0–4 with up to 32 commands. Artefacts:
   `ortho_config_macros/src/derive/parse/tests/json_mode_attrs.rs`,
   `ortho_config/tests/docs_ir_json_mode.rs`,
   `cargo-orthohelp/src/agent_context/json_mode_tests.rs`, and
-  `cargo-orthohelp/src/agent_context/json_mode_proptests.rs`. Evidence:
-  `cargo test -p ortho_config_macros json_mode`,
-  `cargo test -p ortho_config json_mode`,
-  `cargo test -p cargo-orthohelp json_mode` fail before EP-M1 (missing symbols)
-  and pass after. Non-vacuity: generators classify and assert that each token,
-  the absent record, the empty record, and at least one partial record occur
-  (`prop_assert!` on counters or `proptest`'s `prop_oneof!` weights with a
-  coverage test); negative control: temporarily map `forbidden` to
-  `inherit_only_in_human_mode` in the bridge, or copy a parent's record into a
-  child; a named test must fail, then restore with `git checkout -p` after
-  copying the probe aside, and delete any new `proptest-regressions` entries
-  the probe created.
-- Obligation: `INV-presence` and `INV-unknown`.
-  Method: named `rstest` cases. Rationale: each rule is a finite case.
-  Artefacts: `ortho_config/src/agent_context/tests_json_mode_wire.rs`,
+  `cargo-orthohelp/src/agent_context/json_mode_proptests.rs`. Evidence: the
+  focused EP-M1 commands fail before implementation on missing symbols and pass
+  after. Non-vacuity: a deterministic coverage test runs the strategy through a
+  `proptest::test_runner::TestRunner` with a fixed seed, samples a few hundred
+  values, and asserts that every token, the absent record, the empty record,
+  and a partial record occur. Seeded faults: map `forbidden` to
+  `inherit_only_in_human_mode` in the bridge; copy a parent's record into a
+  child. A named test must fail for each.
+- Obligation: `INV-presence`, `INV-unknown`, and `INV-variants`.
+  Method: named `rstest` cases and one exhaustive `match` per enum in the
+  defining crate. Artefacts:
+  `ortho_config/src/agent_context/tests_json_mode_wire.rs`,
   `ortho_config/tests/docs_ir_json_mode.rs`,
   `cargo-orthohelp/src/schema/tests/json_mode_snapshots.rs`, and the trybuild
   fixture `ortho_config/tests/ui/output_invalid_json_mode.rs` with its
   `.stderr`. Evidence: wire tests show `unknown` for a future token in each
   member, rejection of present `null` for the record and each member, and an
-  unchanged decode of a 7.2.3-era context; IR tests reject an unknown token;
-  the trybuild `.stderr` pins the error naming the valid tokens. Non-vacuity:
-  each test asserts the decoded value, not merely `is_ok()`; the legacy test
-  uses a document copied from the current golden snapshot.
-- Obligation: `L-incomplete` and `L-inconsistent`.
-  Method: exhaustive enumeration in an ordinary unit test. Rationale: the input
-  domain that the rules read is finite: `S` (3) × `P` (6) × `D` (3) × `J`
-  (absent, or 5 × 4 × 5 member states = 101) × `H` (4) × `M` (4) × mode (3) =
-  261,792 combinations. Enumerating all of them against an independent oracle
-  is an exhaustive check of the whole domain, which is the strongest evidence
-  available for a finite function and needs no extra tool. Artefact:
-  `cargo-orthohelp/src/policy/rules/json_mode_table_tests.rs`
-  (`rules_match_the_specification_exhaustively`). The oracle is written from
-  the specification above as six named condition functions over plain enums
-  defined in the test module; it does not call production predicates. Evidence:
-  the test fails before EP-M2 (missing module) and passes after; it also
-  asserts the total count of evaluated combinations equals 261,792 and the
-  counts of incomplete and inconsistent findings equal the oracle's counts.
-  Non-vacuity: assert that each condition C1–C6 and the incomplete predicate is
-  true for at least one combination and false for at least one, and that at
-  least one combination triggers several inconsistency conditions at once, so
-  the message-ordering contract is exercised. Seeded faults, each run then
-  reverted: drop C4; treat `unknown` as complete; make `S = ⊥` applicable; emit
-  in off mode. Each must fail the enumeration with a counterexample naming the
-  combination.
-- Obligation: named specification examples for `L-incomplete` and
-  `L-inconsistent`. Method: `rstest` table with one readable row per condition
-  and per missing member, plus `insta` snapshots of the off, warn, and deny
-  reports for a three-command context. Artefact:
-  `cargo-orthohelp/src/policy/rules/json_mode_tests.rs`. Rationale: the
-  enumeration proves correctness; named rows document intent and lock message
-  text. Evidence: snapshots reviewed, never blindly accepted; `googletest`
-  matchers assert rule IDs, codes, severities, and `location: None`.
-- Obligation: `INV-report` and `INV-no-inference`.
-  Method: `proptest` over generated command vectors of length 0–64, copying
-  7.2.3's `output_proptests.rs` properties (permutation invariance for distinct
-  paths, stable ties, additivity, non-mutation) and varying unrelated fields.
-  Artefact: `cargo-orthohelp/src/policy/rules/json_mode_proptests.rs`.
-  Non-vacuity: generated vectors must contain both offending and clean
-  commands; assert class counts. Negative control: replace the stable sort with
-  `sort_unstable_by` or deduplicate equal paths; a property must fail.
+  unchanged decode of a small inline 7.2.3-era context (not a copy of the
+  375-line golden); IR tests reject an unknown token; the trybuild `.stderr`
+  pins the error naming the valid tokens; the variant tests list each enum's
+  variants in an exhaustive `match` (allowed inside the defining crate despite
+  `#[non_exhaustive]`) and their comments point to the kernel table test.
+  Non-vacuity: every test asserts the decoded value, not merely `is_ok()`.
+- Obligation: `L-verdict`.
+  Method: exhaustive enumeration of the kernel. Rationale: the kernel's domain
+  is finite (3,636 views); evaluating every view against an independent oracle
+  and comparing complete structured verdicts is an exhaustive check of that
+  domain, the strongest evidence available for a finite function, with no extra
+  tooling. Artefact:
+  `cargo-orthohelp/src/policy/rules/json_mode_kernel_tests.rs`, test
+  `verdict_matches_the_specification_exhaustively`. Construction: a `Copy`
+  test-local `Case` struct built by chaining `flat_map` over each dimension's
+  variant slice (no nested `for` loops, no index arithmetic, no `#[values]`
+  product, which would generate thousands of test functions); the oracle is
+  four named condition functions and two list builders over the test's own
+  plain enums, written from the specification above without calling production
+  predicates; the test reports at most the first ten mismatches. Evidence:
+  fails before EP-M2 (missing kernel) and passes after; asserts that the
+  enumerated cases are pairwise distinct and number 3,636, and that every enum
+  variant and every ADR token string occurs. Non-vacuity: each condition and
+  `incomplete` is true for at least one view and false for at least one; at
+  least one view holds two or more conditions, exercising ordering. Seeded
+  faults, each applied alone on a clean committed tree and reverted: `unknown`
+  treated as a known token in `json_declined`; the two human conditions' labels
+  swapped; `S = ⊥` with an empty record treated as applicable; `supports_json`
+  omitted from `missing`; members listed in the wrong order. Each must fail
+  with a counterexample naming the view. Residual gap: production's `_`
+  wildcard arms over the `#[non_exhaustive]` wire enums (required outside the
+  defining crate) are unreachable from the enumeration; `INV-variants` bounds
+  that gap.
+- Obligation: `L-view` and `INV-no-inference`.
+  Method: exhaustive enumeration of `view` over concrete states, plus property
+  tests for invariance. Artefacts: `json_mode_kernel_tests.rs`
+  (`projection_matches_the_representation_relation`, covering `output: None`,
+  `Some(OutputContract::default())`, and every member state, crossed with every
+  human inheritance state) and
+  `cargo-orthohelp/src/policy/rules/json_mode_proptests.rs`
+  (`projection_ignores_unrelated_fields`, varying every field listed in
+  `INV-no-inference`). Seeded faults: map `output: None` to `S = false`; read
+  `renderer.machine` instead of `renderer.human`; swap `allowed` and
+  `forbidden` in the projection. Each must fail.
+- Obligation: `L-render`.
+  Method: exhaustive over 3,636 views × 3 modes through the public function on
+  one-command contexts, comparing rule IDs, codes, severities, and
+  `location: None` with the oracle's verdict; plus named `rstest` rows and
+  `insta` snapshots of off, warn, and deny reports for a small context to pin
+  message text, including the paste-able template and the unrecognized-token
+  wording. Artefacts: `json_mode_kernel_tests.rs`
+  (`rendered_findings_follow_the_verdict`) and
+  `cargo-orthohelp/src/policy/rules/json_mode_tests.rs`. Seeded faults: emit
+  the inconsistent finding before the incomplete one; emit findings in off
+  mode. Each must fail. Snapshots are reviewed with `cargo insta review`, never
+  accepted wholesale.
+- Obligation: `L-decompose`.
+  Method: `proptest` over generated command vectors of length 0–64, mirroring
+  7.2.3's `output_proptests.rs` (permutation invariance for distinct paths,
+  stable ties, additivity, non-mutation). Artefact: `json_mode_proptests.rs`.
+  Rationale: the decomposition is over unbounded command lists, so it is
+  sampled; proving it would need a verified specification of `sort_by`
+  (`AXIOM-sort`), which `AGENTS.md` forbids trusting as a proof body.
+  Non-vacuity: the fixed-seed coverage test asserts generated vectors contain
+  offending and clean commands and equal paths. Seeded faults: replace
+  `sort_by` with `sort_unstable_by`; deduplicate equal paths. Each must fail.
+- Obligation: `L-cond-sound`.
+  Method: argument in ADR-0026 plus named "consistent by decision" rows in
+  `json_mode_tests.rs`: `S = ⊥` with an empty record; `S = false` with an empty
+  record; `S = false` with only `unknown` members; `stdout = "none"` with
+  `one_json_document`; `stdout = "path"` or `"summary"` with
+  `one_json_document`; `stdout = "data"` with `artifact_path`;
+  `renderer.machine.subprocess_inheritance = "allowed"` with every policy; and
+  `capture_preview_and_log` with every human inheritance value. Each row
+  asserts no inconsistent finding and cites the ADR sentence that justifies it.
 - Obligation: `INV-nonlocalized` and the executable boundary.
-  Method: real-binary end-to-end test. Artefact:
-  `cargo-orthohelp/tests/agent_context_json_mode_end_to_end.rs`, reusing the
-  supervised fixture helpers of `agent_context_output_end_to_end.rs`. It runs
-  `cargo orthohelp --format agent-context` on `orthohelp_fixture` under two
-  locales, compares the `json_mode` blocks in `agent-context.json` and stdout,
-  decodes the context, and calls `check_json_mode` in deny mode. Expected: the
-  witnesses named in `EP-M1` produce exactly the predicted findings.
-  Non-vacuity: the fixture contains a complete witness, an incomplete witness,
-  and an inconsistent witness; the test asserts each, so a bridge that dropped
-  `json_mode` would turn the complete witness into an incomplete finding and
-  fail.
-- Obligation: `L-no-leak`.
-  Method: design review of the ADR-0026 token table, plus the completeness
-  rule. Rationale: the property holds by definition of the vocabulary; there is
-  no executable routing code in this item to verify. Residual gap: runtime
-  conformance is unverified until roadmap 8.1.1 adds real stream tests for
-  `cargo-orthohelp --json`.
+  Method: real-binary end-to-end test in the existing target. Artefact:
+  `cargo-orthohelp/tests/agent_context_output_end_to_end.rs` with the new helper
+  `cargo-orthohelp/tests/fixtures/json_mode_assertions.rs`, reusing each
+  locale's existing run. Tests:
+  `declared_stream_contract_survives_to_both_artefacts` (greet's complete
+  record and grant-access's partial record, in `agent-context.json` and stdout,
+  under two locales) and `generated_context_drives_the_json_mode_rule` (decode
+  the generated context and call `check_json_mode` in deny mode: exactly one
+  `json_mode_contract_incomplete` finding, for grant-access, naming
+  `subprocess_output_policy`; none for greet, audit, version, or any other
+  command; `summary.deny` is 1). Non-vacuity: a bridge that dropped `json_mode`
+  would turn greet into an incomplete finding and fail the second test; one
+  that dropped grant-access's record would remove its finding.
+- Obligation: `DEF-routing`.
+  Method: design review of the ADR-0026 table for totality (every policy, mode,
+  and child stream has a destination) and for the stdout exclusion. Residual
+  gap: runtime conformance is unverified until roadmap 8.1.1 checks real
+  streams.
+
+Every seeded fault is applied alone to a clean, committed, green tree, its
+failing output is recorded under `Artefacts and notes`, and it is reverted with
+`git restore --source=HEAD -- <path>`. Acceptance for each probe is an empty
+`git status --porcelain --untracked-files=all` afterwards, which also proves
+that no `.snap.new`, pending-snapshot, or `proptest-regressions` residue
+remains (the committed
+`cargo-orthohelp/proptest-regressions/agent_context/output_proptests.txt` must
+be unchanged).
 
 ### Formal verification decision
 
-Verus and Kani are not selected. Every executable obligation introduced here is
-a total function over a finite domain (at most 261,792 inputs), and the plan
-enumerates that domain completely in an ordinary test against an independent
-oracle; Kani would re-establish the same exhaustiveness with more tooling, and
-Verus is designed for properties over unbounded domains. The only unbounded
-objects in this item are the byte streams in the abstract model, and no code
-here parses or produces them. A Verus proof about a detached model of stream
-framing would not verify shipped code, which `AGENTS.md` forbids presenting as
-evidence. This matches the 7.2.2 and 7.2.3 decisions, and 7.2.2's stated
-reconsideration trigger (cross-field enforcement) is met here by exhaustive
-enumeration rather than by proof because the cross-field domain is finite.
+Verus and Kani are not selected, and no production proof is added. Every
+executable obligation introduced here is either a total function over a finite
+domain (the 3,636-view kernel and its 10,908 rendered cases, which this plan
+enumerates completely against an independent oracle) or a decomposition over
+unbounded command lists whose only non-trivial step is the standard library's
+stable sort. Kani would re-establish the kernel's exhaustiveness with more
+tooling. Verus is suited to unbounded properties, but the decomposition's proof
+would depend on a trusted specification of `sort_by`, and `AGENTS.md` forbids
+trusted proof bodies. The unbounded byte streams in the abstract model are
+specified, not implemented, so a Verus proof about them would verify a detached
+model rather than shipped code. This matches the 7.2.2 and 7.2.3 decisions;
+7.2.2's stated reconsideration trigger (cross-field enforcement) is met here by
+exhaustive enumeration because the cross-field domain is finite. Tests remain
+the evidence for executable integration and externally observable behaviour in
+all cases.
 
-Reconsideration trigger: if design review or later work adds a runtime stream
-conformance checker (for example `admits(contract, outcome, stdout, stderr)`),
-its framing kernel has an unbounded domain. Before implementing it, revise this
-plan with a proof milestone over a pure framing function, with these candidate
-lemmas (to be refined when verification conditions appear):
-`L-frame-roundtrip`, splitting the concatenation of `LF`-free records each
-followed by `LF` returns exactly those records; `L-no-torn`, an accepted stream
-is empty or ends with `LF`; `L-one-document`, `one_json_document` acceptance
-holds exactly when splitting yields one record. The acceptance command would be
+Reconsideration triggers. Revise this plan with a proof milestone before
+implementing any of the following:
+
+- A runtime stream conformance checker (for example
+  `admits(contract, outcome, stdout, stderr)`), whose framing kernel has an
+  unbounded domain. Candidate lemmas, to be refined when verification
+  conditions appear: `L-frame-roundtrip` (splitting the concatenation of
+  LF-free records each followed by LF returns exactly those records);
+  `L-no-torn` (an accepted record stream is empty or ends with LF);
+  `L-one-document` (single-document acceptance holds exactly when the trimmed
+  stream parses as one JSON text).
+- An in-house merge, deduplication, or precedence step over unbounded finding
+  sequences (for example in 7.2.8's report composition), with the lemma that it
+  preserves the multiset of per-command verdicts and stable path order.
+
+The acceptance command for such a milestone is
 `make verus VERUS_PROOF_FILES='<production proof path>'` beside the ordinary
 gates, and the proof must reject a seeded fault. No `assume`, `admit`, or
 trusted body may be introduced.
 
 ### Suggested BDD features
 
-Proposed feature file:
+Feature file:
 `cargo-orthohelp/tests/features/json_mode_stream_contract.feature`, bound in
 `cargo-orthohelp/tests/rstest_bdd_support/behaviour/scenarios.rs` with step
 definitions in a new
 `cargo-orthohelp/tests/rstest_bdd_support/json_mode_policy.rs`. It covers
 `REQ-byte-accounting`, `REQ-subprocess`, and `REQ-no-inference` in `EP-M2`.
+Every step uses the "JSON-mode" prefix so no pattern collides with 7.2.3's
+`structured_output.feature` steps in the same binary. Detailed condition
+coverage lives in the kernel table and named rows, not here.
 
 ```gherkin
 Feature: JSON mode stream contract
-  Scenario: A JSON command states where every byte goes
-    Given a command that supports JSON with a complete stream contract and subprocess policy "forbidden"
-    When the JSON mode policy is checked in "deny" mode
-    Then the JSON mode policy report has no findings
+  Scenario: A JSON-mode command states where every byte goes
+    Given a JSON-mode command with a complete stream contract
+    When the JSON-mode policy is checked in "deny" mode
+    Then the JSON-mode policy report has no findings
 
-  Scenario: A JSON command has no stream contract
-    Given a command that supports JSON with no stream contract
-    When the JSON mode policy is checked in "deny" mode
-    Then exactly one "json_mode_contract_incomplete" finding has severity "deny"
-    And the finding names "success_stdout", "failure_stderr", and "subprocess_output_policy"
+  Scenario: A JSON-mode command omits its subprocess policy
+    Given a JSON-mode command whose stream contract omits the subprocess policy
+    When the JSON-mode policy is checked in "deny" mode
+    Then the JSON-mode policy report has one incomplete finding with severity "deny"
+    And the JSON-mode finding names the subprocess output policy
 
-  Scenario: A JSON command omits its subprocess policy
-    Given a command that supports JSON with success stdout "jsonl_stream" and failure stderr "jsonl_diagnostics"
-    When the JSON mode policy is checked in "warn" mode
-    Then exactly one "json_mode_contract_incomplete" finding has severity "warn"
-    And the finding names only "subprocess_output_policy"
+  Scenario: A JSON-mode stream contract contradicts a JSON refusal
+    Given a JSON-mode command that declines JSON support but declares a stream contract
+    When the JSON-mode policy is checked in "warn" mode
+    Then the JSON-mode policy report has one inconsistent finding with severity "warn"
 
-  Scenario: The machine renderer lets child output through
-    Given a command that supports JSON with a complete stream contract and subprocess policy "capture_preview_and_log"
-    And its machine renderer allows subprocess inheritance
-    When the JSON mode policy is checked in "deny" mode
-    Then exactly one "json_mode_contract_inconsistent" finding has severity "deny"
-
-  Scenario: A stream contract contradicts a JSON refusal
-    Given a command that declines JSON support but declares success stdout "one_json_document"
-    When the JSON mode policy is checked in "deny" mode
-    Then exactly one "json_mode_contract_inconsistent" finding has severity "deny"
-
-  Scenario: Enforcement is disabled
-    Given a command that supports JSON with no stream contract
-    When the JSON mode policy is checked in "off" mode
-    Then the JSON mode policy report has no findings
-
-  Scenario: JSON mode is not inferred from a verb
-    Given a command named "get" with no output declaration
-    When the JSON mode policy is checked in "deny" mode
-    Then the JSON mode policy report has no findings
+  Scenario: A JSON-mode contract is not inferred from a verb
+    Given a JSON-mode candidate named "get" with no output declaration
+    When the JSON-mode policy is checked in "deny" mode
+    Then the JSON-mode policy report has no findings
 ```
 
 Runner: `cargo test -p cargo-orthohelp --test rstest_bdd json_mode`. The
-scenarios must fail before `check_json_mode` exists (red: unresolved step
-module or missing function) and pass after. Remember that rstest-bdd's
-`scenarios!` input is not tracked by Cargo: after editing the `.feature` file,
-touch the binding module or the test binary will be stale.
+scenarios fail before `check_json_mode` exists (missing function) and pass
+after.
 
 ## Plan of work
 
@@ -921,81 +1179,90 @@ gate sequence, and is committed as a coherent unit.
 
 Requirements: `REQ-success-stdout`, `REQ-failure-stderr`, `REQ-subprocess`
 (declaration only), `REQ-no-inference`, `REQ-ownership`, `REQ-additive`,
-`REQ-nonlocalized`; gap `GAP-fields`; decisions `D1`–`D6`, `D10`–`D12`.
+`REQ-nonlocalized`; gap `GAP-fields`; decisions `D1`–`D6`, `D10`–`D13`, `D16`,
+`D17`.
 
 Red. Add, before any production change:
 
-1. `ortho_config_macros/src/derive/parse/tests/json_mode_attrs.rs` (registered
-   beside the existing `output_attrs` test module): a full declaration, an empty
-   `json_mode()`, composition of members across two `output(...)` groups,
-   every token of every member (`rstest` cases), and rejection of an unknown
-   member key, an unknown token for each member, a non-string literal, a
-   repeated member in one group and across groups, and `json_mode` outside
-   `output(...)`.
+1. `ortho_config_macros/src/derive/parse/tests/json_mode_attrs.rs`
+   (registered in `ortho_config_macros/src/derive/parse/tests/mod.rs` beside
+   `output_attrs`): a full declaration, an empty `json_mode()`, composition of
+   members across two `output(...)` groups, every token of every member
+   (`rstest` cases), and rejection of an unknown member key, an unknown token
+   for each member, a non-string literal, a repeated member in one group and
+   across groups, and `json_mode` outside `output(...)`. Update the pinned
+   unknown-key message expectation in
+   `ortho_config_macros/src/derive/parse/tests/output_attrs.rs:165` to list
+   `json_mode`.
 2. `ortho_config/tests/docs_ir_json_mode.rs`: IR decode and encode for absent,
    `null`, empty, partial, and full records; unknown-token rejection; derive
    emission for a declared, empty, and undeclared record.
 3. `ortho_config/src/agent_context/tests_json_mode_wire.rs` (registered with
    `#[path]` in `ortho_config/src/agent_context/tests.rs` beside
-   `tests_output_wire.rs`): omission, present-`null` rejection for the record
-   and each member, empty record, each known token, a future token per member
-   decoding to `unknown` and serializing as `"unknown"`, tolerance of a future
-   member key, and an unchanged decode of a context copied from
-   `cargo-orthohelp/tests/golden/agent_context__nested_fixture.json.snap`.
+   `tests_output_wire.rs`) and a variant-pinning test: omission, present-`null`
+   rejection for the record and each member, empty record, each known token, a
+   future token per member decoding to `unknown` and serializing as
+   `"unknown"`, tolerance of a future member key, and an unchanged decode of a
+   small inline 7.2.3-era context.
 4. `cargo-orthohelp/src/agent_context/json_mode_tests.rs`: explicit mapping of
    every token, absent and empty records, per-command independence, and
    localizer independence.
 5. `ortho_config/tests/ui/output_invalid_json_mode.rs` with an unknown
-   `success_stdout` token. Generate its `.stderr` only after the parser exists
+   `success_stdout` token. Generate its `.stderr` only after the parser exists,
    and review it.
+6. In `cargo-orthohelp/tests/agent_context_output_end_to_end.rs`, the test
+   `declared_stream_contract_survives_to_both_artefacts`, using the new helper
+   `cargo-orthohelp/tests/fixtures/json_mode_assertions.rs`; extend
+   `expected_greet_output()` in
+   `cargo-orthohelp/tests/fixtures/output_assertions.rs` with greet's
+   `json_mode` block.
 
-Run the focused commands in `Concrete steps`; they must fail on missing symbols
-or modules, not on fixture or tool errors.
+Run the focused commands in `Concrete steps`; they must fail on missing
+symbols, modules, or fixture declarations, not on tool errors.
 
 Green. Implement:
 
 1. Derive parsing in a new
    `ortho_config_macros/src/derive/parse/json_mode_attrs.rs`
-   (`parse_json_mode_meta`), dispatched from `parse_output_meta` in
-   `output_attrs.rs` for the key `json_mode`. Reuse `group_is_empty`,
-   `set_once`, and `parse_token`. Add `JsonModeAttrs` (three `Option<String>`
-   members) to `doc_types.rs` and a `json_mode: Option<JsonModeAttrs>` member to
-   `OutputAttrs`. Token lists are constants beside the parser, as
-   `STDOUT_VALUES` is.
-2. Emission in `ortho_config_macros/src/derive/generate/docs/output.rs`
-   (or a sibling `json_mode.rs` if the file would pass about 250 lines),
-   emitting `json_mode: Some(JsonModeMetadata { … })` or `None` with
+   (`parse_json_mode_meta`), dispatched from `parse_output_meta` for the key
+   `json_mode`. Make `group_is_empty` and `set_once` in `output_attrs.rs`
+   `pub(super)` and reuse them with `parse_token`. Add `JsonModeAttrs` (three
+   `Option<String>` members) to `doc_types.rs` and
+   `json_mode: Option<JsonModeAttrs>` to `OutputAttrs`. Token lists are
+   constants beside the parser, as `STDOUT_VALUES` is. Extend
+   `unknown_output_key`'s message with `json_mode`.
+2. Emission in `ortho_config_macros/src/derive/generate/docs/output.rs`, or a
+   sibling `json_mode.rs` if that file would pass about 250 lines, emitting
+   `json_mode: Some(JsonModeMetadata { … })` or `None` with
    `enum_option_tokens`.
 3. IR types in a new `ortho_config/src/docs/ir/json_mode.rs`:
-   `JsonModeMetadata`, `SuccessStdout`, `FailureStderr`,
+   `JsonModeMetadata`, `StdoutFraming`, `StderrFraming`,
    `SubprocessOutputPolicy` (strict enums, no `Unknown`), with
    `OutputMetadata::json_mode: Option<JsonModeMetadata>` using the same serde
    attributes as `DocMetadata::output`. Re-export from `ortho_config::docs`.
-4. Mirror types in a new `cargo-orthohelp/src/schema/json_mode.rs`, wired
-   into `cargo-orthohelp/src/schema/output.rs`.
+4. Mirror types in a new `cargo-orthohelp/src/schema/json_mode.rs`, wired into
+   `cargo-orthohelp/src/schema/output.rs`, with snapshots in
+   `cargo-orthohelp/src/schema/tests/json_mode_snapshots.rs` (empty, full, each
+   token).
 5. Wire types in a new `ortho_config/src/agent_context/json_mode.rs`:
    `JsonModeContract` with each member using `deserialize_present`, and the
    three enums marked `#[non_exhaustive]` with
-   `#[default] #[serde(other)] Unknown`. Add `OutputContract::json_mode` with a
-   `deserialize_with` function that rejects a present `null`, mirroring
-   `deserialize_contract`. Re-export the four types from
-   `ortho_config::agent_context` (one `mod` line and one `pub use` line in the
-   345-line `mod.rs`).
+   `#[default] #[serde(other)] Unknown`, each variant carrying a normative
+   one-line Rustdoc summary of its ADR-0026 meaning. Add
+   `OutputContract::json_mode` with a `deserialize_with` function that rejects
+   a present `null`, mirroring `deserialize_contract`. Re-export the four types
+   from `ortho_config::agent_context` (one `mod` line and one `pub use` line in
+   the 345-line `mod.rs`).
 6. Bridge mapping: `map_json_mode` plus one explicit-arm mapping function per
    enum, in `cargo-orthohelp/src/agent_context/output.rs` or a sibling
-   `json_mode.rs`, called from `map_output`.
+   `json_mode.rs`, called from `map_output`, with property tests in
+   `cargo-orthohelp/src/agent_context/json_mode_proptests.rs`.
 7. Update every exhaustive `OutputMetadata { … }` and `OutputContract { … }`
-   literal in the workspace, fixtures, examples, doctests, and Markdown
-   examples with `json_mode: None`.
-8. Fixture witnesses in `tests/fixtures/orthohelp_fixture/src/lib.rs`:
-   - `NestedGreetCommand` gains a complete stream contract inside its
-     existing `output(...)` group. Its machine renderer already declares
-     `subprocess_inheritance = "allowed"`, so this command is the
-     inconsistent (C4) witness; extend its doc comment to say so;
-   - `NestedPruneCommand` gains a JSON claim with a complete stream contract
-     as the clean witness;
-   - `NestedGrantAccessCommand` gains a JSON claim whose stream contract
-     omits the subprocess policy, as the incomplete witness.
+   literal in the workspace, fixtures, examples, doctests, and live Markdown
+   examples with `json_mode: None`, excluding historical documents named in
+   `Constraints`.
+8. Fixture witnesses in `tests/fixtures/orthohelp_fixture/src/lib.rs`
+   (`D17`), extending each command's doc comment to say why:
 
    ```rust,no_run
    // NestedGreetCommand: added inside the existing output(...) group.
@@ -1005,117 +1272,121 @@ Green. Implement:
        subprocess_output_policy = "capture_preview_and_log"
    )
 
-   // NestedPruneCommand: clean, complete witness.
+   // NestedGrantAccessCommand: incomplete witness (no subprocess policy).
    output(
        supports_json = true,
        stdout = "summary",
        json_mode(
-           success_stdout = "artifact_path",
-           failure_stderr = "one_json_diagnostic",
-           subprocess_output_policy = "forbidden"
+           success_stdout = "one_json_document",
+           failure_stderr = "one_json_diagnostic"
        )
-   )
-
-   // NestedGrantAccessCommand: incomplete witness.
-   output(
-       supports_json = true,
-       stdout = "summary",
-       json_mode(success_stdout = "jsonl_stream", failure_stderr = "jsonl_diagnostics")
    )
    ```
 
-   If a fixture comment or another test contradicts one of these choices, pick
-   the nearest command without that conflict and record it in `Decision log`.
-9. Add `cargo-orthohelp/tests/agent_context_json_mode_end_to_end.rs`
-   (structure modelled on `agent_context_output_end_to_end.rs`) covering the
-   declared blocks in file and stdout under two locales. Its policy half is
-   added in EP-M2.
-10. Add schema snapshots in
-    `cargo-orthohelp/src/schema/tests/json_mode_snapshots.rs` (empty, full,
-    each token) and review the regenerated golden agent-context snapshots.
+   Review the regenerated
+   `cargo-orthohelp/tests/golden/agent_context__nested_fixture.json.snap`;
+   accept only the added `json_mode` and grant-access `output` blocks.
+9. Extend the tested users' guide fence `guide-output-metadata`
+   (`docs/users-guide.md:2404`) with a `json_mode(...)` declaration, and update
+   its expected stdout in
+   `ortho_config/tests/documentation_examples/simple_runs.rs`.
 
 Refactor. Keep every touched file under 400 lines, share helpers rather than
-duplicating 7.2.3 test setup, and run `make lint` locally through the gate
-sequence (Clippy finds `missing_const_for_fn` and similar issues that
-`cargo test` does not).
+duplicating 7.2.3 test setup, and expect `make lint` (Clippy with
+`missing_const_for_fn` and `cognitive_complexity`) to find issues that
+`cargo test` does not.
 
-Documentation in the same milestone: write ADR-0026 (status `Accepted` on
-approval, date, context, drivers, options A–D as in `D1`, the token table with
-`D3`–`D6` semantics, wire representation and defaults, migration, risks,
-outstanding decisions), amend ADR-0023 per `D12`, add ADR-0026 to
-`docs/contents.md`, and add the derive syntax to `docs/users-guide.md` "Declare
-structured output and exit classes" with an explicit statement that the
-contract is a declaration, not a runtime guarantee.
+Documentation in the same milestone: draft ADR-0026 (status `Proposed`) with
+the token table, scope definitions, `files` reference shape, and
+purpose-by-framing table; amend ADR-0023 per `D12`; add ADR-0026 to
+`docs/contents.md`; describe the derive syntax in `docs/users-guide.md`
+"Declare structured output and exit classes", stating that the contract is a
+declaration, not a runtime guarantee.
 
 ### `EP-M2` lint byte accounting as a library API
 
 Requirements: `REQ-byte-accounting`, `REQ-subprocess`, `REQ-no-inference`; gaps
-`GAP-rule`, `GAP-renderer`; decisions `D7`–`D9`.
+`GAP-rule`, `GAP-renderer`; decisions `D7`–`D9`, `D15`.
 
-Red. Add `cargo-orthohelp/src/policy/rules/json_mode_table_tests.rs`
-(exhaustive enumeration), `json_mode_tests.rs` (named rows and report
-snapshots), `json_mode_proptests.rs` (report properties), the BDD feature and
-step module, and the policy half of the end-to-end test. Register the test
-modules in `cargo-orthohelp/src/policy/rules/mod.rs` under `#[cfg(test)]`. They
-must fail because `check_json_mode` does not exist.
+Red. Add `cargo-orthohelp/src/policy/rules/json_mode_kernel_tests.rs`
+(exhaustive kernel, projection, and rendering tests), `json_mode_tests.rs`
+(named rows, consistent-by-decision rows, and report snapshots),
+`json_mode_proptests.rs` (decomposition and invariance properties, plus the
+fixed-seed coverage test), the BDD feature and step module, and
+`generated_context_drives_the_json_mode_rule` in the end-to-end target.
+Register the unit test modules in `cargo-orthohelp/src/policy/rules/mod.rs`
+under `#[cfg(test)]`. They must fail because `check_json_mode` and its kernel
+do not exist.
 
 Green. Add `cargo-orthohelp/src/policy/rules/json_mode.rs` with a `//!` module
-comment, `pub mod json_mode;` in `rules/mod.rs`, and:
+comment and `pub mod json_mode;` in `rules/mod.rs`. Inside it, define the
+private kernel (`JsonModeView`, `view`, `JsonModeVerdict`, `verdict`, visible
+to the sibling test modules as `pub(super)`) and the public entry point:
 
 ```rust
+#[must_use]
 pub fn check_json_mode(context: &AgentContext, mode: PolicyMode) -> PolicyReport
 ```
 
-following `check_output`'s structure: return
-`PolicyReport::with_details(mode, Vec::new(), Vec::new(), Vocabulary::canonical())`
-in off mode; otherwise collect commands, `sort_by` path (stable), and for each
-command push an incomplete finding then an inconsistent finding when their
-predicates hold. Keep predicates as small private functions (`is_incomplete`,
-`inconsistency_conditions` returning the ordered list of condition labels) so
-each stays below the cognitive-complexity threshold. Messages name the command
-path, the missing members or the conflicting declarations, and the remedy
-(declare the member, or correct whichever declaration is untrue). Add a Rustdoc
-example that decodes a small context with `serde_json::from_value` and shows
-one incomplete finding in deny mode, as `check_output`'s example does.
+following `check_output`'s structure: in off mode return
+`PolicyReport::with_details(mode, Vec::new(), Vec::new(), Vocabulary::canonical())`;
+otherwise collect commands, `sort_by` path (stable), project, judge, and push
+an incomplete finding then an inconsistent finding when the verdict says so.
+Keep each predicate a small private function below the cognitive-complexity
+threshold. Messages name the command path; the incomplete message lists missing
+and unrecognized members separately and embeds a complete paste-able
+`json_mode(...)` template; the inconsistent message names each holding
+condition and the remedy (correct whichever declaration is untrue). Add a
+Rustdoc example decoding a small context with `serde_json::from_value` and
+showing one incomplete finding in deny mode, as `check_output`'s example does.
 
-Refactor. Share the severity projection with `check_output` only if both
-modules can use one private helper without changing `check_output`'s behaviour;
-otherwise leave the duplicated three-line function and record why. Run the
-seeded-fault negative controls listed in `Verification plan`, restore the code,
-and delete any probe-created regression files.
+Refactor. Share the severity projection with `check_output` only if both can
+use one private helper without changing `check_output`'s behaviour; otherwise
+leave the three-line function duplicated and record why. Run the seeded-fault
+probes listed in `Verification plan`, recording each failure and restoring a
+clean tree after each.
 
-Documentation in the same milestone: add "Lint the JSON mode stream contract" to
-`docs/users-guide.md` after "Lint declared structured output", mirror the
-Rustdoc example in `docs/cargo-orthohelp-api-guide.md` beside the
-structured-output rule, and add a short paragraph to
-`docs/cargo-orthohelp-check-gen-design.md` §6 recording that the 7.2.8
-orchestrator composes `check_json_mode` beside `check_output` when both exist,
-without changing 7.2.8's acceptance gate.
+Documentation in the same milestone: finalize ADR-0026 (status `Accepted`, with
+the condition arguments and the consistent-by-decision table); add "Lint the
+JSON mode stream contract" to `docs/users-guide.md` after "Lint declared
+structured output", including the warning for 7.2.3 adopters; add one tested
+API-guide example `api-guide-json-mode-policy` to
+`docs/cargo-orthohelp-api-guide.md` beside the structured-output rule and
+register it in `documentation_examples_tests.rs` (both inventories),
+`STANDARD_RUST_EXAMPLES` in `documentation_examples_rust_tests.rs`, and
+`simple_runs.rs`; add a paragraph to `docs/cargo-orthohelp-check-gen-design.md`
+§6 recording that the 7.2.8 orchestrator composes `check_json_mode` beside
+`check_output`, needs an applicability count for coverage without duplicating
+the predicate, and should roll the new rule out in warn mode first, without
+changing 7.2.8's acceptance gate.
 
 ### `EP-M3` documentation reconciliation and delivery closure
 
 Requirements: all, through `GAP-docs`.
 
 Update `docs/agent-native-cli-design.md`: §6.2 replaces "remain roadmap 7.2.4
-work" with the delivered shape and links ADR-0026; §8.1 adds rows for
-`output.json_mode` and its three members (absent, `v1`, no inference) and
-corrects the stale "planned" renderer rows; §8.2 records the additive
-`json_mode` history and the unknown-token fallback; §9 removes JSON-mode stream
-contracts from the gap list. Update `docs/design.md` (the deferral at about
-line 1399) and `docs/cargo-orthohelp-design.md` (deferral notes near lines 254,
-815, and 948). Update `docs/developers-guide.md` "Structured output metadata
-ownership" with the new modules, the exhaustive-enumeration testing pattern,
-and the statement that no production proof was added and why. Add a
-`CHANGELOG.md` `## Unreleased` entry noting the new metadata, the new rule API,
-and the breaking struct-literal change. Search for stale claims with:
+work" with the delivered shape and links ADR-0026, including the `jsonl_stream`
+failure amendment; §8.1 adds rows for `output.json_mode` and its three members
+(absent, `v1`, no inference) and corrects the stale "planned" renderer rows;
+§8.2 records the additive `json_mode` history and the unknown-token fallback;
+§9 removes JSON-mode stream contracts from the gap list. Update
+`docs/design.md` (the deferral near line 1399) and
+`docs/cargo-orthohelp-design.md` (deferral notes near lines 254, 815, and 948).
+Update `docs/developers-guide.md` "Structured output metadata ownership" with
+the new modules, the kernel-plus-exhaustive-table testing pattern, and the
+reasons no production proof was added. Add a `CHANGELOG.md` `## Unreleased`
+entry for the new metadata, the new rule API, the breaking struct-literal
+change, and the 7.2.3-adopter warning. Add the 8.1.1 sub-bullet from A1 to
+`docs/roadmap.md` (use the `mapsplice` skill for the structural edit). Search
+for stale claims with:
 
 ```sh
 grep -rn "7\.2\.4\|JsonModeContract\|stream framing\|stream contract" docs README.md CHANGELOG.md \
-  | grep -v "docs/execplans/"
+  | grep -v "docs/execplans/\|docs/v0-\|docs/adrs/"
 ```
 
-and fix every live document it reports (completed ExecPlans are excluded). Mark
-roadmap 7.2.4 and its three bullets `[x]` in `docs/roadmap.md` only after all
+and fix every live document it reports; accepted ADR bodies change only by
+amendment. Mark roadmap 7.2.4 and its three bullets `[x]` only after all
 evidence passes. Run all gates, update this plan's living sections, and set the
 status to `COMPLETE`.
 
@@ -1126,14 +1397,16 @@ status to `COMPLETE`.
   - Requirements and gaps: `REQ-success-stdout`, `REQ-failure-stderr`,
     `REQ-subprocess` (declaration), `REQ-no-inference`, `REQ-ownership`,
     `REQ-additive`, `REQ-nonlocalized`; `GAP-fields`.
-  - Acceptance evidence: focused EP-M1 tests, the real-binary end-to-end
-    test's declaration half, reviewed snapshots, and the full gate sequence.
+  - Acceptance evidence: focused EP-M1 tests, the end-to-end declaration
+    test, reviewed snapshots, the documentation-example suites, and the full
+    gate sequence.
   - Conformance check:
     - declared members round-trip unchanged per command;
     - ADR-0003 ownership and mirror parity hold;
     - no version constant changed;
     - only the authorized public API changed;
     - no trust boundary or persisted-format change beyond the additive field;
+    - `check_output` rule tests and report snapshots unchanged;
     - trace links in `Conformance basis` still name real tests.
   - Recovery: revert the milestone commit; nothing else depends on it.
   - Remaining gaps: `GAP-rule`, `GAP-renderer`, most of `GAP-docs`.
@@ -1143,12 +1416,13 @@ status to `COMPLETE`.
   inconsistent stream contracts.
   - Requirements and gaps: `REQ-byte-accounting`, `REQ-subprocess`,
     `REQ-no-inference`; `GAP-rule`, `GAP-renderer`.
-  - Acceptance evidence: exhaustive table, named rows, snapshots, property
-    tests, BDD scenarios, end-to-end policy half, doctest, negative controls,
-    and the full gate sequence.
+  - Acceptance evidence: exhaustive kernel, projection, and rendering tests;
+    named and consistent-by-decision rows; snapshots; property tests; BDD
+    scenarios; the end-to-end policy test; the doctest; recorded seeded-fault
+    failures; and the full gate sequence.
   - Conformance check:
-    - specification above matches the implementation exactly;
-    - `check_output` unchanged (its tests and snapshots unchanged);
+    - the specification in `Verification plan` matches the implementation;
+    - `check_output` and its tests and snapshots unchanged;
     - no CLI wiring and no bridge build in policy-only paths;
     - only `check_json_mode` added to the public API;
     - trace links current.
@@ -1159,12 +1433,14 @@ status to `COMPLETE`.
   contract and roadmap 7.2.4 is done.
   - Requirements and gaps: `GAP-docs`.
   - Acceptance evidence: stale-claim search clean, Markdown gates, full gate
-    sequence, roadmap checkboxes.
+    sequence, roadmap checkboxes, 8.1.1 sub-bullet.
   - Conformance check: every upstream artefact reconciled; ADR-0023 history
     preserved.
   - Recovery: revert the documentation commit.
   - Remaining gaps: runtime conformance (8.1.1), numeric exit codes and
-    diagnostic class/code consistency (7.2.5), CLI composition (7.2.8).
+    diagnostic class/code consistency (7.2.5), CLI composition (7.2.8), and
+    ADR-0026's outstanding decisions (A5's mode binding; additional stderr
+    tokens).
   - Compatibility decision: none.
 
 ## Concrete steps
@@ -1173,48 +1449,54 @@ Working directory: the repository root on branch
 `7-2-4-json-mode-stream-contract`. Start each session with `git status --short`
 and `git log --oneline -3`.
 
-EP-M1 focused commands (red then green):
+EP-M1 focused commands (red then green), narrowed to avoid compiling every
+integration-test binary:
 
 ```sh
-cargo test -p ortho_config_macros json_mode
-cargo test -p ortho_config json_mode
+cargo test -p ortho_config_macros --lib json_mode
+cargo test -p ortho_config --lib json_mode
+cargo test -p ortho_config --test docs_ir_json_mode
 cargo test -p ortho_config --test compile_fail
-cargo test -p cargo-orthohelp json_mode
-cargo test -p cargo-orthohelp --test agent_context_json_mode_end_to_end
+cargo test -p cargo-orthohelp --lib json_mode
+cargo test -p cargo-orthohelp --test agent_context_output_end_to_end
 cargo test -p cargo-orthohelp --test golden_tests
+cargo test -p ortho_config --test documentation_examples_tests
 cargo test --workspace --doc
 ```
 
 Expected red: compile errors naming the missing `json_mode` member, module, or
-type. Expected green: all named tests pass; record the counts here. A filter
-that matches zero tests is not acceptance.
+type, or assertion failures on the absent `json_mode` block. Expected green:
+all named tests pass; record the counts here. A filter that matches zero tests
+is not acceptance.
 
 EP-M2 focused commands:
 
 ```sh
-cargo test -p cargo-orthohelp json_mode
+cargo test -p cargo-orthohelp --lib json_mode
 cargo test -p cargo-orthohelp --test rstest_bdd json_mode
-cargo test -p cargo-orthohelp --test agent_context_json_mode_end_to_end
+cargo test -p cargo-orthohelp --test agent_context_output_end_to_end
+cargo test -p ortho_config --test documentation_examples_tests
+cargo test -p ortho_config --test documentation_examples_rust_tests
 cargo test -p cargo-orthohelp --doc
 ```
 
 Gate sequence after each milestone, run sequentially (preferably delegated to
-`scrutineer`), each with `pipefail` and a log:
+`scrutineer`), each with `pipefail` and a log carrying a milestone suffix so a
+later run does not overwrite failing evidence:
 
 ```sh
 set -o pipefail
-make fmt 2>&1 | tee /tmp/fmt-ortho-config-7-2-4-json-mode-stream-contract.out
-make check-fmt 2>&1 | tee /tmp/check-fmt-ortho-config-7-2-4-json-mode-stream-contract.out
-make lint 2>&1 | tee /tmp/lint-ortho-config-7-2-4-json-mode-stream-contract.out
-make test 2>&1 | tee /tmp/test-ortho-config-7-2-4-json-mode-stream-contract.out
-make markdownlint 2>&1 | tee /tmp/markdownlint-ortho-config-7-2-4-json-mode-stream-contract.out
-make nixie 2>&1 | tee /tmp/nixie-ortho-config-7-2-4-json-mode-stream-contract.out
+make fmt 2>&1 | tee /tmp/fmt-ortho-config-7-2-4-json-mode-stream-contract-m1.out
+make check-fmt 2>&1 | tee /tmp/check-fmt-ortho-config-7-2-4-json-mode-stream-contract-m1.out
+make lint 2>&1 | tee /tmp/lint-ortho-config-7-2-4-json-mode-stream-contract-m1.out
+make test 2>&1 | tee /tmp/test-ortho-config-7-2-4-json-mode-stream-contract-m1.out
+make markdownlint 2>&1 | tee /tmp/markdownlint-ortho-config-7-2-4-json-mode-stream-contract-m1.out
+make nixie 2>&1 | tee /tmp/nixie-ortho-config-7-2-4-json-mode-stream-contract-m1.out
 ```
 
-Add a milestone suffix (for example `-m1`) to log names so a later run does not
-overwrite failing evidence. Read a failing log before rerunning anything.
-Proceed only when every command exits zero. If `make spelling` regenerates
-unrelated `typos.toml` content, follow the repository's separate-base-PR policy.
+Read a failing log before rerunning anything. Proceed only when every command
+exits zero. If `make spelling` regenerates unrelated `typos.toml` content,
+follow the repository's separate-base-PR policy.
 
 For this planning change (documentation only), run `make fmt`, `make check-fmt`,
 `make markdownlint`, and `make nixie`; the Rust gates are not claimed for
@@ -1224,31 +1506,30 @@ unimplemented work.
 
 After `EP-M1`: running `cargo orthohelp --format agent-context` against
 `tests/fixtures/orthohelp_fixture` writes an `agent-context.json` whose `greet`
-command contains
+command's `output` block contains
 `"json_mode":{"success_stdout":"one_json_document","failure_stderr":"one_json_diagnostic","subprocess_output_policy":"capture_preview_and_log"}`,
-whose `version` command has no `output` block, and whose stdout carries the
-same document. The test
-`agent_context_json_mode_end_to_end::declared_stream_contract_survives_to_both_artefacts`
+whose `grant-access` command carries the partial record, whose `version`
+command has no `output` block, and whose stdout carries the same document in
+both tested locales. The test
+`agent_context_output_end_to_end::declared_stream_contract_survives_to_both_artefacts`
 fails before and passes after.
 
 After `EP-M2`: decoding that context and calling
 `check_json_mode(&context, PolicyMode::Deny)` yields exactly one
-`json_mode_contract_inconsistent` finding for the greet command (condition C4),
-one `json_mode_contract_incomplete` finding for the grant-access command naming
-`subprocess_output_policy`, and none for prune, audit, or version;
-`summary.deny` is 2. `check_output` on the same context is unchanged from its
-pre-change result. The exhaustive table evaluates 261,792 combinations with no
-mismatch.
+`json_mode_contract_incomplete` finding, for grant-access, naming
+`subprocess_output_policy`, and no other finding; `summary.deny` is 1.
+`check_output` on the same context is unchanged from its pre-change result. The
+kernel tests evaluate 3,636 views and 10,908 rendered cases with no mismatch.
 
 Quality criteria:
 
 - Tests: `make test` passes, plus `cargo test --workspace --doc`.
 - Verification: `INV-*` and `L-*` obligations discharged as specified, with
-  the negative controls observed and reverted.
+  every seeded fault observed failing and the tree restored clean.
 - Lint and format: `make check-fmt`, `make lint`, `make markdownlint`, and
   `make nixie` pass.
-- Performance: the exhaustive table completes in a few seconds in a debug
-  build; record its time.
+- Performance: the kernel tests complete in well under a second in a debug
+  build; record the time.
 - Security: no new input surface beyond derive attributes and JSON decoding;
   no secrets in snapshots or logs.
 
@@ -1256,13 +1537,13 @@ Quality criteria:
 
 All focused tests and gates can be rerun safely. Snapshot updates are reviewed
 with `cargo insta review` rather than accepted wholesale. Seeded fault probes
-are applied to a copied file, observed, and reverted by copying back; never use
-`git checkout --` on a file with unstaged work. Delete any
-`proptest-regressions` entries created by a probe in the same step. Commit each
-green milestone with `git commit -F` using an inspected message file; roll back
-with a reviewed `git revert` rather than a reset. If a nested-Cargo test times
-out under compile-admission load, check `build-limits-status` and rerun the
-single test before treating it as a defect.
+run one at a time on a clean committed tree and are reverted with
+`git restore --source=HEAD -- <path>`, never with a destructive reset;
+acceptance is an empty `git status --porcelain --untracked-files=all`. Commit
+each green milestone with `git commit -F` using an inspected message file; roll
+back with a reviewed `git revert`. If a nested-Cargo test fails or times out,
+first confirm its target is in the `orthohelp_cache` nextest group, then check
+`build-limits-status`, and rerun the single test before treating it as a defect.
 
 ## Artefacts and notes
 
@@ -1280,8 +1561,8 @@ Reconnaissance facts recorded at planning time (base `6ec295f4`):
 
 Prior art consulted:
 
-- JSON Lines (jsonlines.org): UTF-8, each line one JSON value, `LF`
-  terminator, no blank lines.
+- JSON Lines (jsonlines.org): UTF-8, each line one JSON value, LF terminator
+  (CRLF tolerated), no blank lines.
 - RFC 7464 JSON text sequences: record-separator prefix framing,
   `application/json-seq`; considered for `jsonl_stream` and rejected (`D4`).
 - Command Line Interface Guidelines (clig.dev): primary and machine-readable
@@ -1289,9 +1570,20 @@ Prior art consulted:
   passed.
 - Cargo external tools, `--message-format json`: JSON objects one per line on
   stdout, with a caveat that other processes may print non-JSON lines to
-  stdout; this item's subprocess policy exists to rule that out.
+  stdout; the subprocess policy exists to rule that out.
 - rustc `--error-format=json`: diagnostics emitted one JSON object per line
   on stderr, the precedent for `jsonl_diagnostics`.
+
+Design review (2026-11-23), four independent reviewers:
+
+```plaintext
+contracts and structure      Revise                    D6 stderr scope; C4 inference; agreed path
+alternatives and viability   Proceed with conditions   drop C2/C4; cargo-orthohelp stderr; framing
+failure modes and delivery   Approve after revision    output_assertions; nextest groups; doc harness
+verification rigour          Approve after fixes       C1 unknown; kernel split; structured verdict
+```
+
+Seeded-fault evidence is recorded here during EP-M1 and EP-M2.
 
 ## Interfaces and dependencies
 
@@ -1302,20 +1594,20 @@ In `ortho_config/src/docs/ir/json_mode.rs` (re-exported from
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct JsonModeMetadata {
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub success_stdout: Option<SuccessStdout>,
+    pub success_stdout: Option<StdoutFraming>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub failure_stderr: Option<FailureStderr>,
+    pub failure_stderr: Option<StderrFraming>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub subprocess_output_policy: Option<SubprocessOutputPolicy>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum SuccessStdout { OneJsonDocument, JsonlStream, ArtifactPath }
+pub enum StdoutFraming { OneJsonDocument, JsonlStream, ArtifactPath }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum FailureStderr { OneJsonDiagnostic, JsonlDiagnostics }
+pub enum StderrFraming { OneJsonDiagnostic, JsonlDiagnostics }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -1326,8 +1618,8 @@ and `OutputMetadata` gains
 `#[serde(default, skip_serializing_if = "Option::is_none")] pub json_mode: Option<JsonModeMetadata>`.
 
 In `cargo-orthohelp/src/schema/json_mode.rs`: identical mirror types that
-serialize exactly as the IR does; `cargo-orthohelp/src/schema/output.rs`'s
-`OutputMetadata` gains the same member.
+serialize exactly as the IR does; the mirror `OutputMetadata` in
+`cargo-orthohelp/src/schema/output.rs` gains the same member.
 
 In `ortho_config/src/agent_context/json_mode.rs` (re-exported from
 `ortho_config::agent_context`): `JsonModeContract` with the same three members,
@@ -1344,30 +1636,53 @@ constructors.
 In `cargo-orthohelp/src/policy/rules/json_mode.rs`:
 
 ```rust
-/// Stable rule identifiers and codes.
 const INCOMPLETE_RULE_ID: &str = "agent-native.output.json-mode-incomplete";
 const INCOMPLETE_CODE: &str = "json_mode_contract_incomplete";
 const INCONSISTENT_RULE_ID: &str = "agent-native.output.json-mode-inconsistent";
 const INCONSISTENT_CODE: &str = "json_mode_contract_inconsistent";
 
+/// Runs the JSON-mode stream-contract rules over a compiled agent context.
 #[must_use]
 pub fn check_json_mode(context: &AgentContext, mode: PolicyMode) -> PolicyReport;
+
+// Private kernel, visible to sibling test modules only.
+pub(super) struct JsonModeView { /* S, D, J members, H */ }
+pub(super) fn view(command: &AgentCommand) -> JsonModeView;
+pub(super) struct JsonModeVerdict {
+    pub(super) incomplete: bool,
+    pub(super) missing: Vec<ContractMember>,
+    pub(super) unrecognized: Vec<ContractMember>,
+    pub(super) conflicts: Vec<Condition>,
+}
+pub(super) fn verdict(view: &JsonModeView) -> JsonModeVerdict;
 ```
 
 Reuse policy: the IR, mirror, and wire types are owned by their schema modules
 and constructed only by the derive, decoding, and the bridge respectively.
 `check_json_mode` is the only owner of the two new predicates; 7.2.8 and any
-CLI must call it rather than reimplementing them. No new helper abstraction is
-introduced beyond private functions inside these modules; existing helpers
-(`group_is_empty`, `set_once`, `parse_token`, `enum_option_tokens`,
-`deserialize_present`, `PolicyReport::with_details`, `Vocabulary::canonical`)
-are reused.
+CLI must call it rather than reimplementing them, and any applicability signal
+7.2.8 needs is added to this module, not copied. The kernel stays private until
+a second consumer exists. No new helper abstraction is introduced beyond
+private functions inside these modules; existing helpers (`group_is_empty`,
+`set_once`, `parse_token`, `enum_option_tokens`, `deserialize_present`,
+`PolicyReport::with_details`, `Vocabulary::canonical`) are reused.
 
-Dependencies: no runtime dependency. Dev-dependencies `googletest` and
-`pretty_assertions` may be added to `ortho_config_macros` with
-`workspace = true`; nothing else.
+Dependencies: none added.
 
 ## Revision note
 
 - 2026-11-23: initial draft from Wyvern reconnaissance and prior-art
   research, before community-of-experts review.
+- 2026-11-23: community-of-experts review applied. Changed: subprocess policy
+  scoped to stdout (`D6`); `artifact_path` simplified and an agreed `files`
+  reference proposed (`D3`, A2); single-document framing admits whitespace
+  (`D4`); scope definitions added (`D13`); incomplete rule covers implied
+  applicability and unrecognized tokens (`D8`); machine-renderer and
+  `stdout = "none"` conditions dropped and the rest named (`D9`, A5); verdict
+  kernel and honest exhaustiveness claim (`D15`); existing end-to-end target
+  extended instead of a new binary (`D16`); realistic fixture witnesses
+  (`D17`); documentation-example inventories, BDD step prefixes, probe hygiene,
+  narrowed focused commands, historical-document exclusions, and a larger
+  budget. The corrected `cargo-orthohelp` stderr discovery added decision A1
+  and an 8.1.1 roadmap sub-bullet. Milestone order unchanged; EP-M2's
+  verification is larger, and remaining work now waits on approval of A1–A5.
