@@ -283,7 +283,7 @@ const fn count_outcome(
 #[cfg(test)]
 mod tests {
     //! Telemetry vocabulary checks for terminal loading decisions.
-    use super::{CATEGORY_MISSING_REQUIRED_VALUES, error_category};
+    use super::{CATEGORY_MISSING_REQUIRED_VALUES, CATEGORY_PROFILE, error_category};
     use crate::{ConfigPath, MissingRequiredValue, MissingRequiredValues, OrthoError};
 
     /// A missing-values report gets its own category so a dashboard can count
@@ -309,6 +309,28 @@ mod tests {
         assert_eq!(
             CATEGORY_MISSING_REQUIRED_VALUES, "missing_required_values",
             "the category label is a dashboard contract"
+        );
+    }
+    /// Both profile-metadata failures are profile errors, not merge failures:
+    /// a dashboard counting profile misconfiguration must see them together.
+    #[test]
+    fn profile_metadata_errors_have_the_profile_category() {
+        let duplicate = OrthoError::DuplicateProfileRedaction {
+            command_path: String::from("tool login"),
+            field_name: String::from("token"),
+        };
+        let unsupported = OrthoError::ProfileMetadataOnUnsupported {
+            kind: "redaction records",
+        };
+        let categories = (error_category(&duplicate), error_category(&unsupported));
+        assert_eq!(
+            categories,
+            (CATEGORY_PROFILE, CATEGORY_PROFILE),
+            "both profile-metadata errors must count as profile failures"
+        );
+        assert_eq!(
+            CATEGORY_PROFILE, "profile",
+            "the profile category label is a dashboard contract"
         );
     }
 }

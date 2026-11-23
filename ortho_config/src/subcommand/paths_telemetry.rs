@@ -333,7 +333,7 @@ const fn count_candidate(_outcome: &'static str) {}
 #[cfg(test)]
 mod tests {
     //! Discovery telemetry vocabulary checks for error classification.
-    use super::{CATEGORY_MISSING_REQUIRED_VALUES, error_category};
+    use super::{CATEGORY_MISSING_REQUIRED_VALUES, CATEGORY_PROFILE, error_category};
     use crate::{ConfigPath, MissingRequiredValue, MissingRequiredValues, OrthoError};
 
     /// The discovery vocabulary is closed, so the new variant is named rather
@@ -359,6 +359,29 @@ mod tests {
         assert_eq!(
             CATEGORY_MISSING_REQUIRED_VALUES, "missing_required_values",
             "the category label is a dashboard contract"
+        );
+    }
+    /// Discovery cannot raise either profile-metadata error today, but the
+    /// vocabulary is closed, so each variant is named rather than falling
+    /// through to a catch-all if a later path discovers profile metadata.
+    #[test]
+    fn profile_metadata_errors_are_named_in_the_discovery_vocabulary() {
+        let duplicate = OrthoError::DuplicateProfileRedaction {
+            command_path: String::from("tool login"),
+            field_name: String::from("token"),
+        };
+        let unsupported = OrthoError::ProfileMetadataOnUnsupported {
+            kind: "redaction records",
+        };
+        assert_eq!(
+            error_category(&duplicate),
+            CATEGORY_PROFILE,
+            "a duplicate redaction record must be a profile failure"
+        );
+        assert_eq!(
+            error_category(&unsupported),
+            CATEGORY_PROFILE,
+            "metadata on an unsupported declaration must be a profile failure"
         );
     }
 }
