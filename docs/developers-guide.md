@@ -105,6 +105,30 @@ downloading one. The two options are independent: passing only the first still
 lets the runner invoke `rustup`, so keep both. `make install-verus` remains the
 single installing step.
 
+### The production-proofs workflow
+
+`.github/workflows/prover-tools.yml` runs the registered proofs in CI. Its
+`production-proofs` job (`production-proofs (linux-x86_64)`) checks out the
+repository, sets up Rust with `mold`, sets up `uv`, installs the pinned Verus
+release with `make install-verus`, and then runs the registered production
+proofs, teeing the verifier's transcript so the job log and the uploaded
+`prover-tools-evidence` artefact both carry it. The transcript is the only
+record of what the verifier reported, so it is retained rather than summarized.
+
+The workflow triggers on pull requests that touch its own file, the `Makefile`,
+`tools/verus/VERSION`, `tools/verus/SHA256SUMS`, `verus/**`,
+`ortho_config/src/docs/profile_redaction/**`, `ortho_config/src/docs/ir/**`,
+the workflow-contract fixtures and helpers, and
+`scripts/requirements-test.txt`; on a weekly schedule, which catches an
+upstream release or runner-image change no pull request would exercise; and on
+manual dispatch. A pull-request run is cancelled when a newer push supersedes
+it, whereas a dispatch or scheduled run always completes.
+
+`tests/workflow_contracts/prover_tools_workflow_test.py` holds that structure
+in place, and `tests/workflow_contracts/prover_tools_fakes.py` supplies the
+fake tool the contract tests drive. Change the workflow and its contract test
+together.
+
 ### Production proof inventory
 
 Production harnesses and proofs are registered by extending
@@ -781,12 +805,15 @@ or other human-facing reference material. Those fields are versioned by
 `OrthoConfigSubcommandDocs` is part of the same human-documentation IR contract
 and uses the same versioning boundary for recursive subcommand metadata.
 
-Adding, removing, or changing a field in `ortho_config::docs` requires a
-matching change in `cargo-orthohelp::schema`, which mirrors the IR for the
-standalone generator. The two definitions must stay byte-for-byte aligned;
-`ORTHO_DOCS_IR_VERSION` is bumped in both, and the version-alignment test fails
-if the pair drifts. Add fields with `#[serde(default)]` so documents written
-before the field existed still read correctly, as ADR-0003 requires.
+`cargo-orthohelp::schema` re-exports the `ortho_config::docs` types rather than
+mirroring them, so the standalone generator and the derive macro share one type
+identity: a field added, removed, or changed in `ortho_config::docs` is already
+in scope for `cargo-orthohelp` as `cargo_orthohelp::schema::DocMetadata` and
+its siblings, with nothing to keep aligned and no second copy to compare.
+`ORTHO_DOCS_IR_VERSION` is bumped once, in the owning crate. Add fields with
+`#[serde(default)]` so documents written before the field existed still read
+correctly, as ADR-0003 requires; ADR-0026 records the re-export boundary and
+the redaction projection it enables.
 
 Add compact agent invocation fields to `ortho_config::agent_context` when
 downstream applications need a reusable machine-readable command contract. Use
@@ -817,9 +844,10 @@ literal's `profiles` value or construct it with one of those two constructors.
 The constructors keep future *field* additions non-breaking, not this field's
 retype. The derive emits the matching IR `DocMetadata.profiles` only for
 opted-in structs; the `cargo-orthohelp` bridge maps it into the declaration.
-Adding `DocMetadata.profiles` is a second break of the same kind, and it
-reaches two copies of the type — `ortho_config::docs::DocMetadata` and the
-`cargo_orthohelp::schema::DocMetadata` mirror. The field is
+Adding `DocMetadata.profiles` is a second break of the same kind, and every
+external literal it reaches is a literal of the one shared type:
+`cargo_orthohelp::schema::DocMetadata` is a re-export of
+`ortho_config::docs::DocMetadata`, not a second copy. The field is
 `#[serde(default)]`, so the wire contract stays additive and older JSON still
 deserializes, but a defaulted field is still required in a struct literal:
 every external literal, including the linked Weaver and Netsuke consumers, must
@@ -837,11 +865,11 @@ validating builders, described under [Agent context](#agent-context) in
 Renderer metadata (ADR-0016) is declared through the sibling `renderer(...)`
 attribute and is owned in three places that must move together:
 
-- `ortho_config::docs::ir::renderer` holds the human-documentation IR types;
-- `cargo_orthohelp::schema::renderer` holds the mirror the standalone generator
-  decodes, per
-  [ADR-0003](adrs/adr-0003-define-schema-ownership-for-agent-native-contracts.md);
-  and
+- `ortho_config::docs::ir::renderer` holds the human-documentation IR types,
+  and the standalone generator decodes the same types through
+  `cargo_orthohelp::schema`, which re-exports them as
+  [ADR-0003](adrs/adr-0003-define-schema-ownership-for-agent-native-contracts.md)
+  requires; and
 - `ortho_config::agent_context::renderer` and
   `cargo_orthohelp::agent_context::renderer` hold the wire contract, linked by
   `agent_context::walk`, which maps one IR into the other.
@@ -901,9 +929,9 @@ Structured-output metadata
 declared through the sibling `output(...)` attribute and is owned in the same
 three places as the renderer block, which it sits beside in every document:
 
-- `ortho_config::docs::ir::output` holds the human-documentation IR types;
-- `cargo_orthohelp::schema` re-exports the mirror the standalone generator
-  decodes; and
+- `ortho_config::docs::ir::output` holds the human-documentation IR types, and
+  `cargo_orthohelp::schema` re-exports those types to the standalone generator;
+  and
 - `ortho_config::agent_context::output` holds the wire contract, with
   `cargo_orthohelp::agent_context::output::map_output` as the only place the
   strict IR enum meets the tolerant wire enum.

@@ -1,4 +1,25 @@
-//! Localized IR structures for `cargo-orthohelp`.
+//! The public localisation boundary for `cargo-orthohelp`'s documentation IR.
+//!
+//! [`localize_doc`] takes the shared, unresolved [`DocMetadata`] and returns
+//! the localized shape a renderer consumes. Because a library caller may hand
+//! it unprojected metadata, it applies `DocMetadata::redacted_for_output` once
+//! at entry, then converts that projected document and its subcommands
+//! recursively; the recursion is private and never re-projects a subtree,
+//! since the command-example rule is decided from the whole document. The
+//! pipeline's own earlier projection is idempotent, so the two applications
+//! agree.
+//!
+//! The `resolvers` submodule owns the missing-message, missing-heading, and
+//! optional-identifier policies: it decides what a missing translation renders
+//! as, and which identifiers may legitimately be absent. The `types`
+//! submodule owns the localized output shapes this module re-exports; they
+//! are separate types rather than aliases because resolution changes what the
+//! text slots hold.
+//!
+//! The input types come from [`crate::schema`], which re-exports
+//! `ortho_config::docs`, and the projection itself is owned by
+//! `ortho_config::docs::profile_redaction`. Nothing here implements a second
+//! disclosure rule.
 
 use ortho_config::{LanguageIdentifier, Localizer};
 

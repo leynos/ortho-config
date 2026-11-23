@@ -1201,10 +1201,11 @@ shared cache services are outside the bridge's ownership.
 ## 6.4 Localized IR JSON output
 
 `cargo-orthohelp` emits a localized IR JSON file per locale into
-`<out>/ir/<locale>.json`. The schema mirrors `DocMetadata` but resolves every
-Fluent identifier into a concrete string. The output includes the locale for
-traceability and preserves non-localized fields such as value types or Windows
-metadata.
+`<out>/ir/<locale>.json`. The schema decodes the shared `DocMetadata` that
+`cargo_orthohelp::schema` re-exports from `ortho_config::docs` — one type
+identity, not a mirror — and resolves every Fluent identifier into a concrete
+string. The output includes the locale for traceability and preserves
+non-localized fields such as value types or Windows metadata.
 
 When a Fluent ID cannot be resolved, the output uses `[missing: <id>]` as a
 sentinel so generators can surface gaps during development.
