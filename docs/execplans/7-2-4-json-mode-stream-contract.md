@@ -624,7 +624,8 @@ A command's JSON-mode stream contract is a partial record `J = (σ, φ, π)` whe
 each member is either undeclared (written `⊥`), a known token, or (in agent
 context only) `unknown`:
 
-- `σ ∈ {one_json_document, jsonl_stream, artifact_path}` (success stdout);
+- `σ`, the success stdout framing, is one of `one_json_document`,
+  `jsonl_stream`, or `artifact_path`;
 - `φ ∈ {one_json_diagnostic, jsonl_diagnostics}` (failure stderr);
 - `π ∈ {capture_preview_and_log, inherit_only_in_human_mode, forbidden}`
   (subprocess output policy).
@@ -645,7 +646,7 @@ byte string. In JSON mode, for outcome `o ∈ {success, failure}`:
 - `σ = jsonl_stream`: success stdout is `enc(v₁)·LF·…·enc(vₙ)·LF` with
   `n ≥ 0` and no `LF` inside any `enc(vᵢ)`; failure stdout is such a sequence
   of already-delivered records, never ending in a partial record.
-- `σ = artifact_path`: the result document is written to an artefact file;
+- `σ` is `artifact_path`: the result document is written to an artefact file;
   success stdout is `enc(m)·LF` for one manifest `m` naming at least one
   delivered artefact; failure stdout is `ε` if nothing was delivered, otherwise
   `enc(m)·LF` naming only delivered artefacts.
@@ -987,21 +988,42 @@ Green. Implement:
    literal in the workspace, fixtures, examples, doctests, and Markdown
    examples with `json_mode: None`.
 8. Fixture witnesses in `tests/fixtures/orthohelp_fixture/src/lib.rs`:
-   - add to `NestedGreetCommand` a complete
-     `json_mode(success_stdout = "one_json_document", failure_stderr =
-     "one_json_diagnostic", subprocess_output_policy =
-     "capture_preview_and_log")`. Its machine renderer already declares
+   - `NestedGreetCommand` gains a complete stream contract inside its
+     existing `output(...)` group. Its machine renderer already declares
      `subprocess_inheritance = "allowed"`, so this command is the
      inconsistent (C4) witness; extend its doc comment to say so;
-   - add to `NestedPruneCommand` an
-     `output(supports_json = true, stdout = "summary", json_mode(
-     success_stdout = "artifact_path", failure_stderr =
-     "one_json_diagnostic", subprocess_output_policy = "forbidden"))` as the
-     clean, complete witness;
-   - add to `NestedGrantAccessCommand` an
-     `output(supports_json = true, stdout = "summary", json_mode(
-     success_stdout = "jsonl_stream", failure_stderr =
-     "jsonl_diagnostics"))` as the incomplete witness.
+   - `NestedPruneCommand` gains a JSON claim with a complete stream contract
+     as the clean witness;
+   - `NestedGrantAccessCommand` gains a JSON claim whose stream contract
+     omits the subprocess policy, as the incomplete witness.
+
+   ```rust,no_run
+   // NestedGreetCommand: added inside the existing output(...) group.
+   json_mode(
+       success_stdout = "one_json_document",
+       failure_stderr = "one_json_diagnostic",
+       subprocess_output_policy = "capture_preview_and_log"
+   )
+
+   // NestedPruneCommand: clean, complete witness.
+   output(
+       supports_json = true,
+       stdout = "summary",
+       json_mode(
+           success_stdout = "artifact_path",
+           failure_stderr = "one_json_diagnostic",
+           subprocess_output_policy = "forbidden"
+       )
+   )
+
+   // NestedGrantAccessCommand: incomplete witness.
+   output(
+       supports_json = true,
+       stdout = "summary",
+       json_mode(success_stdout = "jsonl_stream", failure_stderr = "jsonl_diagnostics")
+   )
+   ```
+
    If a fixture comment or another test contradicts one of these choices, pick
    the nearest command without that conflict and record it in `Decision log`.
 9. Add `cargo-orthohelp/tests/agent_context_json_mode_end_to_end.rs`
