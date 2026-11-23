@@ -372,8 +372,19 @@ describes the same contract.
 Applications that drive discovery by hand use `ConfigDiscovery` directly.
 `ConfigDiscovery::load_first` distinguishes three outcomes. `Ok(Some(...))`
 contains the first successfully parsed candidate. `Ok(None)` means discovery
-had no candidates to try. `Err(...)` means candidates existed but none loaded
-successfully; surface or map that error rather than treating it as absence:
+had no candidates to try, or every candidate was optional and absent.
+`Err(...)` means a required candidate failed, or no candidate loaded while an
+optional candidate recorded an error; surface or map that error rather than
+treating it as absence.
+
+A required candidate is stricter than an ordinary one. A path added with
+`ConfigDiscoveryBuilder::add_required_path`, or a non-empty path selected by the
+`env_var(...)` selector, must load. Its missing, unreadable, malformed,
+disabled-format, or `extends` error is returned even when a later optional
+candidate loaded successfully. A relative selector the environment source
+cannot anchor is also a required failure: discovery never falls back to the
+process's working directory. An unset or empty selector value selects nothing,
+so it does not fail closed, and automatic discovery candidates remain optional.
 
 <!-- tested-example: guide-load-first-outcomes -->
 ```rust

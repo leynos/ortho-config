@@ -68,6 +68,10 @@ struct AggConfig {
     )
 )]
 struct DiscoveryErrorConfig {
+    #[expect(
+        dead_code,
+        reason = "These cases assert discovery errors without inspecting the merged value"
+    )]
     #[ortho_config(default = 0)]
     port: u32,
 }
@@ -117,9 +121,12 @@ fn aggregates_cli_file_env_errors(fixture: Result<Fixture>) -> Result<()> {
     Ok(())
 }
 
-/// An invalid higher-ranked candidate is hidden when a fallback file loads.
+/// An invalid explicit selector is reported even when a fallback file loads.
+///
+/// The fallback is valid TOML, so the error can only come from the selector's
+/// fail-closed policy rather than from every candidate being unusable.
 #[rstest]
-fn discovery_errors_hidden_when_fallback_succeeds(fixture: Result<Fixture>) -> Result<()> {
+fn selector_errors_surface_even_with_fallback(fixture: Result<Fixture>) -> Result<()> {
     let staged = fixture?;
     let fixture_root = &staged.root;
     let invalid_path = fixture_root.join("invalid.toml");
@@ -131,6 +138,14 @@ fn discovery_errors_hidden_when_fallback_succeeds(fixture: Result<Fixture>) -> R
         .dir
         .write(".agg.toml", b"port = 7000")
         .context("write fallback configuration fixture")?;
+    let fallback = ortho_config::load_config_file(fixture_root.join(".agg.toml").as_std_path())
+        .map_err(|err| anyhow!(err))?
+        .ok_or_else(|| anyhow!("the fallback fixture should exist"))?;
+    let fallback_port: u32 = fallback.extract_inner("port")?;
+    ensure!(
+        fallback_port == 7000,
+        "the fallback fixture should be loadable, got port {fallback_port}"
+    );
 
     let source = Arc::new(
         fixture_env(fixture_root)
@@ -139,10 +154,14 @@ fn discovery_errors_hidden_when_fallback_succeeds(fixture: Result<Fixture>) -> R
     );
     let discovery: SharedEnvSource = source.clone();
     let merge: SharedScanEnvSource = source;
-    let cfg = DiscoveryErrorConfig::load_from_iter_with_sources(["prog"], discovery, merge)
-        .map_err(|err| anyhow!(err))?;
-    let actual = cfg.port;
-    ensure!(actual == 7000, "expected port 7000, got {actual}");
+    let err = match DiscoveryErrorConfig::load_from_iter_with_sources(["prog"], discovery, merge) {
+        Ok(cfg) => return Err(anyhow!("expected selector error, got config {cfg:?}")),
+        Err(err) => err,
+    };
+    ensure!(
+        matches!(&*err, OrthoError::File { .. }),
+        "expected a file error for the invalid selector, got {err:?}"
+    );
     Ok(())
 }
 

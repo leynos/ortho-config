@@ -47,7 +47,8 @@ pub(super) const SELECTOR_EMPTY: &str = "empty";
 /// The selector named a path, which now leads the candidate list.
 pub(super) const SELECTOR_ACCEPTED: &str = "accepted";
 /// The selector named a relative path and the source reported no working
-/// directory to resolve it against, so it contributed nothing.
+/// directory to resolve it against. Selection fails closed with a required
+/// error rather than resolving against the process directory.
 pub(super) const SELECTOR_DROPPED: &str = "dropped";
 
 /// The variable is unset.

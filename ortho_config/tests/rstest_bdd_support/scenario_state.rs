@@ -31,6 +31,10 @@ pub use scenario_state_profiles::{ProfilesConfig, ProfilesContext, profiles_cont
 pub struct RulesContext {
     pub env_value: Slot<String>,
     pub file_value: Slot<String>,
+    /// Rule list written to an automatic discovery candidate.
+    pub auto_value: Slot<String>,
+    /// Marks a scenario whose environment-selected path must be absent.
+    pub missing_selector: Slot<()>,
     pub result: Slot<ortho_config::OrthoResult<RulesConfig>>,
 }
 /// Scenario state for collection merge scenarios.
@@ -67,6 +71,8 @@ pub struct ComposerContext {
 pub struct ErrorContext {
     pub env_value: Slot<String>,
     pub file_value: Slot<String>,
+    /// Contents written to an automatic discovery candidate.
+    pub auto_contents: Slot<String>,
     pub agg_result: Slot<ortho_config::OrthoResult<ErrorConfig>>,
 }
 

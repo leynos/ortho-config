@@ -350,7 +350,7 @@ fn the_injected_selector_composes_a_layer() {
 
     assert!(
         outcome.required_errors.is_empty(),
-        "no required candidate was configured, got {:?}",
+        "the required selector loaded, so no required error is expected, got {:?}",
         outcome.required_errors
     );
     let layer = outcome.value.expect("a layer should have been composed");

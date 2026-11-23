@@ -196,6 +196,74 @@ fn env_var_overrides_default_locations() -> Result<()> {
     Ok(())
 }
 
+/// Stage a valid automatic XDG candidate and return its XDG home.
+fn stage_xdg_candidate(dir: &Path, value: u32) -> Result<std::path::PathBuf> {
+    let xdg_home = dir.join("xdg");
+    let app_dir = xdg_home.join("demo_app");
+    fs::create_dir_all(&app_dir).context("create XDG application directory")?;
+    create_test_config(&app_dir, "demo.toml", value)?;
+    Ok(xdg_home)
+}
+
+/// A missing selector file fails closed despite a valid automatic candidate.
+#[test]
+fn env_selector_missing_file_fails_despite_automatic_candidate() -> Result<()> {
+    let dir = TempDir::new().context("create temp dir")?;
+    let xdg_home = stage_xdg_candidate(dir.path(), 64)?;
+    let missing = dir.path().join("missing.toml");
+    let env = isolated_env(dir.path())
+        .with_var("XDG_CONFIG_HOME", &xdg_home)
+        .with_var("APP_CONFIG_PATH", &missing);
+
+    let err = match load::<DiscoveryConfig>(&["prog"], env) {
+        Ok(cfg) => return Err(anyhow!("expected selector error, got config {cfg:?}")),
+        Err(err) => err,
+    };
+    ensure!(
+        matches!(&*err, OrthoError::File { path, .. } if path == &missing),
+        "expected a file error for the missing selector, got {err:?}"
+    );
+    Ok(())
+}
+
+/// A malformed selector file fails closed despite a valid automatic candidate.
+#[test]
+fn env_selector_malformed_file_fails_despite_automatic_candidate() -> Result<()> {
+    let dir = TempDir::new().context("create temp dir")?;
+    let xdg_home = stage_xdg_candidate(dir.path(), 64)?;
+    let broken = dir.path().join("broken.toml");
+    write_file(&broken, "value = ???")?;
+    let env = isolated_env(dir.path())
+        .with_var("XDG_CONFIG_HOME", &xdg_home)
+        .with_var("APP_CONFIG_PATH", &broken);
+
+    let err = match load::<DiscoveryConfig>(&["prog"], env) {
+        Ok(cfg) => return Err(anyhow!("expected selector error, got config {cfg:?}")),
+        Err(err) => err,
+    };
+    // The loader canonicalises before parsing, so compare the file name rather
+    // than a spelling that differs between `std::fs` and `dunce` on Windows.
+    ensure!(
+        matches!(&*err, OrthoError::File { path, .. } if path.ends_with("broken.toml")),
+        "expected a file error for the malformed selector, got {err:?}"
+    );
+    Ok(())
+}
+
+/// An empty selector selects nothing, so automatic discovery still loads.
+#[test]
+fn empty_env_selector_uses_automatic_candidate() -> Result<()> {
+    let dir = TempDir::new().context("create temp dir")?;
+    let xdg_home = stage_xdg_candidate(dir.path(), 64)?;
+    let env = isolated_env(dir.path())
+        .with_var("XDG_CONFIG_HOME", &xdg_home)
+        .with_var("APP_CONFIG_PATH", "");
+
+    let cfg = load::<DiscoveryConfig>(&["prog"], env).map_err(|err| anyhow!(err))?;
+    ensure!(cfg.value == 64, "expected 64, got {}", cfg.value);
+    Ok(())
+}
+
 fn load_xdg_config<F>(setup: F) -> OrthoResult<DiscoveryConfig>
 where
     F: FnOnce(&Path) -> Result<()>,

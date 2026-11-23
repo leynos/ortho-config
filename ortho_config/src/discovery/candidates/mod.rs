@@ -10,17 +10,8 @@ use super::candidate_set::{CandidateAccumulator, CandidateDecisions, CandidateSe
 
 mod anchor;
 mod provenance;
+mod selector;
 mod variants;
-
-/// A configured selector's value, classified.
-enum SelectorValue {
-    /// The variable is configured but unset in the environment.
-    Unset,
-    /// The variable is set to an empty value, which discovery ignores.
-    Empty,
-    /// The variable names a path, preserved as read.
-    Accepted(std::ffi::OsString),
-}
 
 impl ConfigDiscovery {
     /// Produces the canonical filename, dotfile, and enabled format variants for one base.
@@ -75,7 +66,7 @@ impl ConfigDiscovery {
                 continue;
             };
             for candidate in self.candidates_for_base(base_path.as_path()) {
-                let _ = acc.push_unique(candidate, origin.source, Some(origin.scope));
+                let _ = acc.push_automatic(candidate, origin.source, origin.scope);
             }
         }
     }
@@ -210,61 +201,19 @@ impl ConfigDiscovery {
                 acc,
                 CandidateOrigin::new(telemetry::CANDIDATE_HOME, DiscoveryScope::User),
             );
-            let _ = acc.push_unique(
-                home_path.join(&self.dotfile_name),
-                telemetry::CANDIDATE_HOME,
-                Some(DiscoveryScope::User),
-            );
+            let dotfile = home_path.join(&self.dotfile_name);
+            let _ = acc.push_automatic(dotfile, telemetry::CANDIDATE_HOME, DiscoveryScope::User);
         }
         source
-    }
-
-    /// Push the configuration-path selector, reporting how it resolved.
-    ///
-    /// Owns only the not-configured case and the accumulator side effect;
-    /// the value classification lives in [`ConfigDiscovery::classify_selector`]
-    /// so the three-way rule can be read (and changed) in one place.
-    fn push_selector(&self, acc: &mut CandidateAccumulator) -> &'static str {
-        let Some(env_var) = self.env_var.as_ref() else {
-            return telemetry::SELECTOR_NOT_CONFIGURED;
-        };
-
-        match self.classify_selector(env_var) {
-            SelectorValue::Unset => telemetry::SELECTOR_UNSET,
-            SelectorValue::Empty => telemetry::SELECTOR_EMPTY,
-            SelectorValue::Accepted(value) => {
-                let Some(path) = self.anchored(PathBuf::from(value)) else {
-                    return telemetry::SELECTOR_DROPPED;
-                };
-                let _ = acc.push_unique(path, telemetry::CANDIDATE_SELECTOR, None);
-                telemetry::SELECTOR_ACCEPTED
-            }
-        }
-    }
-
-    /// Classify the configured selector's lookup result.
-    ///
-    /// The three non-accepting states are kept distinct because they call for
-    /// different action: no selector was configured at all (handled by the
-    /// caller), one was configured but the operator has not set it, or it is
-    /// set to an empty value — the last being a likely mistake that discovery
-    /// deliberately ignores. An accepted value keeps its `OsString` so the
-    /// caller can convert it to a path without a lossy round trip.
-    fn classify_selector(&self, env_var: &str) -> SelectorValue {
-        match self.env_source.get(env_var) {
-            None => SelectorValue::Unset,
-            Some(value) if value.is_empty() => SelectorValue::Empty,
-            Some(value) => SelectorValue::Accepted(value),
-        }
     }
 
     /// Adds one project filename for each configured root in caller order.
     fn push_projects(&self, acc: &mut CandidateAccumulator) {
         for root in &self.project_roots {
-            let _ = acc.push_unique(
+            let _ = acc.push_automatic(
                 root.join(&self.project_file_name),
                 telemetry::CANDIDATE_PROJECT,
-                Some(DiscoveryScope::Project),
+                DiscoveryScope::Project,
             );
         }
     }
@@ -328,27 +277,24 @@ impl ConfigDiscovery {
             .collect()
     }
 
-    /// Assembles candidates in precedence order and records the required prefix.
+    /// Assembles candidates in precedence order and records their requiredness.
     ///
     /// Required paths lead the list, followed by optional explicit paths, the
     /// configured selector, platform locations, home locations, and project
-    /// roots. Deduplication preserves the first source label and whether the
-    /// first occurrence was required.
+    /// roots. Deduplication preserves the first source label but promotes an
+    /// entry to required when any rung that names it is required.
     pub(super) fn candidate_set(&self) -> CandidateSet {
         let mut acc = CandidateAccumulator::default();
-        let mut required_bound = 0;
 
         for path in &self.required_explicit_paths {
-            if acc.push_unique(path.clone(), telemetry::CANDIDATE_REQUIRED_EXPLICIT, None) {
-                required_bound += 1;
-            }
+            let _ = acc.push_required(path.clone(), telemetry::CANDIDATE_REQUIRED_EXPLICIT);
         }
 
         for path in &self.explicit_paths {
-            let _ = acc.push_unique(path.clone(), telemetry::CANDIDATE_EXPLICIT, None);
+            let _ = acc.push_optional(path.clone(), telemetry::CANDIDATE_EXPLICIT);
         }
 
-        let selector = self.push_selector(&mut acc);
+        let (selector, selector_error) = self.push_selector(&mut acc);
         let xdg = self.push_xdg(&mut acc);
         self.push_windows(&mut acc);
         let home = self.push_home(&mut acc);
@@ -356,7 +302,7 @@ impl ConfigDiscovery {
 
         CandidateSet {
             candidates: acc.candidates,
-            required_bound,
+            assembly_errors: selector_error.into_iter().collect(),
             decisions: CandidateDecisions {
                 selector,
                 xdg_config_home: xdg.config_home,

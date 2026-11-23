@@ -130,13 +130,19 @@ impl ConfigDiscovery {
         }
     }
 
-    /// Walk the candidates in order, stopping at the first that yields a value.
+    /// Walk the candidates in order, keeping the first value that loads.
     ///
     /// The two discovery entry points differ only in what they attempt per
     /// candidate and what they build from the result; the traversal — ordering,
     /// the required/optional split, error routing, and the telemetry around it —
     /// is identical, and duplicating it once let the two drift in exactly the
     /// places a reader would assume they agree.
+    ///
+    /// The first success normally ends the walk. A remaining required candidate
+    /// is the exception: its absence or failure must still be reported, even
+    /// though the value already found keeps its precedence. That is what stops
+    /// an optional explicit path, which is generated before the selector, from
+    /// hiding a broken or missing required selector.
     fn walk_candidates<T>(
         &self,
         operation: &'static str,
@@ -146,17 +152,31 @@ impl ConfigDiscovery {
         let mut errors = PartitionedErrors::default();
         let set = self.candidate_set();
         set.decisions.emit();
-        for (idx, candidate) in set.candidates.into_iter().enumerate() {
-            let required = Self::is_required_candidate(idx, set.required_bound);
+        for err in &set.assembly_errors {
+            errors.record(
+                &CandidateFailure {
+                    operation,
+                    required: true,
+                    source: telemetry::CANDIDATE_SELECTOR,
+                    scope: None,
+                },
+                Arc::clone(err),
+            );
+        }
+        let mut winner: Option<(T, &'static str)> = None;
+        for candidate in set.candidates {
+            let required = candidate.required;
+            // Once a value has loaded, an optional candidate can neither
+            // override it nor contribute a reportable error, so skip it. A
+            // required candidate still has to be checked.
+            if winner.is_some() && !required {
+                continue;
+            }
             match try_one(&candidate.path, required) {
                 Ok(Some(value)) => {
-                    telemetry::load_outcome(
-                        operation,
-                        telemetry::OUTCOME_SUCCESS,
-                        Some(candidate.source),
-                        None,
-                    );
-                    return (Some(value), errors);
+                    // Keep the first success; a later required candidate that
+                    // loads merely satisfies its must-exist contract.
+                    winner = winner.or(Some((value, candidate.source)));
                 }
                 Ok(None) => {}
                 Err(err) => errors.record(
@@ -170,14 +190,19 @@ impl ConfigDiscovery {
                 ),
             }
         }
-        telemetry::load_outcome(operation, telemetry::OUTCOME_NOT_FOUND, None, None);
-        (None, errors)
+        let outcome = winner
+            .as_ref()
+            .map_or(telemetry::OUTCOME_NOT_FOUND, |_| telemetry::OUTCOME_SUCCESS);
+        let source = winner.as_ref().map(|(_, source)| *source);
+        telemetry::load_outcome(operation, outcome, source, None);
+        (winner.map(|(value, _)| value), errors)
     }
 
     /// Runs the shared first-success traversal and maps its value and errors.
     ///
     /// The builder runs only for a parsed candidate. Required failures remain
-    /// in the outcome even when a later optional candidate produces a value.
+    /// in the outcome even when a later optional candidate produces a value;
+    /// [`Self::load_first`] is what turns that retained error into a failure.
     fn discover_first<T, F>(&self, mut build: F) -> DiscoveryOutcome<T>
     where
         F: FnMut(figment::Figment, &Path) -> Result<T, Arc<OrthoError>>,
@@ -189,31 +214,51 @@ impl ConfigDiscovery {
         errors.into_outcome(value)
     }
 
-    /// Returns true if the candidate at `idx` is required.
-    ///
-    /// Shared with [`ConfigDiscovery::compose_scoped_layers`], which walks the
-    /// same list and must partition its diagnostics identically.
-    pub(super) const fn is_required_candidate(idx: usize, required_bound: usize) -> bool {
-        idx < required_bound
-    }
-
     /// Loads the first available configuration file using [`load_config_file`].
     ///
     /// # Behaviour
     ///
-    /// Skips candidates that fail to load and continues scanning until an
-    /// existing configuration file is parsed successfully.
+    /// Optional candidates that fail to load are skipped so a later candidate
+    /// may still succeed. A required candidate is different: a path added with
+    /// [`ConfigDiscoveryBuilder::add_required_path`], or a non-empty path named
+    /// by the selector configured with
+    /// [`ConfigDiscoveryBuilder::env_var`], must load. Its absence or failure
+    /// is returned even when a later fallback loads successfully.
+    ///
+    /// An unset or empty selector value selects nothing, so it does not fail
+    /// closed and automatic discovery continues normally. A relative value the
+    /// environment source cannot anchor is a required failure, never a fallback
+    /// to the process's working directory.
     ///
     /// # Errors
     ///
-    /// When every candidate fails, returns an error containing all recorded
-    /// discovery diagnostics; if no candidates exist, returns `Ok(None)`.
+    /// Returns an error when any required candidate fails, or when no candidate
+    /// loaded and an optional candidate recorded an error. The error aggregates
+    /// the recorded required diagnostics; optional diagnostics join it only
+    /// when nothing loaded. Returns `Ok(None)` when there were no candidates,
+    /// or when every candidate was optional and absent.
+    ///
+    /// [`ConfigDiscoveryBuilder::add_required_path`]: super::ConfigDiscoveryBuilder::add_required_path
+    /// [`ConfigDiscoveryBuilder::env_var`]: super::ConfigDiscoveryBuilder::env_var
     pub fn load_first(&self) -> OrthoResult<Option<figment::Figment>> {
-        let (figment, errors) = self.load_first_with_errors();
-        if let Some(found_figment) = figment {
+        let DiscoveryLoadOutcome {
+            figment,
+            mut required_errors,
+            mut optional_errors,
+        } = self.load_first_partitioned();
+        let has_figment = figment.is_some();
+        if required_errors.is_empty()
+            && let Some(found_figment) = figment
+        {
             return Ok(Some(found_figment));
         }
-        if let Some(err) = OrthoError::try_aggregate(errors) {
+        if !has_figment {
+            // With no value to return, optional diagnostics are worth
+            // reporting alongside the required ones; a loaded fallback
+            // suppresses them.
+            required_errors.append(&mut optional_errors);
+        }
+        if let Some(err) = OrthoError::try_aggregate(required_errors) {
             return Err(Arc::new(err));
         }
         Ok(None)
@@ -221,10 +266,11 @@ impl ConfigDiscovery {
 
     /// Attempts to load the first available configuration file while partitioning errors.
     ///
-    /// Required explicit candidates populate [`DiscoveryLoadOutcome::required_errors`]
-    /// even when a later fallback succeeds, enabling callers to surface them eagerly.
-    /// Optional candidates populate [`DiscoveryLoadOutcome::optional_errors`] so they
-    /// can be reported once discovery exhausts every location.
+    /// Required candidates populate [`DiscoveryLoadOutcome::required_errors`]
+    /// even when a later fallback succeeds, enabling callers to surface them
+    /// eagerly. Optional candidates populate
+    /// [`DiscoveryLoadOutcome::optional_errors`] so they can be reported once
+    /// discovery exhausts every location.
     ///
     /// # Examples
     ///

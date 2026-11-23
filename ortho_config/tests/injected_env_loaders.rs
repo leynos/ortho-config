@@ -209,10 +209,9 @@ fn a_relative_xdg_config_home_resolves_against_the_pinned_directory() -> Result<
     Ok(())
 }
 
-/// A relative selector is dropped, not read from the process, when the source
-/// cannot report a working directory.
+/// A relative selector that cannot be anchored fails closed, not defaulted.
 #[test]
-fn a_relative_selector_is_dropped_when_the_directory_is_unknown() -> Result<()> {
+fn a_relative_selector_fails_when_the_directory_is_unknown() -> Result<()> {
     #[derive(Debug)]
     struct Unlocated(MapEnv);
     impl ortho_config::EnvSource for Unlocated {
@@ -230,13 +229,15 @@ fn a_relative_selector_is_dropped_when_the_directory_is_unknown() -> Result<()> 
     }
 
     let env = Unlocated(MapEnv::new().with_var("CWDENV_CONFIG_PATH", "chosen.toml"));
-    let config = PlainConfig::load_from_iter_with_env(["prog"], Arc::new(env))
-        .map_err(|err| anyhow!(err))?;
+    let error = PlainConfig::load_from_iter_with_env(["prog"], Arc::new(env))
+        .err()
+        .ok_or_else(|| {
+            anyhow!("a relative selector without a working directory must fail closed")
+        })?;
 
     ensure!(
-        config.port == 1,
-        "expected the default, got {}",
-        config.port
+        matches!(error.as_ref(), OrthoError::File { .. }),
+        "expected a file error for the unanchorable selector, got {error:?}"
     );
     Ok(())
 }

@@ -10,6 +10,7 @@ use cap_std::{ambient_authority, fs_utf8::Dir as Utf8Dir};
 use tempfile::tempdir;
 
 use super::*;
+use crate::MapEnv;
 
 #[cfg(windows)]
 fn canonicalish(path: &Path) -> PathBuf {
@@ -87,6 +88,55 @@ fn load_first_partitioned_dedups_required_paths() -> Result<()> {
 
     assert_first_error_path(&outcome.required_errors, &required)?;
     assert_first_error_path(&outcome.optional_errors, &optional)
+}
+
+/// A selector naming an already-listed optional path makes it required.
+///
+/// Deduplication keeps one entry, so without promoting requiredness the
+/// selector's fail-closed policy would be lost and the missing file would be
+/// reported as an ordinary absent optional candidate.
+#[test]
+fn selector_promotes_an_existing_optional_candidate_to_required() -> Result<()> {
+    let dir = tempdir().expect("create tempdir");
+    let shared = dir.path().join("shared.toml");
+
+    let discovery = ConfigDiscovery::builder("app")
+        .project_roots([dir.path().to_path_buf()])
+        .add_explicit_path(&shared)
+        .env_var("APP_CONFIG_PATH")
+        .env_source(Arc::new(
+            MapEnv::new()
+                .with_var("APP_CONFIG_PATH", &shared)
+                .with_var("XDG_CONFIG_DIRS", dir.path()),
+        ))
+        .build();
+
+    let outcome = discovery.load_first_partitioned();
+    ensure!(
+        outcome.figment.is_none(),
+        "the missing shared path must not yield a figment"
+    );
+    ensure!(
+        outcome.required_errors.len() == 1,
+        "the promoted candidate should yield one required error, got {}",
+        outcome.required_errors.len()
+    );
+    ensure!(
+        outcome.optional_errors.is_empty(),
+        "the promoted candidate must not also yield an optional error, got {}",
+        outcome.optional_errors.len()
+    );
+    assert_first_error_path(&outcome.required_errors, &shared)?;
+
+    let error = discovery
+        .load_first()
+        .err()
+        .ok_or_else(|| anyhow!("a promoted required candidate must fail load_first"))?;
+    ensure!(
+        matches!(&*error, OrthoError::File { .. }),
+        "expected a file error, got {error:?}"
+    );
+    Ok(())
 }
 
 #[cfg(windows)]

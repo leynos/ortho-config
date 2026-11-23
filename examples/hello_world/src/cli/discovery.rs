@@ -91,18 +91,22 @@ pub(super) fn discover_config_layer_with_source(
 /// Convert a discovery outcome into an optional merge layer or an error.
 ///
 /// For example, no matching candidate returns `Ok(None)`, while a readable
-/// candidate returns its layer.
+/// candidate returns its layer. A required candidate's failure is returned
+/// even when a later fallback layer loaded, mirroring
+/// `ConfigDiscovery::load_first`; optional failures surface only when no layer
+/// loaded at all.
 pub(super) fn discover_config_layer_from(
     discovery: &ortho_config::ConfigDiscovery,
 ) -> Result<Option<ortho_config::MergeLayer<'static>>, HelloWorldError> {
     let mut outcome = discovery.compose_layer();
-    if let Some(layer) = outcome.value {
-        return Ok(Some(layer));
+    let layer = outcome.value;
+    let mut errors = outcome.required_errors;
+    if layer.is_none() {
+        errors.append(&mut outcome.optional_errors);
     }
 
-    outcome.required_errors.append(&mut outcome.optional_errors);
-    ortho_config::OrthoError::try_aggregate(outcome.required_errors).map_or_else(
-        || Ok(None),
+    ortho_config::OrthoError::try_aggregate(errors).map_or_else(
+        || Ok(layer),
         |err| Err(HelloWorldError::Configuration(Arc::new(err))),
     )
 }

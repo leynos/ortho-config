@@ -128,6 +128,28 @@ where
     Ok(config)
 }
 
+/// Shared harness for a CLI case that must fail.
+///
+/// Mirrors [`run_config_case`]'s fixture and environment setup, then hands the
+/// loader's error to `predicate` instead of requiring success.
+pub(crate) fn run_config_case_error<T>(
+    files: &[(&str, &str)],
+    env: &[(&str, &str)],
+    cli_args: &[&str],
+    predicate: impl FnOnce(&OrthoError) -> bool,
+) -> Result<()>
+where
+    T: OrthoConfig,
+{
+    let temp_dir = tempfile::tempdir()?;
+    write_fixtures(temp_dir.path(), files)?;
+    let env_map = build_env(temp_dir.path(), files, env);
+    let args = resolve_args(temp_dir.path(), cli_args);
+    let source = Arc::new(env_map);
+    let result = T::load_from_iter_with_sources(args, source.clone(), source).map(|_| ());
+    assert_ortho_error(result, "discovery", predicate)
+}
+
 /// Write each fixture beneath `root`, failing on the first that cannot be
 /// created.
 fn write_fixtures(root: &Path, files: &[(&str, &str)]) -> Result<()> {

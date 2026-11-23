@@ -2,6 +2,27 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Changed (configuration discovery)
+
+- **Explicit configuration selectors fail closed.** A non-empty path named by
+  `ConfigDiscoveryBuilder::env_var` is now a required candidate, as is any path
+  added through `add_required_path`. `ConfigDiscovery::load_first` returns the
+  aggregated error when a required candidate is missing, unreadable, malformed,
+  uses a disabled format, cannot expand its `extends` chain, or is a relative
+  selector the environment source cannot anchor, even when a later automatic
+  candidate loads. Previously a selector value was optional, so a broken
+  selected file was suppressed by a later successful candidate. Unset and empty
+  selector values still select nothing, and automatic discovery candidates
+  remain optional; this preserves the buffered-error policy for automatic
+  discovery established for
+  [#96](https://github.com/leynos/ortho-config/issues/96). Derived loaders
+  already surfaced required errors from `compose_layers`, so they inherit the
+  stricter selector policy. See
+  [#437](https://github.com/leynos/ortho-config/issues/437) and
+  [the discovery contract](docs/users-guide.md#handle-every-load_first-outcome).
+
 ## [0.11.0] - 2026-11-15
 
 ### Deprecated (test helpers)

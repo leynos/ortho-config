@@ -1,6 +1,9 @@
 //! Tests covering configuration path resolution across CLI and environment.
 
-use super::common::{RenamedPathConfig, TestConfig, assert_config_values, run_config_case};
+use super::common::{
+    OrthoError, RenamedPathConfig, TestConfig, assert_config_values, run_config_case,
+    run_config_case_error,
+};
 use anyhow::{Result, ensure};
 use rstest::rstest;
 
@@ -30,18 +33,28 @@ struct ConfigPathCase {
     expected_sample: Some("alt"),
     expected_other: Some("a"),
 })]
-#[case::missing_file_is_ignored(ConfigPathCase {
-    files: &[],
-    env: &[ ("CONFIG_PATH", "nope.toml") ],
-    cli_args: &["prog", "--sample-value", "cli", "--other", "val"],
-    expected_sample: Some("cli"),
-    expected_other: Some("val"),
-})]
 fn resolves_config_path_priorities(#[case] case: ConfigPathCase) -> Result<()> {
     run_config_case::<TestConfig, _>(case.files, case.env, case.cli_args, |cfg| {
         assert_config_values(cfg, case.expected_sample, case.expected_other)
     })?;
     Ok(())
+}
+
+/// A missing file named by `CONFIG_PATH` fails closed.
+///
+/// The CLI values are otherwise valid, so a successful load here would prove
+/// the selector's error had been hidden by the command-line layer.
+#[test]
+fn missing_env_selected_file_fails_closed() -> Result<()> {
+    run_config_case_error::<TestConfig>(
+        &[],
+        &[("CONFIG_PATH", "nope.toml")],
+        &["prog", "--sample-value", "cli", "--other", "val"],
+        |error| match error {
+            OrthoError::File { path, .. } => path.ends_with("nope.toml"),
+            _ => false,
+        },
+    )
 }
 
 struct RenamedPathCase {

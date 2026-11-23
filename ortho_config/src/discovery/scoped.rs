@@ -27,6 +27,7 @@
 
 use std::collections::HashSet;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use crate::MergeLayer;
 
@@ -93,6 +94,18 @@ impl ConfigDiscovery {
         let set = self.candidate_set();
         set.decisions.emit();
         let mut errors = PartitionedErrors::default();
+        for err in &set.assembly_errors {
+            errors.record(
+                &CandidateFailure {
+                    operation: telemetry::OPERATION_COMPOSE_LAYERS,
+                    required: true,
+                    source: telemetry::CANDIDATE_SELECTOR,
+                    scope: None,
+                },
+                Arc::clone(err),
+            );
+        }
+        Self::check_required_outside_scopes(&set, scopes, &mut errors);
         let mut layers = Vec::new();
         let mut origins = Vec::new();
         let mut loaded_paths = HashSet::new();
@@ -127,6 +140,35 @@ impl ConfigDiscovery {
         (errors.into_layers_outcome(layers), origins)
     }
 
+    /// Attempt required candidates that no requested scope will reach.
+    ///
+    /// Explicit paths and the selector carry no automatic scope, so the
+    /// per-scope walk never reaches them. A required one must still be checked:
+    /// its absence or failure is fatal even though its layers are not part of a
+    /// stacked composition. Candidates that belong to a requested scope are
+    /// left to that scope's walk, so their errors are not duplicated.
+    fn check_required_outside_scopes(
+        set: &CandidateSet,
+        scopes: &[DiscoveryScope],
+        errors: &mut PartitionedErrors,
+    ) {
+        for candidate in set.candidates.iter().filter(|candidate| {
+            candidate.required && !scopes.iter().any(|scope| candidate.in_scope(*scope))
+        }) {
+            if let Err(error) = Self::chain_layers(&candidate.path, true) {
+                errors.record(
+                    &CandidateFailure {
+                        operation: telemetry::OPERATION_COMPOSE_LAYERS,
+                        required: true,
+                        source: candidate.source,
+                        scope: None,
+                    },
+                    error,
+                );
+            }
+        }
+    }
+
     /// Resolve one scope, least-preferred candidate first.
     ///
     /// Every applicable candidate is attempted rather than only the first that
@@ -147,8 +189,8 @@ impl ConfigDiscovery {
         let mut winner = None;
         let mut layers = Vec::new();
 
-        for (index, candidate) in Self::scope_candidates(scope, set) {
-            let required = Self::is_required_candidate(index, set.required_bound);
+        for candidate in Self::scope_candidates(scope, set) {
+            let required = candidate.required;
             match Self::chain_layers(&candidate.path, required) {
                 Ok(Some(chain)) => {
                     layers.extend(Self::unique_layers(chain, loaded_paths));
@@ -186,12 +228,11 @@ impl ConfigDiscovery {
     fn scope_candidates(
         scope: DiscoveryScope,
         set: &CandidateSet,
-    ) -> impl Iterator<Item = (usize, &Candidate)> {
+    ) -> impl Iterator<Item = &Candidate> {
         set.candidates
             .iter()
-            .enumerate()
             .rev()
-            .filter(move |(_, candidate)| candidate.in_scope(scope))
+            .filter(move |candidate| candidate.in_scope(scope))
     }
 
     /// Keeps only the first layer for each canonical path across all scopes.
