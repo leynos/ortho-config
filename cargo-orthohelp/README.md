@@ -188,3 +188,12 @@ help_info_uri = "https://example.com/help/MyApp"
 
 If `root_type` is omitted from both CLI and metadata, generation fails with a
 clear remediation message.
+
+`root_type` must be a plain type path such as `my_app::AppConfig`, with an
+optional leading `crate::` that is rewritten to the package crate name. The
+value is parsed before the bridge crate is generated: generics
+(`my_app::Config<T>`), tuples, references, qualified self types
+(`<T as Trait>::Assoc`), global paths, a bare `crate`, a leading `self`,
+`super`, or `Self`, `crate`, `self`, `super`, or `Self` in any later segment,
+and statement- or expression-shaped values are rejected with a
+`failed to parse root type` diagnostic. The same rule applies to `--root-type`.

@@ -9,10 +9,14 @@
 
 mod fixtures;
 
+#[path = "cli_dispatch/root_type_injection.rs"]
+mod root_type_injection;
+
 use insta::assert_snapshot;
 use rstest::rstest;
 use std::error::Error;
 use std::process::{Command, Output};
+use std::time::Duration;
 
 /// Process status for a completed run, including `--help` and `--version`.
 const EXIT_SUCCESS: i32 = 0;
@@ -23,12 +27,24 @@ const EXIT_FAILURE: i32 = 1;
 /// Process status for Clap's argument and dispatch rejection.
 const EXIT_USAGE: i32 = 2;
 
+/// Budget for one spawned `cargo-orthohelp` invocation.
+///
+/// The nextest base tier terminates a test after ten 60-second periods, so a
+/// command that hangs is reported here first, with its own description, rather
+/// than as an unexplained test timeout.
+const SUBPROCESS_DEADLINE: Duration = Duration::from_secs(480);
+
 fn run_direct(args: &[&str]) -> Result<Output, Box<dyn Error + Send + Sync>> {
     let exe = fixtures::cargo_orthohelp_exe()?;
-    Ok(Command::new(exe.as_str())
+    let mut command = Command::new(exe.as_str());
+    command
         .current_dir(fixtures::workspace_root()?.as_std_path())
-        .args(args)
-        .output()?)
+        .args(args);
+    Ok(test_helpers::process::run_with_deadline(
+        command,
+        SUBPROCESS_DEADLINE,
+        "cargo-orthohelp direct invocation",
+    )?)
 }
 
 fn run_cargo_dispatch(args: &[&str]) -> Result<Output, Box<dyn Error + Send + Sync>> {
@@ -42,15 +58,20 @@ fn run_cargo_dispatch(args: &[&str]) -> Result<Output, Box<dyn Error + Send + Sy
         std::iter::once(bin_dir.as_std_path().to_path_buf()).chain(std::env::split_paths(&path));
     let joined_path = std::env::join_paths(paths)?;
 
-    Ok(Command::new("cargo")
+    let mut command = Command::new("cargo");
+    command
         .current_dir(fixtures::workspace_root()?.as_std_path())
         .env("PATH", joined_path)
         // Dispatch only finds and runs the subcommand binary; it builds
         // nothing, and the offline setting states that for Concordat NC-007.
         .env("CARGO_NET_OFFLINE", "true")
         .arg("orthohelp")
-        .args(args)
-        .output()?)
+        .args(args);
+    Ok(test_helpers::process::run_with_deadline(
+        command,
+        SUBPROCESS_DEADLINE,
+        "cargo-dispatched orthohelp invocation",
+    )?)
 }
 
 fn stdout(output: &Output) -> String {
@@ -143,44 +164,84 @@ fn version_reports_success_and_the_built_version(
     );
 }
 
+/// What a failing dispatch case must report.
+///
+/// The fields travel together because they describe one failure class: its
+/// diagnostic, the usage hint it may add, and the status its class documents.
+struct FailureExpectation {
+    /// Failure message used in assertion diagnostics.
+    message: &'static str,
+    /// Text the diagnostic must contain.
+    error: &'static str,
+    /// Usage line the diagnostic must add, when the class has one.
+    usage: Option<&'static str>,
+    /// Process status the failure class documents.
+    status: i32,
+}
+
 #[rstest]
 #[case::direct_without_subcommand(
     &["--format", "ir"],
-    "direct invocation without subcommand should fail",
-    "unexpected argument '--format'",
-    Some("Usage: cargo <COMMAND>")
+    FailureExpectation {
+        message: "direct invocation without subcommand should fail",
+        error: "unexpected argument '--format'",
+        usage: Some("Usage: cargo <COMMAND>"),
+        status: EXIT_USAGE,
+    }
 )]
 #[case::unknown_subcommand(
     &["unknown"],
-    "unknown subcommand should fail",
-    "unrecognized subcommand 'unknown'",
-    Some("Usage: cargo <COMMAND>")
+    FailureExpectation {
+        message: "unknown subcommand should fail",
+        error: "unrecognized subcommand 'unknown'",
+        usage: Some("Usage: cargo <COMMAND>"),
+        status: EXIT_USAGE,
+    }
 )]
 #[case::invalid_subcommand_option(
     &["orthohelp", "--man-section", "9"],
-    "invalid man section should fail",
-    "invalid value '9'",
-    None
+    FailureExpectation {
+        message: "invalid man section should fail",
+        error: "invalid value '9'",
+        usage: None,
+        status: EXIT_USAGE,
+    }
 )]
-fn command_failure_cases(
-    #[case] args: &[&str],
-    #[case] failure_message: &str,
-    #[case] expected_error: &str,
-    #[case] expected_usage: Option<&str>,
-) {
+// The root type is validated after the arguments have parsed, so a rejected
+// value is an ordinary runtime failure rather than a usage error.
+#[case::injection_shaped_root_type(
+    &[
+        "orthohelp",
+        "--package",
+        "orthohelp_fixture",
+        "--root-type",
+        concat!(
+            "orthohelp_fixture::SimpleFixtureConfig as OrthoConfigDocs>::get_doc_metadata(); ",
+            "std::process::exit(1); let _ = <orthohelp_fixture::SimpleFixtureConfig",
+        ),
+    ],
+    FailureExpectation {
+        message: "injection-shaped root type should fail",
+        error: "InvalidRootType",
+        usage: None,
+        status: EXIT_FAILURE,
+    }
+)]
+fn command_failure_cases(#[case] args: &[&str], #[case] expected: FailureExpectation) {
     let output = run_direct(args).expect("direct orthohelp invocation should run");
 
     assert_eq!(
         output.status.code(),
-        Some(EXIT_USAGE),
-        "{failure_message}: expected Clap's usage status"
+        Some(expected.status),
+        "{}: expected the documented status for its failure class",
+        expected.message
     );
     let stderr = stderr(&output);
     assert!(
-        stderr.contains(expected_error),
+        stderr.contains(expected.error),
         "unexpected error output:\n{stderr}"
     );
-    if let Some(usage_text) = expected_usage {
+    if let Some(usage_text) = expected.usage {
         assert!(
             stderr.contains(usage_text),
             "unexpected error usage:\n{stderr}"

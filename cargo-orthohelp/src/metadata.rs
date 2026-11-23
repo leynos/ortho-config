@@ -8,6 +8,7 @@ use crate::cli::Args;
 use crate::error::OrthohelpError;
 use crate::policy::config::PolicyConfigMetadata;
 use crate::powershell::{ExportAlias, HelpInfoUri, ModuleName};
+use crate::root_type::{CrateIdent, RawRootType, parse_root_type};
 use crate::schema::WindowsMetadata;
 
 /// Deserialized `package.metadata.ortho_config` defaults.
@@ -193,7 +194,10 @@ pub fn select_package(
         .clone()
         .or_else(|| metadata_defaults.root_type.clone())
         .ok_or(OrthohelpError::MissingRootType)?;
-    let root_type = normalize_root_type(&raw_root_type, &crate_ident);
+    let root_type = parse_root_type(
+        RawRootType::new(&raw_root_type),
+        CrateIdent::new(&crate_ident),
+    )?;
 
     ensure_library_target(package)?;
     if let Some(bin) = args.bin.as_ref() {
@@ -304,37 +308,4 @@ fn find_ortho_config_dependency(
         requirement: dependency.req.to_string(),
         path: dependency.path.clone(),
     })
-}
-
-/// Qualifies a root type with the package crate name while preserving explicit paths.
-///
-/// `crate::Type` is made suitable for the generated bridge crate, already qualified paths
-/// pass through, and a bare type name receives the package path as its prefix.
-fn normalize_root_type(raw: &str, crate_ident: &str) -> String {
-    if let Some(stripped) = raw.strip_prefix("crate::") {
-        return format!("{crate_ident}::{stripped}");
-    }
-
-    if raw.contains("::") {
-        return raw.to_owned();
-    }
-
-    format!("{crate_ident}::{raw}")
-}
-
-#[cfg(test)]
-mod tests {
-    //! Unit tests for metadata helpers.
-
-    use super::*;
-    use rstest::rstest;
-
-    #[rstest]
-    #[case::crate_prefix("crate::Config", "demo", "demo::Config")]
-    #[case::bare_type("Config", "demo", "demo::Config")]
-    #[case::qualified("demo::Config", "ignored", "demo::Config")]
-    fn normalizes_root_type(#[case] raw: &str, #[case] crate_ident: &str, #[case] expected: &str) {
-        let normalized = normalize_root_type(raw, crate_ident);
-        assert_eq!(normalized, expected);
-    }
 }

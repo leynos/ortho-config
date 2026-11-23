@@ -1,0 +1,80 @@
+//! Example-based tests for the root type grammar.
+//!
+//! `root_type.rs` owns `parse_root_type`, and this module is its companion
+//! table: small, complete and readable. `parses_root_type` pins the accepted
+//! forms and the rendering each produces — a bare name, a `crate` prefix, an
+//! already-qualified path, whitespace variants, raw identifiers and Unicode
+//! identifiers — and `rejects_unsupported_root_type` pins the diagnostic for
+//! every form the grammar refuses.
+//!
+//! `root_type_proptests.rs`, included beside this module, covers the open-ended
+//! remainder of the input space with properties. A new named form belongs in
+//! this table; a new invariant over many inputs belongs there.
+
+use super::*;
+use rstest::rstest;
+
+#[rstest]
+#[case::crate_prefix("crate::Config", "demo", "demo::Config")]
+#[case::bare_type("Config", "demo", "demo::Config")]
+#[case::qualified("demo::Config", "ignored", "demo::Config")]
+#[case::nested_crate_prefix("crate::config::Config", "demo", "demo::config::Config")]
+#[case::whitespace_is_canonicalized("demo :: Config", "ignored", "demo::Config")]
+#[case::spaced_crate_prefix("crate :: Config", "demo", "demo::Config")]
+#[case::leading_space_crate_prefix(" crate::Config", "demo", "demo::Config")]
+#[case::leading_space_bare_name("  Config  ", "demo", "demo::Config")]
+#[case::raw_identifier("crate::r#type", "demo", "demo::r#type")]
+#[case::combining_mark("crate::q\u{301}", "demo", "demo::q\u{301}")]
+#[case::ordinal_indicator("º", "demo", "demo::º")]
+fn parses_root_type(#[case] raw: &str, #[case] crate_ident: &str, #[case] expected: &str) {
+    let parsed = parse_root_type(RawRootType::new(raw), CrateIdent::new(crate_ident))
+        .expect("root type should parse");
+    assert_eq!(
+        parsed, expected,
+        "{raw:?} should render as {expected:?} in crate {crate_ident:?}"
+    );
+}
+
+#[rstest]
+#[case::generic("demo::Config<T>", "generic or parenthesized arguments")]
+#[case::tuple("(A, B)", "failed to parse root type")]
+#[case::reference("&Config", "failed to parse root type")]
+#[case::empty("", "failed to parse root type")]
+#[case::qualified_self(
+    "<Config as Trait>::Assoc",
+    "qualified self types such as `<Type as Trait>::Assoc` are not supported"
+)]
+#[case::global_path("::std::Config", "global paths starting with `::` are not supported")]
+#[case::bare_crate("crate", "a bare `crate` does not name a type")]
+#[case::relative_self("self::Config", "`self` cannot start a root type path")]
+#[case::relative_super("super::Config", "`super` cannot start a root type path")]
+#[case::assoc_self("Self::Config", "`Self` cannot start a root type path")]
+#[case::mid_path_crate(
+    "demo::crate::Config",
+    "`crate` cannot appear after the first segment of a root type path"
+)]
+#[case::mid_path_self(
+    "demo::self::Config",
+    "`self` cannot appear after the first segment of a root type path"
+)]
+#[case::mid_path_super(
+    "demo::super::Config",
+    "`super` cannot appear after the first segment of a root type path"
+)]
+#[case::mid_path_self_type(
+    "demo::Self::Config",
+    "`Self` cannot appear after the first segment of a root type path"
+)]
+#[case::injection(
+    "Config as OrthoConfigDocs>::get_doc_metadata(); std::process::exit(1); let _ = <Config",
+    "failed to parse root type"
+)]
+fn rejects_unsupported_root_type(#[case] raw: &str, #[case] expected_message: &str) {
+    let error = parse_root_type(RawRootType::new(raw), CrateIdent::new("demo"))
+        .expect_err("root type should be rejected");
+    let message = error.to_string();
+    assert!(
+        message.contains(expected_message),
+        "unexpected diagnostic: {message}"
+    );
+}

@@ -3103,6 +3103,84 @@ The selection rules are tested with injected environment lookups and inspected
 child command environments. Tests verify both which values are selected and
 that unrelated inherited variables do not reach the nested build.
 
+### Root type parsing before bridge generation
+
+The configured root type — from `--root-type` or
+`package.metadata.ortho_config.root_type` — is spliced into the generated
+bridge's `main`, which is then compiled and run. It is therefore untrusted
+input that reaches executable source, and it is parsed before generation rather
+than escaped at the splice point.
+
+`cargo-orthohelp/src/root_type.rs` owns that grammar. `parse_root_type` parses
+the value as a `syn::TypePath`, rejects forms that cannot name a configuration
+type from the separately compiled bridge, and renders the accepted path from
+its parsed segments. Two rules keep the boundary narrow:
+
+- **One call site.** `metadata::select_package` is the only caller, and it
+  parses the merged CLI-or-metadata candidate before the cache key and the
+  bridge template see it. Nothing downstream may re-read the raw value, and no
+  other module may build a root type from text.
+- **Render, never copy.** The rendered value is identifiers joined by `::`.
+  Because it is rebuilt from the syntax tree, spacing variants such as
+  `crate :: Config` render canonically and a statement or expression cannot
+  survive parsing, however it is spelled.
+
+Rejected forms are a qualified self type, a leading `::`, generic or
+parenthesized path arguments, a bare `crate`, a leading `self`, `super`, or
+`Self`, and any `crate`, `self`, `super`, or `Self` segment after the first.
+That last rule is why the parser inspects the whole path: `syn` accepts those
+keywords in any position, while Rust allows them only at the start, so
+`demo::crate::Config` would otherwise fail in the bridge instead of here. Each
+rejection reports `OrthohelpError::InvalidRootType`, which carries the caller's
+original spelling alongside the reason. Adding a form to the grammar means
+adding its rejection message here and a case to the `rstest` table.
+
+`cargo-orthohelp/src/root_type_tests.rs` pins the named accepted and rejected
+forms with an `rstest` table. `cargo-orthohelp/src/root_type_proptests.rs`
+covers the remaining input space with four properties in two pairs. Over
+arbitrary strings, whatever the parser accepts renders as identifier path
+syntax only, and a rendering re-parses unchanged under a different crate name;
+the second is what proves the rendering is already qualified, so a later
+consumer cannot silently re-qualify it. Over paths generated from the grammar's
+own building blocks — raw identifiers, combining marks, spacing variants, and a
+leading `crate` — the parser must accept the input, so a run cannot pass by
+accepting nothing. The oracle uses Rust's XID character classes rather than
+`char::is_alphanumeric`, because an identifier may continue with a combining
+mark that the alphanumeric test rejects.
+
+`cargo-orthohelp/tests/cli_dispatch.rs` exercises both input sources with
+injection-shaped values, asserting the diagnostic and the absence of the
+payload's marker file.
+
+#### The parser dependencies
+
+`cargo-orthohelp/Cargo.toml` declares the parser with its default features
+disabled:
+
+```toml
+syn = { version = "2", default-features = false, features = ["derive", "parsing"] }
+```
+
+`derive` supplies the `TypePath` syntax tree and `parsing` parses the caller's
+value into it. `printing` is deliberately not enabled: the bridge renders the
+validated path itself, from the segmented syntax tree, so nothing here turns a
+tree back into tokens. Leaving the printer out also removes the easy route back
+to the caller's spelling, which is what the boundary above requires.
+
+The oracle needs one further crate: `unicode-ident = "1"`, a dev-dependency
+that supplies `is_xid_start` and `is_xid_continue` for
+`root_type_proptests.rs`. It is a dev-dependency because only the property
+oracle asks which characters may appear in an identifier; the parser hands the
+text to `syn` and never inspects character classes itself.
+
+The dependency sits inside that boundary, so it reaches the
+[bridge cache key](#the-bridge-cache-key) and the
+[bridge build environment](#bridge-build-environment) only through the rendered
+value those steps receive. The grammar it implements is specified in
+[`cargo-orthohelp` design §6.1.2](cargo-orthohelp-design.md#612-root_type-grammar).
+No ADR records the dependency: it implements a grammar the design document
+already fixes and introduces no boundary or invariant of its own.
+
 ## Scoped and policy-based configuration discovery
 
 Automatic discovery historically resolved one file: the candidate list was

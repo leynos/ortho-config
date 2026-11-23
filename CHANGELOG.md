@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## Unreleased
+
+### Fixed (root type validation)
+
+- **Bridge source injection through `root_type`.** `cargo-orthohelp` now
+  parses `--root-type` and `package.metadata.ortho_config.root_type` as a
+  restricted type path before splicing the value into generated bridge source.
+  An optional leading `crate::` is rewritten to the package crate name.
+  Generics, tuples, references, qualified self types, global paths, a bare
+  `crate`, a leading `self`, `super`, or `Self`, `crate`, `self`, `super`, or
+  `Self` in any later segment, and statement- or expression-shaped values are
+  rejected with an `InvalidRootType` diagnostic instead of being compiled and
+  run ([#430](https://github.com/leynos/ortho-config/issues/430)).
+
 ## [0.11.0] - 2026-11-15
 
 ### Deprecated (test helpers)
