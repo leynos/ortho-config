@@ -244,8 +244,13 @@ project:
   - `make test` executes:
 
     ```sh
+    cargo fetch --locked
     cargo test --all-targets --all-features
     ```
+
+    The fetch runs first so that nested builds the tests start find the
+    package cache warm (the offline-tests rule); it needs `Cargo.lock` to be
+    current.
 
     running the Rust workspace tests for every target and feature under
     `GATE_RUSTFLAGS`, which restates the build standard alongside `-D warnings`.
