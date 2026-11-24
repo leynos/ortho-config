@@ -595,6 +595,12 @@ namespace, which the procedural derive still owns. The audit therefore keeps
 every root bound to a name and trusts it only when all of them are compiler
 roots, in either source order.
 
+The count is bound to a declaration rather than to the path a consumer
+resolves, so a `use` item that renames another item to `ErrorKind` is refused:
+`pub use crate::real::ActualErrorKind as ErrorKind;` would export an enum the
+walk never counts while a file-level decoy stayed countable. The plain
+`pub use kind::ErrorKind;` names the declaration itself and stays accepted.
+
 The count is the total declared variant count for that builder package, not
 only the raisable variants; classification as translated or `DisplayOnly`
 remains in `CLAP_ERROR_IDS`. The reviewed identity and its total are explicit

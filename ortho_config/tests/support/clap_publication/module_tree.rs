@@ -181,6 +181,9 @@ fn unconditional_module_chain_is_counted() -> Result<()> {
 // A `use` path rooted at `std` is only as trustworthy as the root itself, so a
 // local `mod std` makes the compiler-root exemption name the local module.
 #[case::poisoned_root("poisoned_root", "binds a derive named")]
+// A renamed re-export gives the inventory name to an enum declared under
+// another one, so the counted declaration is not the exported inventory.
+#[case::renamed_reexport("renamed_reexport", "by renaming another item to")]
 // A tree without a reported crate root is refused rather than guessed at.
 #[case::no_crate_root("no_crate_root", "expected a crate root lib.rs")]
 fn module_tree_is_refused(#[case] fixture: &str, #[case] expected: &str) -> Result<()> {

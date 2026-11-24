@@ -1522,6 +1522,19 @@ stopping and reporting.
       which failed `derive_masked_by_std` alone. The focused gate passes 89
       tests, up from 87.
 
+- [x] (2026-11-24) Round-25 refusal of a renamed re-export. The follow-up
+      assessment found that the count is bound to a declaration, not to the
+      path a consumer resolves, so
+      `pub use crate::real::ActualErrorKind as ErrorKind;` could export an
+      eighteen-variant enum while the walk counted a file-level
+      seventeen-variant decoy. `refuse_error_kind_renames` now refuses any
+      `use` that gives the name `ErrorKind` to an item declared under another
+      one, at any depth and whether or not the enclosing module is
+      conditional. The reviewed plain re-export `pub use kind::ErrorKind;`
+      names the declaration itself and stays accepted, so the resolved
+      `clap_builder` 4.6.7 source is unaffected. The new
+      `module_tree/renamed_reexport` fixture joins the refused-tree table.
+
 - [x] (2026-11-21) Round-22 conflict dispositions. Five paths conflicted, and
       every one was resolved by preserving both sides' intent rather than by
       choosing a side wholesale:
@@ -2858,3 +2871,8 @@ Revision note (2026-11-24): keep every explicit `use` root bound to a name and
 trust a built-in derive name only when all of them are compiler roots. A type
 import of the same spelling no longer hides a procedural import in the other
 namespace; the reviewed count and the runtime consultation are unchanged.
+
+Revision note (2026-11-24): refuse a `use` item that renames another item to
+`ErrorKind`, so the exported name cannot lead to an enum the walk does not
+count. The reviewed plain re-export keeps the declaration and the export the
+same item, so the resolved source and the reviewed total are unchanged.

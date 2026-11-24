@@ -178,6 +178,80 @@ pub(super) fn refuse_nested_error_kinds(items: &[Item], origin: &Utf8Path) -> Re
     }
 }
 
+/// Refuse a `use` item that binds the inventory name by renaming another item.
+///
+/// The count is bound to a declaration whose file the compiler compiles, not to
+/// the path a consumer resolves. Those coincide only when every binding of the
+/// name `ErrorKind` names an item that is itself called `ErrorKind`. A renamed
+/// re-export breaks that: `pub use crate::real::ActualErrorKind as ErrorKind;`
+/// makes the exported inventory an enum this walk never counts, so a file-level
+/// `ErrorKind` decoy beside it would pass with the wrong total. A plain
+/// re-export such as the reviewed `pub use kind::ErrorKind;` keeps the
+/// guarantee and stays accepted.
+///
+/// The check descends inline modules, conditional or not, because the re-export
+/// is normally written in a public module rather than at the crate root, and
+/// the gate cannot evaluate a condition that would decide whether the compiler
+/// sees it.
+pub(super) fn refuse_error_kind_renames(items: &[Item], origin: &Utf8Path) -> Result<()> {
+    if let Some(place) = renamed_error_kind(items, "") {
+        bail!(
+            "{origin} binds the inventory name in {place} by renaming another item to \
+             `ErrorKind`; the gate cannot bind that export to the declaration it counts, so it \
+             fails closed"
+        );
+    }
+    Ok(())
+}
+
+/// Where the first `ErrorKind`-renaming `use` appears, if any.
+fn renamed_error_kind(items: &[Item], prefix: &str) -> Option<String> {
+    for item in items {
+        match item {
+            Item::Use(declaration) if tree_renames_error_kind(&declaration.tree) => {
+                return Some(described_place(prefix));
+            }
+            Item::Mod(module) => {
+                let Some((_, nested)) = &module.content else {
+                    continue;
+                };
+                let path = module_path(prefix, &module.ident.to_string());
+                if let Some(deeper) = renamed_error_kind(nested, &path) {
+                    return Some(deeper);
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+/// Whether one `use` tree renames a differently named item to `ErrorKind`.
+///
+/// A rename from `ErrorKind` to `ErrorKind` changes nothing, so it stays
+/// accepted; the hazard is the rename that gives the inventory name to an item
+/// declared under another one.
+fn tree_renames_error_kind(tree: &syn::UseTree) -> bool {
+    match tree {
+        syn::UseTree::Path(path) => tree_renames_error_kind(&path.tree),
+        syn::UseTree::Rename(rename) => {
+            identifier_name(&rename.rename) == "ErrorKind"
+                && identifier_name(&rename.ident) != "ErrorKind"
+        }
+        syn::UseTree::Group(group) => group.items.iter().any(tree_renames_error_kind),
+        syn::UseTree::Name(_) | syn::UseTree::Glob(_) => false,
+    }
+}
+
+/// Name the place a refusal was found for the diagnostic.
+fn described_place(prefix: &str) -> String {
+    if prefix.is_empty() {
+        "the file level".to_owned()
+    } else {
+        format!("`mod {prefix}`")
+    }
+}
+
 /// The module path of the first nested `ErrorKind`, if any.
 ///
 /// Every inline module is searched, conditional or not: the condition decides

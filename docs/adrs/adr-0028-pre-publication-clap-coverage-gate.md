@@ -178,6 +178,15 @@ trait import stays counted beside the built-in `Debug` derive, an alias of the
 declaring module stays uncounted rather than refused, and a tree using only the
 compiler's attributes stays counted.
 
+The count is bound to a declaration, not to the path a consumer resolves, so
+the gate also refuses a `use` item that gives the inventory name to an item
+declared under another one.
+`pub use crate::real::ActualErrorKind as ErrorKind;` makes the exported
+inventory an enum the walk never counts while a file-level `ErrorKind` decoy
+stays countable, so the renamed re-export is refused at any depth, conditional
+or not. The reviewed plain re-export `pub use kind::ErrorKind;` keeps the
+declaration and the export the same item and stays accepted.
+
 ## Alternatives rejected
 
 - **Build script (the superseded §6.1.1).** It cannot see consumer resolution,
