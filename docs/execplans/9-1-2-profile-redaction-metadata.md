@@ -1406,6 +1406,21 @@ including the boundary suite and `must_use_compile_tests`, passes in the hosted
 saturation, whilst its constituent suites are proven green wherever the
 environment can give them slots.
 
+2026-11-24, acceptance status at `47cbcbe3`: this gate is a maintainer
+decision, not an engineering one. Four further local `make test` attempts on
+the delivery candidate reproduced the same signature — `must_use_compile_tests`
+killed at its 900 s child budget with the admission queue between 90 and 500
+deep, zero rustc or clippy diagnostics, and, in the last attempt, a trybuild
+scratch tree warmed by a prior run of that target alone. `build-limits-status`
+reported `healthy` with all four slots held throughout. Every constituent suite
+has passed on this host in some run (`--no-fail-fast`: 121 binaries, zero
+failures, including `must_use_compile_tests`), and the hosted `build-test` legs
+for Linux and Windows pass at every head, including this one, with all hosted
+checks green and `mergeStateStatus: CLEAN`. The remaining question — whether
+that substitution discharges the plan's `make test` acceptance criterion — is
+recorded here as open rather than answered by this agent, because accepting
+substitute evidence for a defined gate is the maintainer's call.
+
 2026-11-22, replayed again: `main` advanced to `c4377e48` (#433 bounded IR
 cache reads, #724 phrase-checker bump) while the assessments were running, and
 the second replay completed with no conflicts. Two review findings were then
