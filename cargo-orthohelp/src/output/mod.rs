@@ -148,8 +148,8 @@ fn write_atomic_json(
 /// Each emission lives in its own function so that [`write_atomic_json`] holds
 /// at most one `tracing` call: when a dependent crate enables `tracing`'s
 /// `log` bridge, Cargo's feature unification expands every event into a
-/// branch ladder that counts against the workspace's cognitive-complexity
-/// ceiling.
+/// branch ladder that inflates a complexity score measured after macro
+/// expansion.
 fn log_atomic_write_start(artefact: &str, out_dir: &Utf8Path) {
     tracing::debug!(artefact, out_dir = %out_dir, "starting atomic JSON write");
 }

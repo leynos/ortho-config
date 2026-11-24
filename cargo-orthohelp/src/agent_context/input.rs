@@ -43,8 +43,8 @@ pub(super) fn build_input(field: &FieldMetadata) -> Option<ortho_config::AgentIn
 ///
 /// Kept out of [`build_input`] so that function contains a single `tracing`
 /// call at most: the `log` bridge `tracing` expands into when another crate in
-/// the graph enables it is branch-heavy enough to matter to the workspace's
-/// cognitive-complexity ceiling.
+/// the graph enables it is branch-heavy enough to inflate a complexity score
+/// measured after macro expansion, so the emission stays in a small helper.
 fn warn_skipped_input(field: &FieldMetadata) {
     tracing::warn!(
         field = field.name,

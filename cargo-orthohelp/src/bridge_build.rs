@@ -74,7 +74,7 @@ pub(super) fn build_and_snapshot(
 /// Build and snapshot with the `tracing` attribute expanded by hand.
 ///
 /// The `#[tracing::instrument]` attribute expands into a branch ladder that
-/// counts against the workspace's cognitive-complexity ceiling, so the span is
+/// inflates a complexity score measured after macro expansion, so the span is
 /// constructed explicitly and the body lives in a function the attribute would
 /// otherwise wrap.
 fn build_and_snapshot_inner(

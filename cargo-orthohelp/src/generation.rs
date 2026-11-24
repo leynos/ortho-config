@@ -70,8 +70,8 @@ pub fn generate_agent_context_if_requested(
 /// Split out of [`generate_agent_context_if_requested`] so the two `tracing`
 /// emissions there each sit in a function of their own: when a dependent crate
 /// enables `tracing`'s `log` bridge, Cargo's feature unification expands every
-/// event into a branch ladder that counts against the workspace's
-/// cognitive-complexity ceiling.
+/// event into a branch ladder that inflates a complexity score measured after
+/// macro expansion.
 fn build_agent_context(context: &GenerationContext<'_>) -> ortho_config::AgentContext {
     let summary_localizer = context
         .en_us_localizer

@@ -116,8 +116,8 @@ pub fn bridge_ir_to_agent_context(
 ///
 /// Extracted so [`bridge_ir_to_agent_context`] holds at most one `tracing`
 /// call: when a dependent crate enables `tracing`'s `log` bridge, Cargo's
-/// feature unification expands every event into a branch ladder that counts
-/// against the workspace's cognitive-complexity ceiling.
+/// feature unification expands every event into a branch ladder that inflates
+/// a complexity score measured after macro expansion.
 fn log_bridge_start(package: &str, root: &str) {
     tracing::debug!(
         package = %package,

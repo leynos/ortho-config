@@ -157,8 +157,18 @@ Whitaker lints are divided into two categories:
   explicitly enabled.
 
 The default `whitaker_suite` pattern includes only standard lints. Whitaker
-currently ships one experimental lint, `rstest_helper_should_be_fixture`, which
-is available only when experimental lints are enabled.
+ships experimental lints such as `rstest_helper_should_be_fixture` and
+`macro_aware_cognitive_complexity`, which are available only when requested. A
+repository requests one per lint in `dylint.toml`, as this one does for
+`macro_aware_cognitive_complexity`:
+
+```toml
+[whitaker]
+experimental = ["macro_aware_cognitive_complexity"]
+
+[macro_aware_cognitive_complexity]
+max_complexity = 9
+```
 
 ### Enabling experimental lints
 

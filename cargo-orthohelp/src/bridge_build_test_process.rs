@@ -73,8 +73,8 @@ fn reap_after_kill(child: &mut Child) {
 /// Report a probe whose exit status could not be collected.
 ///
 /// Separate from `reap_after_kill` so the polling loop keeps at most its own
-/// branches: a `tracing` event expands into a branch ladder that counts against
-/// the workspace's cognitive-complexity ceiling.
+/// branches: a `tracing` event expands into a branch ladder that inflates a
+/// complexity score measured after macro expansion.
 fn report_reap_failure(error: &std::io::Error) {
     tracing::warn!(error = %error, "failed to reap controlled test probe");
 }

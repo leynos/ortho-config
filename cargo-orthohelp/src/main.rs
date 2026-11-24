@@ -210,8 +210,8 @@ fn run(cli: Cli, format_was_explicit: bool) -> Result<(), OrthohelpError> {
 ///
 /// Kept out of [`run`] so that function holds a single `tracing` call: when a
 /// dependent crate enables `tracing`'s `log` bridge, Cargo's feature
-/// unification expands every event into a branch ladder that counts against
-/// the workspace's cognitive-complexity ceiling.
+/// unification expands every event into a branch ladder that inflates a
+/// complexity score measured after macro expansion.
 fn log_dispatched() {
     tracing::debug!("cargo-orthohelp dispatched via Cargo external-subcommand");
 }
