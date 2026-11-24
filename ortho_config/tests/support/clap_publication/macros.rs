@@ -138,6 +138,7 @@ pub(super) fn collect_crate_facts(
     items: &[Item],
     names: &mut BTreeSet<String>,
     modules: &mut BTreeSet<String>,
+    imports: &mut BTreeSet<String>,
 ) {
     for item in items {
         match item {
@@ -147,13 +148,14 @@ pub(super) fn collect_crate_facts(
                 }
             }
             Item::Use(_) => {
-                let imports = Imports::of(std::slice::from_ref(item));
-                names.extend(imports.explicit_names().cloned());
+                let bound = Imports::of(std::slice::from_ref(item));
+                names.extend(bound.explicit_names().cloned());
+                imports.extend(bound.explicit_names().cloned());
             }
             Item::Mod(module) => {
                 modules.insert(module.ident.to_string());
                 if let Some((_, nested)) = &module.content {
-                    collect_crate_facts(nested, names, modules);
+                    collect_crate_facts(nested, names, modules, imports);
                 }
             }
             _ => {}

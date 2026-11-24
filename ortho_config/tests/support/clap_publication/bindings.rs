@@ -224,7 +224,7 @@ fn classify_with_root(
             // crate declares. A `use dependency as helper;` alias does not, and
             // `crate::helper::ErrorKind` then reaches the dependency.
             let is_local_here = is_local_segment(&segment, walk.is_local, imports)
-                || (walk.root == Some("crate") && scope.declares_module(&segment));
+                || (walk.root == Some("crate") && scope.root_declares_module(&segment));
             let next = PathWalk {
                 is_local: is_local_here,
                 root: walk.root.or(Some(segment.as_str())),
@@ -250,13 +250,22 @@ fn classify_with_root(
         // carry one — `pub use anstyle::*;` — so the reviewed roots are an
         // allow-list, in the same spirit as the closed attribute lists: a new
         // external glob fails the gate until it has been reviewed.
-        syn::UseTree::Glob(_) => classify_glob(walk.root, walk.is_local),
+        syn::UseTree::Glob(_) => classify_glob(walk.root, walk.is_local, scope),
     }
 }
 
 /// Classify one glob by whether its root is a reviewed external crate.
-fn classify_glob(root: Option<&str>, is_local: bool) -> Binding {
-    if is_local || root.is_some_and(|name| REVIEWED_EXTERNAL_GLOBS.contains(&name)) {
+///
+/// The reviewed names are accepted only when nothing in the crate rebinds them.
+/// A `use std::io as anstyle;` makes `anstyle` an alias for a different crate,
+/// whose `*` can then export an `ErrorKind` the walk never reads, so an
+/// imported name that matches a reviewed root is refused rather than trusted.
+fn classify_glob(root: Option<&str>, is_local: bool, scope: &CrateScope) -> Binding {
+    let Some(glob_root) = root.filter(|_| !is_local) else {
+        return Binding::Unrelated;
+    };
+    let is_reviewed = REVIEWED_EXTERNAL_GLOBS.contains(&glob_root);
+    if is_reviewed && !scope.is_imported_somewhere(glob_root) {
         Binding::Unrelated
     } else {
         Binding::Foreign

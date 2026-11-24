@@ -87,7 +87,12 @@ pub(super) fn count_error_kinds_from(root: &Utf8Path, crate_root: &Utf8Path) -> 
 fn count_from(directory: &Dir, source_root: &Utf8Path, crate_root: &Utf8Path) -> Result<usize> {
     let sources = rust_sources(directory, Utf8Path::new(""))?;
     let parsed = parse_sources(directory, source_root, &sources)?;
-    let crate_scope = crate_scope_of(parsed.iter().map(|(_, file)| file));
+    let mut crate_scope = crate_scope_of(parsed.iter().map(|(_, file)| file));
+    // `crate::X` resolves in the crate root's own scope, so narrow the root set
+    // to the reported crate root file before any binding is judged.
+    if let Some((_, root_file)) = parsed.iter().find(|(path, _)| path == crate_root) {
+        crate_scope.set_root_modules(root_file);
+    }
     let mut definitions = Vec::new();
     for (relative, file) in &parsed {
         if let Some(count) = analyze_error_kind(file, &crate_scope, relative)? {
@@ -147,10 +152,11 @@ fn crate_scope_of<'a>(files: impl IntoIterator<Item = &'a syn::File>) -> CrateSc
     let parsed: Vec<&syn::File> = files.into_iter().collect();
     let mut names = BTreeSet::new();
     let mut modules = BTreeSet::new();
+    let mut imports = BTreeSet::new();
     for file in &parsed {
-        collect_crate_facts(&file.items, &mut names, &mut modules);
+        collect_crate_facts(&file.items, &mut names, &mut modules, &mut imports);
     }
-    let mut scope = CrateScope::new(names, modules);
+    let mut scope = CrateScope::new(names, modules, imports);
     for file in parsed {
         scope.observe(&file.items);
     }

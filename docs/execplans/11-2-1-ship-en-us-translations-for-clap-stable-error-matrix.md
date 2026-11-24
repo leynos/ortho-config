@@ -1602,6 +1602,22 @@ stopping and reporting.
       and the full target passes 99 tests. CodeScene's argument-count advisory
       on the walker is cleared by grouping its state in a `PathWalk` struct.
 
+- [x] (2026-11-24) Round-30 resolution in the actual scope, and of the glob's
+      binding rather than its spelling. Two more shapes were reported, both of
+      the same kind: a name was trusted where a binding had to be resolved.
+      - `crate::X` resolves in the crate root's own scope, so the root-module
+        set is now narrowed to the reported crate root file's top level. A
+        `mod helper` nested inside another module no longer makes
+        `crate::helper::ErrorKind` look local while Rust resolves it to a
+        `std::io` alias.
+      - A reviewed external glob root is accepted only when nothing in the
+        crate binds that name. `use std::io as anstyle;` beside
+        `pub use anstyle::*;` therefore no longer borrows the reviewed
+        spelling for a different crate's exports.
+      - Two decoys cover them, `nested_module_collision` and `aliased_glob`; the
+        real `use crate::error::ErrorKind;` and the reviewed `anstyle` glob both
+        stay accepted, and the full target passes 101 tests.
+
 - [x] (2026-11-21) Round-22 conflict dispositions. Five paths conflicted, and
       every one was resolved by preserving both sides' intent rather than by
       choosing a side wholesale:

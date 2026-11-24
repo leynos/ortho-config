@@ -156,13 +156,20 @@ impl Imports {
 pub(super) struct CrateScope {
     /// Every name the crate declares as a macro or an import binding.
     names: BTreeSet<String>,
-    /// Every module the crate declares, by its bare name.
+    /// Every module the crate root itself declares, by its bare name.
     ///
-    /// A `crate::`-rooted path stays inside the crate only while each segment
-    /// names a module the crate declares. A `use` alias in the same crate can
-    /// bind a dependency, so the segment after `crate` has to be checked
-    /// against declarations rather than assumed local.
-    declared_modules: BTreeSet<String>,
+    /// `crate::X` resolves in the crate root's scope, so only a module declared
+    /// there makes the first segment local. A module of the same name nested in
+    /// another module is out of scope, and a `use` alias bound at the crate
+    /// root can redirect the name to a dependency; both must not count.
+    root_modules: BTreeSet<String>,
+    /// Every name any `use` item in the crate binds.
+    ///
+    /// A reviewed external glob is trusted by its root spelling, so an alias
+    /// that reuses that spelling has to be visible here: `use std::io as
+    /// anstyle;` would otherwise borrow the reviewed name for a different
+    /// crate's exports.
+    imported_names: BTreeSet<String>,
     /// Whether any module is annotated `#[macro_use]`.
     has_macro_use: bool,
     /// Whether any `extern crate` is annotated `#[macro_use]`.
@@ -171,18 +178,45 @@ pub(super) struct CrateScope {
 
 impl CrateScope {
     /// Build the scope from the crate-wide name and module sets.
-    pub(super) const fn new(names: BTreeSet<String>, declared_modules: BTreeSet<String>) -> Self {
+    pub(super) const fn new(
+        names: BTreeSet<String>,
+        root_modules: BTreeSet<String>,
+        imported_names: BTreeSet<String>,
+    ) -> Self {
         Self {
             names,
-            declared_modules,
+            root_modules,
+            imported_names,
             has_macro_use: false,
             has_external_macro_use: false,
         }
     }
 
-    /// Whether the crate declares a module with this bare name.
-    pub(super) fn declares_module(&self, name: &str) -> bool {
-        self.declared_modules.contains(name)
+    /// Whether the crate root declares a module with this bare name.
+    pub(super) fn root_declares_module(&self, name: &str) -> bool {
+        self.root_modules.contains(name)
+    }
+
+    /// Replace the root-module set with the crate root file's own top level.
+    ///
+    /// `crate::X` resolves in the crate root's own scope, so only a `mod X`
+    /// written at that file's top level makes the segment local. The crate-wide
+    /// walk collects nested modules too, which is what a name-only check would
+    /// wrongly trust.
+    pub(super) fn set_root_modules(&mut self, root_file: &syn::File) {
+        self.root_modules = root_file
+            .items
+            .iter()
+            .filter_map(|item| match item {
+                Item::Mod(module) => Some(module.ident.to_string()),
+                _ => None,
+            })
+            .collect();
+    }
+
+    /// Whether any `use` item in the crate binds this name.
+    pub(super) fn is_imported_somewhere(&self, name: &str) -> bool {
+        self.imported_names.contains(name)
     }
 
     /// Record the `#[macro_use]` attributes one item list carries.
