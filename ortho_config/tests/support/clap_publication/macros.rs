@@ -133,7 +133,12 @@ pub(super) fn refuse_item_macros(
 /// The module set is the second half of the same question: a `use` path's first
 /// segment names one of this crate's modules or an external crate, and only the
 /// second can reach an inventory the walk never counted.
-pub(super) fn collect_crate_names(items: &[Item], names: &mut BTreeSet<String>) {
+/// Every macro or import name, and every module name, a crate declares.
+pub(super) fn collect_crate_facts(
+    items: &[Item],
+    names: &mut BTreeSet<String>,
+    modules: &mut BTreeSet<String>,
+) {
     for item in items {
         match item {
             Item::Macro(invocation) => {
@@ -146,8 +151,9 @@ pub(super) fn collect_crate_names(items: &[Item], names: &mut BTreeSet<String>) 
                 names.extend(imports.explicit_names().cloned());
             }
             Item::Mod(module) => {
+                modules.insert(module.ident.to_string());
                 if let Some((_, nested)) = &module.content {
-                    collect_crate_names(nested, names);
+                    collect_crate_facts(nested, names, modules);
                 }
             }
             _ => {}

@@ -1589,6 +1589,19 @@ stopping and reporting.
         decisive evidence that the refusals did not become a blanket
         rejection.
 
+- [x] (2026-11-24) Round-29 trace of `crate::`-rooted paths. The next
+      assessment found that treating every segment after `crate` as local let
+      `use inventory_provider as helper;` beside
+      `pub use crate::helper::ErrorKind;` reach the dependency's inventory and
+      still count the decoy. A `crate::` path is now local only while each
+      segment names a module the crate declares, and a `use` alias in the same
+      scope does not count as a module declaration. The crate-wide declared
+      module set is restored for that purpose only; the enclosing-scope set
+      still decides a bare first segment. The new `module_tree/crate_alias_path`
+      decoy is refused, the real `use crate::error::ErrorKind;` stays accepted,
+      and the full target passes 99 tests. CodeScene's argument-count advisory
+      on the walker is cleared by grouping its state in a `PathWalk` struct.
+
 - [x] (2026-11-21) Round-22 conflict dispositions. Five paths conflicted, and
       every one was resolved by preserving both sides' intent rather than by
       choosing a side wholesale:

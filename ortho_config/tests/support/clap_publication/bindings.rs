@@ -21,7 +21,7 @@ use camino::Utf8Path;
 use syn::Item;
 
 use super::audit::is_error_kind_name;
-use super::imports::Imports;
+use super::imports::{CrateScope, Imports};
 use super::tokens::{identifier_name, module_path};
 
 /// Refuse a `use` item that binds the inventory name by renaming another item.
@@ -39,8 +39,12 @@ use super::tokens::{identifier_name, module_path};
 /// is normally written in a public module rather than at the crate root, and
 /// the gate cannot evaluate a condition that would decide whether the compiler
 /// sees it.
-pub(super) fn refuse_error_kind_renames(items: &[Item], origin: &Utf8Path) -> Result<()> {
-    if let Some(place) = renamed_error_kind(items, "") {
+pub(super) fn refuse_error_kind_renames(
+    items: &[Item],
+    scope: &CrateScope,
+    origin: &Utf8Path,
+) -> Result<()> {
+    if let Some(place) = renamed_error_kind(items, "", scope) {
         bail!(
             "{origin} binds the inventory name in {place} to something the gate cannot trace \
              to the declaration it counts; the export may reach an inventory this walk never \
@@ -111,7 +115,7 @@ fn redeclared_in_module(item: &Item, prefix: &str) -> Option<String> {
 }
 
 /// Where the first `ErrorKind`-rebinding `use` appears, if any.
-fn renamed_error_kind(items: &[Item], prefix: &str) -> Option<String> {
+fn renamed_error_kind(items: &[Item], prefix: &str, scope: &CrateScope) -> Option<String> {
     let imports = Imports::of(items);
     for item in items {
         match item {
@@ -120,7 +124,7 @@ fn renamed_error_kind(items: &[Item], prefix: &str) -> Option<String> {
                 // 2018 and later, so the path is external whatever the crate's
                 // own module names are.
                 let is_absolute = declaration.leading_colon.is_some();
-                if binds_unproven_inventory(&declaration.tree, is_absolute, &imports) {
+                if binds_unproven_inventory(&declaration.tree, is_absolute, scope, &imports) {
                     return Some(described_place(prefix));
                 }
             }
@@ -129,7 +133,7 @@ fn renamed_error_kind(items: &[Item], prefix: &str) -> Option<String> {
                     continue;
                 };
                 let path = module_path(prefix, &module.ident.to_string());
-                if let Some(deeper) = renamed_error_kind(nested, &path) {
+                if let Some(deeper) = renamed_error_kind(nested, &path, scope) {
                     return Some(deeper);
                 }
             }
@@ -157,9 +161,14 @@ enum Binding {
 }
 
 /// Whether one `use` tree can bind an inventory the walk never counted.
-fn binds_unproven_inventory(tree: &syn::UseTree, is_absolute: bool, imports: &Imports) -> bool {
+fn binds_unproven_inventory(
+    tree: &syn::UseTree,
+    is_absolute: bool,
+    scope: &CrateScope,
+    imports: &Imports,
+) -> bool {
     matches!(
-        classify_binding(tree, !is_absolute, imports),
+        classify_binding(tree, !is_absolute, scope, imports),
         Binding::LocalRename | Binding::Foreign
     )
 }
@@ -173,52 +182,75 @@ fn binds_unproven_inventory(tree: &syn::UseTree, is_absolute: bool, imports: &Im
 /// reviews what the new crate exports.
 const REVIEWED_EXTERNAL_GLOBS: [&str; 1] = ["anstyle"];
 
-/// Classify one `use` tree, tracking whether its path is still local.
-///
-/// `root` is the first segment of the path being walked, kept so a glob can be
-/// judged against the reviewed external roots rather than its own segment.
-fn classify_binding(tree: &syn::UseTree, is_local: bool, imports: &Imports) -> Binding {
-    classify_with_root(tree, is_local, imports, None)
+/// The state one `use` tree's walk carries from segment to segment.
+#[derive(Clone, Copy)]
+struct PathWalk<'a> {
+    /// Whether every segment so far stays inside this crate.
+    is_local: bool,
+    /// The first segment seen, which decides how a glob is judged.
+    root: Option<&'a str>,
 }
 
-/// Classify one `use` tree, remembering the root its path began with.
-fn classify_with_root(
+/// Classify one `use` tree, starting as a local path with no root yet.
+fn classify_binding(
     tree: &syn::UseTree,
     is_local: bool,
+    scope: &CrateScope,
     imports: &Imports,
-    root: Option<&str>,
+) -> Binding {
+    classify_with_root(
+        tree,
+        PathWalk {
+            is_local,
+            root: None,
+        },
+        scope,
+        imports,
+    )
+}
+
+/// Classify one `use` tree, carrying whether its path is still local.
+fn classify_with_root(
+    tree: &syn::UseTree,
+    walk: PathWalk<'_>,
+    scope: &CrateScope,
+    imports: &Imports,
 ) -> Binding {
     match tree {
         syn::UseTree::Path(path) => {
             let segment = identifier_name(&path.ident);
             // A `crate::`-rooted path may name a module declared in another
-            // file, and the walk already certifies which files the compiler
-            // compiles, so once `crate` has appeared the rest stays local.
-            let is_local_here =
-                is_local_segment(&segment, is_local, imports) || root == Some("crate");
-            let next_root = root.or(Some(segment.as_str()));
-            classify_with_root(&path.tree, is_local_here, imports, next_root)
+            // file, so it is local only while each segment names a module the
+            // crate declares. A `use dependency as helper;` alias does not, and
+            // `crate::helper::ErrorKind` then reaches the dependency.
+            let is_local_here = is_local_segment(&segment, walk.is_local, imports)
+                || (walk.root == Some("crate") && scope.declares_module(&segment));
+            let next = PathWalk {
+                is_local: is_local_here,
+                root: walk.root.or(Some(segment.as_str())),
+            };
+            classify_with_root(&path.tree, next, scope, imports)
         }
         syn::UseTree::Group(group) => group
             .items
             .iter()
-            .map(|item| classify_with_root(item, is_local, imports, root))
+            .map(|item| classify_with_root(item, walk, scope, imports))
             .fold(Binding::Unrelated, stronger_binding),
         syn::UseTree::Name(name) => {
             let ident = identifier_name(&name.ident);
-            leaf_binding(&ident, None, is_local)
+            leaf_binding(&ident, None, walk.is_local)
         }
         syn::UseTree::Rename(rename) => {
             let from = identifier_name(&rename.ident);
             let to = identifier_name(&rename.rename);
-            leaf_binding(&from, Some(&to), is_local)
+            leaf_binding(&from, Some(&to), walk.is_local)
         }
         // A glob reaches whatever its module exports, so an external glob may
         // bring in an `ErrorKind` this walk never reads. The resolved source does
         // carry one — `pub use anstyle::*;` — so the reviewed roots are an
         // allow-list, in the same spirit as the closed attribute lists: a new
         // external glob fails the gate until it has been reviewed.
-        syn::UseTree::Glob(_) => classify_glob(root, is_local),
+        syn::UseTree::Glob(_) => classify_glob(walk.root, walk.is_local),
     }
 }
 

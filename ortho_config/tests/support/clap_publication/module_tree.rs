@@ -200,6 +200,9 @@ fn unconditional_module_chain_is_counted() -> Result<()> {
 // A leading `::` reaches the extern prelude, so a same-named local module
 // elsewhere in the crate cannot make the path local.
 #[case::absolute_foreign_path("absolute_foreign_path", "cannot trace to the declaration it counts")]
+// A `crate::` path can traverse a `use` alias to a dependency, so the segment
+// after `crate` must name a module the crate declares.
+#[case::crate_alias_path("crate_alias_path", "cannot trace to the declaration it counts")]
 // A condition the gate cannot evaluate does not exempt the alias shape.
 #[case::conditional_alias("conditional_alias", "as something other than the counted enum")]
 // A tree without a reported crate root is refused rather than guessed at.

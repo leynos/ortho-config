@@ -93,8 +93,12 @@ impl Imports {
     }
 
     /// Whether `root` names a module this item list itself declares.
+    ///
+    /// A `use inventory_provider as helper;` in this scope does not count: it
+    /// binds an alias, and `crate::helper::…` then reaches whatever the alias
+    /// names rather than a module of this crate.
     pub(super) fn declares_module(&self, root: &str) -> bool {
-        self.modules.contains(root)
+        self.modules.contains(root) && !self.explicit.contains_key(root)
     }
 
     /// Every explicit binding with the roots its paths are imported through.
@@ -152,6 +156,13 @@ impl Imports {
 pub(super) struct CrateScope {
     /// Every name the crate declares as a macro or an import binding.
     names: BTreeSet<String>,
+    /// Every module the crate declares, by its bare name.
+    ///
+    /// A `crate::`-rooted path stays inside the crate only while each segment
+    /// names a module the crate declares. A `use` alias in the same crate can
+    /// bind a dependency, so the segment after `crate` has to be checked
+    /// against declarations rather than assumed local.
+    declared_modules: BTreeSet<String>,
     /// Whether any module is annotated `#[macro_use]`.
     has_macro_use: bool,
     /// Whether any `extern crate` is annotated `#[macro_use]`.
@@ -159,13 +170,19 @@ pub(super) struct CrateScope {
 }
 
 impl CrateScope {
-    /// Build the scope from the crate-wide name set.
-    pub(super) const fn new(names: BTreeSet<String>) -> Self {
+    /// Build the scope from the crate-wide name and module sets.
+    pub(super) const fn new(names: BTreeSet<String>, declared_modules: BTreeSet<String>) -> Self {
         Self {
             names,
+            declared_modules,
             has_macro_use: false,
             has_external_macro_use: false,
         }
+    }
+
+    /// Whether the crate declares a module with this bare name.
+    pub(super) fn declares_module(&self, name: &str) -> bool {
+        self.declared_modules.contains(name)
     }
 
     /// Record the `#[macro_use]` attributes one item list carries.
