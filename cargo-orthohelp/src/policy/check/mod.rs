@@ -124,8 +124,8 @@ fn write_summary_best_effort(
 ///
 /// Extracted so [`write_summary_best_effort`] holds at most one `tracing`
 /// call: when a dependent crate enables `tracing`'s `log` bridge, Cargo's
-/// feature unification expands every event into a branch ladder that counts
-/// against the workspace's cognitive-complexity ceiling.
+/// feature unification expands every event into a branch ladder that inflates
+/// a complexity score measured after macro expansion.
 fn log_summary_failure(error: &std::io::Error) {
     tracing::debug!(%error, "failed to write advisory policy summary");
 }

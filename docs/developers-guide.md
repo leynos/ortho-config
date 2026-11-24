@@ -2911,13 +2911,15 @@ Two rules keep this structure from decaying:
 
 - **One `tracing` emission per function.** When a dependent crate enables
   `tracing`'s `log` bridge, Cargo's feature unification expands every event
-  into a branch ladder, and those branches count against the workspace's
-  `cognitive-complexity-threshold` in `clippy.toml` (9). In this workspace the
-  enabling crate is `rstest-bdd`, a dev-dependency, so the ladder appears in
-  every test build even though the shipped libraries never enable it. A
-  function that reports two facts therefore delegates each to a small
-  `fn log_<fact>` helper, as `bridge/telemetry.rs` and the atomic-write helpers
-  in `output/mod.rs` do; their module docs record the reason.
+  into a branch ladder. Clippy's `cognitive_complexity` would count those
+  branches, so it is not enabled: Whitaker's experimental
+  `macro_aware_cognitive_complexity` gates complexity at 9 (`dylint.toml`),
+  skipping branching a macro generated. In this workspace the enabling crate is
+  `rstest-bdd`, a dev-dependency, so the ladder appears in every test build
+  even though the shipped libraries never enable it. A function that reports
+  two facts still delegates each to a small `fn log_<fact>` helper, as
+  `bridge/telemetry.rs` and the atomic-write helpers in `output/mod.rs` do;
+  their module docs record the reason.
 - **Split by size, not by taste.** The vocabulary, the entrypoints and their
   documentation together reach the 400-line module cap, which is why the
   emitters and the counters live in sibling modules. Moving code back would

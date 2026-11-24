@@ -59,8 +59,8 @@ pub fn write_agent_context_stdout(payload: &AgentContext) -> Result<(), Orthohel
 /// Each emission lives in its own function so that
 /// [`write_agent_context`] holds at most one `tracing` call: when a dependent
 /// crate enables `tracing`'s `log` bridge, Cargo's feature unification
-/// expands every event into a branch ladder that counts against the
-/// workspace's cognitive-complexity ceiling.
+/// expands every event into a branch ladder that inflates a complexity score
+/// measured after macro expansion.
 fn log_agent_context_start(package: &str, out_dir: &Utf8Path) {
     tracing::debug!(
         package = %package,

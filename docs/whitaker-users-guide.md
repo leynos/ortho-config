@@ -156,9 +156,18 @@ Whitaker lints are divided into two categories:
   false positives or undergo breaking changes between releases. They must be
   explicitly enabled.
 
-The default `whitaker_suite` pattern includes only standard lints. Whitaker
-currently ships one experimental lint, `rstest_helper_should_be_fixture`, which
-is available only when experimental lints are enabled.
+The default `whitaker_suite` contains the experimental lints too, such as
+`rstest_helper_should_be_fixture` and `macro_aware_cognitive_complexity`, but
+does not run them unless they are selected. A repository selects one per lint in
+`dylint.toml`, as this one does for `macro_aware_cognitive_complexity`:
+
+```toml
+[whitaker]
+experimental = ["macro_aware_cognitive_complexity"]
+
+[macro_aware_cognitive_complexity]
+max_complexity = 9
+```
 
 ### Enabling experimental lints
 
@@ -170,9 +179,8 @@ whitaker-installer --experimental
 
 This enables experimental suite features when building `whitaker_suite`. To
 build experimental lints as individual libraries, combine it with
-`--individual-lints`. Explicit `--lint` requests for experimental lints also
-require `--experimental`; without that opt-in the installer rejects the request
-before building anything.
+`--individual-lints`. An explicit `--lint` request for an experimental lint
+does not require `--experimental`.
 
 ## Lint Configuration
 

@@ -2,8 +2,8 @@
 //!
 //! Each emission lives in its own function. When a dependent crate enables
 //! `tracing`'s `log` bridge, Cargo's feature unification expands every event
-//! into a branch ladder that counts against the workspace's
-//! cognitive-complexity ceiling, so the function that *decides* something must
+//! into a branch ladder that inflates a complexity score measured after macro
+//! expansion, so the function that *decides* something must
 //! not also spell the event. Keeping the spellings together here mirrors the
 //! bridge IR-cache telemetry module.
 //!
