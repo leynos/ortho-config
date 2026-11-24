@@ -46,7 +46,6 @@ missing_docs_in_private_items = "deny"
 allow_attributes                    = "deny"
 allow_attributes_without_reason     = "deny"
 blanket_clippy_restriction_lints    = "deny"
-cognitive_complexity                = "deny"
 needless_pass_by_value              = "deny"
 implicit_hasher                     = "deny"
 

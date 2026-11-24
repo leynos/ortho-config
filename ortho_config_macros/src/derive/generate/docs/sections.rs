@@ -72,10 +72,6 @@ pub(super) fn synopsis_id_tokens(doc: &DocStructAttrs, krate: &TokenStream) -> T
 ///
 /// The returned tokens refer to the selected runtime crate path so derive expansion
 /// remains valid when the dependency is renamed by the consuming package.
-#[expect(
-    clippy::cognitive_complexity,
-    reason = "`quote!` expansion inflates the complexity score; keep this wrapper minimal."
-)]
 pub(super) fn build_sections_metadata(
     app_name: &AppName,
     struct_attrs: &StructAttrs,
