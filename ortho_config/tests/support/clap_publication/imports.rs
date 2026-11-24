@@ -32,13 +32,18 @@ use super::tokens::identifier_name;
 /// What the `use` items of one item list can bind.
 #[derive(Debug, Default)]
 pub(super) struct Imports {
-    /// Names bound by an explicit `use` path, including `as` renames, and the
-    /// first path segment each binding is imported through.
+    /// Names bound by an explicit `use` path, including `as` renames, and every
+    /// root those bindings are imported through.
     ///
     /// The root matters beyond the macro audit: a derive name has to know
     /// whether an explicit binding could name a procedural macro, and a path
-    /// rooted at `std`, `core` or `alloc` cannot.
-    explicit: BTreeMap<String, Option<String>>,
+    /// rooted at `std`, `core` or `alloc` cannot. Every binding is kept rather
+    /// than the last one seen, because a type and a derive macro occupy
+    /// different namespaces: `use injector::Inject as Debug;` beside
+    /// `use std::…::DefaultHasher as Debug;` compiles, and `#[derive(Debug)]`
+    /// still invokes the procedural macro. A single root per name would let the
+    /// later, trustworthy binding hide the earlier one.
+    explicit: BTreeMap<String, Vec<Option<String>>>,
     /// `use crate::…::*`, `use self::…::*` and `use super::…::*`.
     has_internal_glob: bool,
     /// A glob whose path may name an external crate.
@@ -77,11 +82,13 @@ impl Imports {
         self.explicit.keys()
     }
 
-    /// Every explicit binding with the root of the path it is imported through.
+    /// Every explicit binding with the roots its paths are imported through.
     ///
     /// A binding whose root is `None` is a bare `use Name;`, so it resolves in
-    /// the crate's own scope rather than through a named crate.
-    pub(super) const fn explicit_roots(&self) -> &BTreeMap<String, Option<String>> {
+    /// the crate's own scope rather than through a named crate. One name can
+    /// carry several roots, because two imports of it may compile when they
+    /// occupy different namespaces.
+    pub(super) const fn explicit_roots(&self) -> &BTreeMap<String, Vec<Option<String>>> {
         &self.explicit
     }
 
@@ -92,13 +99,9 @@ impl Imports {
             // `use crate::error_inject as r#compile_error;` binds the imported
             // macro to `compile_error`, so the binding is recorded under the name
             // Rust resolves rather than the spelling the source renders.
-            UseTree::Name(name) => {
-                self.explicit
-                    .insert(identifier_name(&name.ident), root.map(identifier_name));
-            }
+            UseTree::Name(name) => self.record_binding(identifier_name(&name.ident), root),
             UseTree::Rename(rename) => {
-                self.explicit
-                    .insert(identifier_name(&rename.rename), root.map(identifier_name));
+                self.record_binding(identifier_name(&rename.rename), root);
             }
             // The glob's root needs no normalization: only `crate`, `self` and
             // `super` are classified here, and Rust forbids a raw spelling of a
@@ -112,6 +115,19 @@ impl Imports {
                     self.add_tree(item, root);
                 }
             }
+        }
+    }
+
+    /// Add one root to a name's bindings without discarding an earlier one.
+    ///
+    /// A repeated identical root is recorded once; a distinct root is kept
+    /// beside it, because the two imports may compile in different namespaces
+    /// and only one of them decides what a derive of that name invokes.
+    fn record_binding(&mut self, name: String, root: Option<&Ident>) {
+        let root_name = root.map(identifier_name);
+        let roots = self.explicit.entry(name).or_default();
+        if !roots.contains(&root_name) {
+            roots.push(root_name);
         }
     }
 }

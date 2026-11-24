@@ -585,11 +585,15 @@ imported procedural macro and append its output to the annotated item's scope.
 A binding rooted at `std`, `core` or `alloc` cannot name a procedural derive,
 because the standard library exports none, so the reviewed
 `use std::fmt::Debug;` stays trusted; a module that rebinds the root itself,
-through `mod std` or `extern crate … as std`, voids that exemption. A glob is
-safe on the other side: a derive of the same name reaching a module through one
-is reported ambiguous (`E0659`) rather than chosen, and a `macro_rules!`
-definition of the name leaves the built-in derive in place, because bang macros
-are a separate macro kind.
+through `mod std` or `extern crate … as std`, voids that exemption.
+
+Every binding of the name decides the outcome, not only the last one written. A
+type and a derive macro occupy different namespaces, so
+`use inventory_macros::Inject as Debug;` and `use std::fmt::Debug as Debug;`
+compile together in one module; the `std` root says nothing about the macro
+namespace, which the procedural derive still owns. The audit therefore keeps
+every root bound to a name and trusts it only when all of them are compiler
+roots, in either source order.
 
 The count is the total declared variant count for that builder package, not
 only the raisable variants; classification as translated or `DisplayOnly`

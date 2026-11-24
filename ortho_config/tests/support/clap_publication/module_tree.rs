@@ -174,6 +174,10 @@ fn unconditional_module_chain_is_counted() -> Result<()> {
 // `use` can rebind it to an imported procedural macro that appends its own
 // items to the annotated item's scope.
 #[case::imported_derive("imported_derive", "binds a derive named")]
+// A type import of the same name compiles beside the macro import, so the
+// later `std` root cannot be read as proof; both orders are refused.
+#[case::derive_masked_by_std("derive_masked_by_std", "binds a derive named")]
+#[case::std_masked_by_derive("std_masked_by_derive", "binds a derive named")]
 // A `use` path rooted at `std` is only as trustworthy as the root itself, so a
 // local `mod std` makes the compiler-root exemption name the local module.
 #[case::poisoned_root("poisoned_root", "binds a derive named")]

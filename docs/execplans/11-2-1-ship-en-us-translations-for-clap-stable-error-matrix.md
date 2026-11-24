@@ -1506,6 +1506,22 @@ stopping and reporting.
       and `6ec295f4` to `31ba5716` matches every commit except the one carrying
       that resolution.
 
+- [x] (2026-11-24) Round-24 repair of a derive-binding bypass the twelfth
+      whole-plan assessment found. `Imports` stored one root per explicitly
+      bound name, so a later import overwrote an earlier one. A type and a
+      derive macro occupy different namespaces, so
+      `use inventory_macros::Inject as Debug;` beside
+      `use std::fmt::Debug as Debug;` compiles, and `#[derive(Debug)]` still
+      invokes the procedural macro: keeping only the `std` root would trust the
+      decoy. Every binding is now kept, and a built-in derive name is trusted
+      only when all of its roots are compiler roots. Two decoy fixtures cover
+      both source orders, `derive_masked_by_std` and `std_masked_by_derive`.
+      A `rustc` probe reproduced the exploit before the repair — the module
+      compiled with both imports and called the derive's appended method — and
+      the non-vacuity check restored last-root semantics in a throwaway copy,
+      which failed `derive_masked_by_std` alone. The focused gate passes 89
+      tests, up from 87.
+
 - [x] (2026-11-21) Round-22 conflict dispositions. Five paths conflicted, and
       every one was resolved by preserving both sides' intent rather than by
       choosing a side wholesale:
@@ -2837,3 +2853,8 @@ Revision note (2026-11-23): replay once more onto `origin/main` `6ec295f4`
 after main advanced by seven commits during the Round-22 gates. The only
 conflict is the `## Unreleased` add/add pair in `CHANGELOG.md`, resolved by
 keeping one section with both sides' subsections; no source file changes.
+
+Revision note (2026-11-24): keep every explicit `use` root bound to a name and
+trust a built-in derive name only when all of them are compiler roots. A type
+import of the same spelling no longer hides a procedural import in the other
+namespace; the reviewed count and the runtime consultation are unchanged.

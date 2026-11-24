@@ -154,21 +154,36 @@ fn shadowed_derives(items: &[Item]) -> BTreeSet<String> {
     let imports = Imports::of(items);
     let locals = local_names(items);
     let mut shadowed = BTreeSet::new();
-    for (name, root) in imports.explicit_roots() {
-        if is_builtin_derive(name) && !is_compiler_binding(root.as_deref(), &locals) {
+    for (name, roots) in imports.explicit_roots() {
+        if is_builtin_derive(name) && !every_binding_is_compiler(roots, &locals) {
             shadowed.insert(name.clone());
         }
     }
     shadowed
 }
 
-/// Whether an explicit binding can only name a compiler-supplied derive.
+/// Whether every binding of one name can only name a compiler-supplied derive.
+///
+/// A name is trusted only when all of its bindings are: one import that could
+/// reach a procedural macro is enough to redirect `#[derive(Name)]`, even with
+/// a trustworthy import of the same spelling beside it, because a type and a
+/// derive macro occupy different namespaces and both imports then compile. An
+/// empty list cannot arise from a recorded binding, and is treated as untrusted
+/// so the decision fails closed if that ever changes.
+fn every_binding_is_compiler(roots: &[Option<String>], locals: &BTreeSet<String>) -> bool {
+    !roots.is_empty()
+        && roots
+            .iter()
+            .all(|root| is_compiler_binding(root.as_deref(), locals))
+}
+
+/// Whether one explicit binding can only name a compiler-supplied derive.
 ///
 /// The root decides: `std`, `core` and `alloc` export no procedural derive, so
 /// a binding through one is the built-in item the name suggests. A module that
 /// declares a `mod std`, or an `extern crate … as std`, gives that root a local
 /// meaning instead, and then the path reaches whatever the local declaration
-/// exports.
+/// exports. A bare `use Name;` names no root at all, so it is untrusted.
 fn is_compiler_binding(root: Option<&str>, locals: &BTreeSet<String>) -> bool {
     root.is_some_and(|path_root| {
         COMPILER_DERIVE_ROOTS.contains(&path_root) && !locals.contains(path_root)
