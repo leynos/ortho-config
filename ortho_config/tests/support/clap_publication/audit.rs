@@ -204,6 +204,62 @@ pub(super) fn refuse_error_kind_renames(items: &[Item], origin: &Utf8Path) -> Re
     Ok(())
 }
 
+/// Refuse any declaration of the inventory name that is not the counted enum.
+///
+/// The count is certified for one enum, so every other type-namespace
+/// declaration of `ErrorKind` is a way to make the exported name lead
+/// somewhere the walk never counted: a type alias
+/// (`pub type ErrorKind = crate::real::ActualErrorKind;`), a struct, a union, a
+/// trait, or a module. Resolving each of those to whatever it ultimately names
+/// would repeat the same binding question at every hop, so the gate refuses
+/// them instead. The declaration is refused wherever it appears, conditionally
+/// or not, because the gate cannot evaluate a condition that decides whether
+/// the compiler sees it.
+pub(super) fn refuse_error_kind_redeclarations(items: &[Item], origin: &Utf8Path) -> Result<()> {
+    if let Some(place) = redeclared_error_kind(items, "") {
+        bail!(
+            "{origin} declares the inventory name in {place} as something other than the counted \
+             enum; the gate cannot bind that export to the declaration it counts, so it fails \
+             closed"
+        );
+    }
+    Ok(())
+}
+
+/// Where the first non-enum `ErrorKind` declaration appears, if any.
+fn redeclared_error_kind(items: &[Item], prefix: &str) -> Option<String> {
+    for item in items {
+        match item {
+            Item::Type(alias) if is_error_kind_name(&alias.ident) => {
+                return Some(described_place(prefix));
+            }
+            Item::Struct(item_struct) if is_error_kind_name(&item_struct.ident) => {
+                return Some(described_place(prefix));
+            }
+            Item::Union(union) if is_error_kind_name(&union.ident) => {
+                return Some(described_place(prefix));
+            }
+            Item::Trait(trait_item) if is_error_kind_name(&trait_item.ident) => {
+                return Some(described_place(prefix));
+            }
+            Item::Mod(module) => {
+                if is_error_kind_name(&module.ident) {
+                    return Some(described_place(prefix));
+                }
+                let Some((_, nested)) = &module.content else {
+                    continue;
+                };
+                let path = module_path(prefix, &module.ident.to_string());
+                if let Some(deeper) = redeclared_error_kind(nested, &path) {
+                    return Some(deeper);
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
 /// Where the first `ErrorKind`-renaming `use` appears, if any.
 fn renamed_error_kind(items: &[Item], prefix: &str) -> Option<String> {
     for item in items {

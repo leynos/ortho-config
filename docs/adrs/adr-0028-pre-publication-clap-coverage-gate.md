@@ -179,13 +179,15 @@ declaring module stays uncounted rather than refused, and a tree using only the
 compiler's attributes stays counted.
 
 The count is bound to a declaration, not to the path a consumer resolves, so
-the gate also refuses a `use` item that gives the inventory name to an item
-declared under another one.
-`pub use crate::real::ActualErrorKind as ErrorKind;` makes the exported
-inventory an enum the walk never counts while a file-level `ErrorKind` decoy
-stays countable, so the renamed re-export is refused at any depth, conditional
-or not. The reviewed plain re-export `pub use kind::ErrorKind;` keeps the
-declaration and the export the same item and stays accepted.
+the gate also refuses every other way of giving the name `ErrorKind` to
+something the walk does not count. A renamed re-export
+(`pub use crate::real::ActualErrorKind as ErrorKind;`) and a type alias
+(`pub type ErrorKind = crate::real::ActualErrorKind;`) both make the exported
+name lead to an enum the walk never counts while a file-level `ErrorKind` decoy
+stays countable; so does a struct, union, trait or module declared under the
+name. Each is refused at any depth, conditional or not. The reviewed plain
+re-export `pub use kind::ErrorKind;` keeps the declaration and the export the
+same item and stays accepted.
 
 ## Alternatives rejected
 

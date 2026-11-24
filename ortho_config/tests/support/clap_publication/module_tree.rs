@@ -184,6 +184,10 @@ fn unconditional_module_chain_is_counted() -> Result<()> {
 // A renamed re-export gives the inventory name to an enum declared under
 // another one, so the counted declaration is not the exported inventory.
 #[case::renamed_reexport("renamed_reexport", "by renaming another item to")]
+// A type alias reaches the same redirection without a `use`, so it is refused
+// at any depth as well.
+#[case::aliased_reexport("aliased_reexport", "as something other than the counted enum")]
+#[case::struct_reexport("struct_reexport", "as something other than the counted enum")]
 // A tree without a reported crate root is refused rather than guessed at.
 #[case::no_crate_root("no_crate_root", "expected a crate root lib.rs")]
 fn module_tree_is_refused(#[case] fixture: &str, #[case] expected: &str) -> Result<()> {

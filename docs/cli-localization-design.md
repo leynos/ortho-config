@@ -596,10 +596,12 @@ every root bound to a name and trusts it only when all of them are compiler
 roots, in either source order.
 
 The count is bound to a declaration rather than to the path a consumer
-resolves, so a `use` item that renames another item to `ErrorKind` is refused:
-`pub use crate::real::ActualErrorKind as ErrorKind;` would export an enum the
-walk never counts while a file-level decoy stayed countable. The plain
-`pub use kind::ErrorKind;` names the declaration itself and stays accepted.
+resolves, so every other way of giving the name `ErrorKind` to something the
+walk does not count is refused: a renamed re-export such as
+`pub use crate::real::ActualErrorKind as ErrorKind;`, a type alias such as
+`pub type ErrorKind = crate::real::ActualErrorKind;`, and a struct, union,
+trait or module declared under the name. The plain `pub use kind::ErrorKind;`
+names the declaration itself and stays accepted.
 
 The count is the total declared variant count for that builder package, not
 only the raisable variants; classification as translated or `DisplayOnly`

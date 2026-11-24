@@ -43,8 +43,8 @@ use cargo_metadata::Package;
 use syn::Item;
 
 use super::audit::{
-    audit_definition, is_error_kind_name, refuse_error_kind_renames, refuse_nested_error_kinds,
-    reject_cfg_attributes,
+    audit_definition, is_error_kind_name, refuse_error_kind_redeclarations,
+    refuse_error_kind_renames, refuse_nested_error_kinds, reject_cfg_attributes,
 };
 use super::expansion::refuse_unverified_attributes;
 use super::imports::CrateScope;
@@ -215,6 +215,7 @@ fn analyze_error_kind(
     refuse_unverified_attributes(file, origin)?;
     refuse_nested_error_kinds(&file.items, origin)?;
     refuse_error_kind_renames(&file.items, origin)?;
+    refuse_error_kind_redeclarations(&file.items, origin)?;
     refuse_item_macros(&file.items, origin, crate_scope)?;
     let mut definitions = file.items.iter().filter_map(|item| match item {
         Item::Enum(definition) if is_error_kind_name(&definition.ident) => Some(definition),
