@@ -90,3 +90,15 @@ pub(super) fn quote_path(path: &Path) -> String {
         .collect::<Vec<_>>()
         .join("::")
 }
+
+/// Join one inline module name onto the path of its enclosing modules.
+///
+/// The refusal diagnostics name where a bad shape was found, so both the
+/// nested-enum walk and the export-binding walk build the same dotted path.
+pub(super) fn module_path(prefix: &str, name: &str) -> String {
+    if prefix.is_empty() {
+        name.to_owned()
+    } else {
+        format!("{prefix}::{name}")
+    }
+}

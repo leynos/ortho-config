@@ -43,9 +43,9 @@ use cargo_metadata::Package;
 use syn::Item;
 
 use super::audit::{
-    audit_definition, is_error_kind_name, refuse_error_kind_redeclarations,
-    refuse_error_kind_renames, refuse_nested_error_kinds, reject_cfg_attributes,
+    audit_definition, is_error_kind_name, refuse_nested_error_kinds, reject_cfg_attributes,
 };
+use super::bindings::{refuse_error_kind_redeclarations, refuse_error_kind_renames};
 use super::expansion::refuse_unverified_attributes;
 use super::imports::CrateScope;
 use super::library::library_crate_root;

@@ -19,6 +19,7 @@
 //! count.
 
 mod audit;
+mod bindings;
 mod expansion;
 mod files;
 mod identity;
