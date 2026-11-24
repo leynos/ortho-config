@@ -271,3 +271,53 @@ fn unknown_turbofish_value_leaves_the_following_key_readable() -> Result<()> {
     );
     Ok(())
 }
+
+/// An unknown closure value must still parse.
+///
+/// A closure's parameter list carries a top-level comma — `|a, b| a` — so a
+/// scan that only tracks turbofish angles splits it. The previous `Expr` parse
+/// accepted closures, so splitting them here would break derives that compiled
+/// before. The zero-parameter form arrives as two bars and must close too.
+#[rstest]
+#[case::two_parameters(parse_quote! {
+    #[ortho_config(prefix = "CFG_", future = |a, b| a)]
+})]
+#[case::zero_parameters(parse_quote! {
+    #[ortho_config(prefix = "CFG_", future = || 1)]
+})]
+#[case::no_parameters_before_known_key(parse_quote! {
+    #[ortho_config(prefix = "CFG_", future = |a, b| a, crate = "my_config")]
+})]
+#[case::bitwise_or_stays_ordinary(parse_quote! {
+    #[ortho_config(prefix = "CFG_", future = a | b)]
+})]
+fn unknown_closure_value_parses(#[case] attribute: syn::Attribute) -> Result<()> {
+    let input: DeriveInput = parse_quote! {
+        #attribute
+        struct Demo { field: String }
+    };
+    let (_, _, struct_attrs, _) = parse_input(&input).map_err(|err| anyhow!(err))?;
+    ensure!(
+        struct_attrs.prefix.as_deref() == Some("CFG_"),
+        "the known key before the unknown closure must still be read"
+    );
+    Ok(())
+}
+
+/// The separator after an unknown closure value is left unread.
+#[test]
+fn unknown_closure_value_leaves_the_following_key_readable() -> Result<()> {
+    let input: DeriveInput = parse_quote! {
+        #[ortho_config(future = |a, b| a, crate = "my_config")]
+        struct Demo { field: String }
+    };
+    let (_, _, struct_attrs, _) = parse_input(&input).map_err(|err| anyhow!(err))?;
+    ensure!(
+        struct_attrs
+            .crate_path
+            .as_ref()
+            .is_some_and(|path| path.is_ident("my_config")),
+        "the key after the unknown closure must still be read"
+    );
+    Ok(())
+}

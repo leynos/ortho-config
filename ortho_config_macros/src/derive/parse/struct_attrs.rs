@@ -51,28 +51,38 @@ pub(crate) fn discard_unknown(meta: &syn::meta::ParseNestedMeta) -> syn::Result<
     Ok(())
 }
 
-/// Tracks the turbofish nesting a token scan must respect.
+/// Tracks the nesting a token scan must respect.
 ///
-/// A turbofish is not a delimiter group, so the comma in `factory::<A, B>()`
-/// is an ordinary top-level token. The scan therefore counts angle brackets:
-/// a `<` that follows `::` opens a level, and a `<` already inside a level
-/// opens a nested one, as in `outer::<Inner<A, B>, C>()`. A `>` closes a
-/// level, except after `-`, so the arrow in `dyn Fn() -> T` cannot. Only a
-/// comma at depth zero separates one item from the next.
+/// An item boundary is a comma that is not enclosed by anything. Two constructs
+/// carry top-level commas without being delimiter groups, so both are counted
+/// here:
+///
+/// - a turbofish: a `<` that follows `::` opens a level, a `<` already inside a
+///   level opens a nested one (`outer::<Inner<A, B>, C>()`), and a `>` closes
+///   one — except after `-`, so the arrow in `dyn Fn() -> T` cannot;
+/// - a closure's parameter list: `|a, b| a` puts its comma at top level.
+///
+/// The closure bar is recognised only as the value's first token. A later `|`
+/// is bitwise or (`a | b`), which must not open a level, and the previous
+/// `syn::Expr` parse accepted both shapes.
 #[derive(Default)]
-struct AngleNesting {
+struct ItemNesting {
     /// How many turbofish argument lists are open.
-    depth: usize,
+    angle_depth: usize,
     /// Consecutive `:` tokens seen, to recognise the `::<` opener.
     colons: u8,
     /// Whether the previous token was `-`, to recognise an arrow's `>`.
     after_dash: bool,
+    /// Whether a closure's parameter list is open.
+    inside_closure_params: bool,
+    /// Whether any token has been consumed yet.
+    seen_any: bool,
 }
 
-impl AngleNesting {
+impl ItemNesting {
     /// Reports whether a comma here ends the value rather than nesting.
     const fn at_top_level(&self) -> bool {
-        self.depth == 0
+        self.angle_depth == 0 && !self.inside_closure_params
     }
 
     /// Updates the nesting from one token.
@@ -81,20 +91,38 @@ impl AngleNesting {
             proc_macro2::TokenTree::Punct(punct) => Some(punct.as_char()),
             _ => None,
         };
+        if ch == Some('|') {
+            // The value's first token can only be a closure's opening bar; a
+            // `||` zero-parameter closure arrives as two bars and closes on the
+            // second. Any later bar is bitwise or and leaves nesting alone.
+            if !self.seen_any {
+                self.inside_closure_params = true;
+            } else if self.inside_closure_params && self.angle_depth == 0 {
+                self.inside_closure_params = false;
+            }
+            self.colons = 0;
+        } else {
+            self.observe_angle(ch);
+        }
+        self.after_dash = ch == Some('-');
+        self.seen_any = true;
+    }
+
+    /// Applies the turbofish rules to a token that is not a closure bar.
+    const fn observe_angle(&mut self, ch: Option<char>) {
         match ch {
             Some(':') => self.colons = self.colons.saturating_add(1),
-            Some('<') if self.depth > 0 || self.colons >= 2 => {
-                self.depth += 1;
+            Some('<') if self.angle_depth > 0 || self.colons >= 2 => {
+                self.angle_depth += 1;
                 self.colons = 0;
             }
             Some('>') if self.after_dash => self.colons = 0,
-            Some('>') if self.depth > 0 => {
-                self.depth -= 1;
+            Some('>') if self.angle_depth > 0 => {
+                self.angle_depth -= 1;
                 self.colons = 0;
             }
             _ => self.colons = 0,
         }
-        self.after_dash = ch == Some('-');
     }
 }
 
@@ -104,9 +132,9 @@ impl AngleNesting {
 /// the enclosing `parse_nested_meta` loop positioned on the next item, so a
 /// later `flatten` in `#[serde(rename = "common", flatten)]` still reaches its
 /// handler. The nesting rules that make "top-level" meaningful are in
-/// [`AngleNesting`].
+/// [`ItemNesting`].
 fn skip_to_item_end(input: syn::parse::ParseStream<'_>) -> syn::Result<()> {
-    let mut nesting = AngleNesting::default();
+    let mut nesting = ItemNesting::default();
     while !input.is_empty() {
         if nesting.at_top_level() && input.peek(Token![,]) {
             break;
