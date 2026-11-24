@@ -1558,6 +1558,37 @@ stopping and reporting.
       CodeScene reports 10.0 for the module after one shared `any_leaf` walk
       replaced two near-identical traversals.
 
+- [x] (2026-11-24) Round-28 scope and absoluteness repair, found by running
+      the real gate rather than reasoning about it. The next assessment
+      reported two more shapes: a leading `::` reaches the extern prelude, and
+      a module name collected anywhere in the crate must not make an unrelated
+      path local. Repairing the glob half exposed a regression the assessment
+      had not named: refusing every external glob refused the real
+      `clap_builder`, whose `builder/styling.rs` carries `pub use
+      anstyle::*;`. Running `resolved_clap_builder_inventory_matches_the
+      _reviewed_total` reproduced it as
+      `builder/styling.rs binds the inventory name … fails closed`.
+      - External globs are now a closed reviewed allow-list,
+        `REVIEWED_EXTERNAL_GLOBS = ["anstyle"]`, in the same spirit as the
+        closed attribute lists: a new upstream glob fails the gate until it is
+        reviewed.
+      - The leading `::` is carried from `ItemUse::leading_colon` and makes the
+        path foreign regardless of local module names, so
+        `module_tree/absolute_foreign_path` — an absolute path colliding with
+        an unrelated `mod inventory_provider {}` — is refused.
+      - A bare first segment is local only when the enclosing item list itself
+        declares that module, so a same-named module elsewhere in the crate no
+        longer counts. A `crate::`-rooted path stays local for the rest of its
+        segments, because the reachability walk already certifies which files
+        the compiler compiles; that is what keeps the real
+        `use crate::error::ErrorKind;` in `builder/command.rs` accepted.
+      - The `CrateScope` module set became dead and was removed rather than
+        kept.
+      - The full `clap_error_coverage` target passes 98 tests, 89 of them the
+        publication subset, and the real-source test passes, which is the
+        decisive evidence that the refusals did not become a blanket
+        rejection.
+
 - [x] (2026-11-21) Round-22 conflict dispositions. Five paths conflicted, and
       every one was resolved by preserving both sides' intent rather than by
       choosing a side wholesale:
@@ -2894,6 +2925,12 @@ Revision note (2026-11-24): keep every explicit `use` root bound to a name and
 trust a built-in derive name only when all of them are compiler roots. A type
 import of the same spelling no longer hides a procedural import in the other
 namespace; the reviewed count and the runtime consultation are unchanged.
+
+Revision note (2026-11-24): refuse an inventory name bound outside the crate,
+including an absolute path and an unreviewed external glob, while keeping the
+reviewed `pub use kind::ErrorKind;`, the crate-rooted
+`use crate::error::ErrorKind;` and the reviewed `pub use anstyle::*;` accepted.
+The real resolved source is the control for that boundary.
 
 Revision note (2026-11-24): refuse every non-enum binding of the name
 `ErrorKind` — a renamed re-export, a type alias, or a struct, union, trait or

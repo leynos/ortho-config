@@ -49,7 +49,7 @@ use super::bindings::{refuse_error_kind_redeclarations, refuse_error_kind_rename
 use super::expansion::refuse_unverified_attributes;
 use super::imports::CrateScope;
 use super::library::library_crate_root;
-use super::macros::{collect_crate_facts, refuse_item_macros};
+use super::macros::{collect_crate_names, refuse_item_macros};
 use super::reachability::unconditionally_compiled;
 
 /// The crate root a library package compiles first when it declares no path.
@@ -146,11 +146,10 @@ fn parse_sources(
 fn crate_scope_of<'a>(files: impl IntoIterator<Item = &'a syn::File>) -> CrateScope {
     let parsed: Vec<&syn::File> = files.into_iter().collect();
     let mut names = BTreeSet::new();
-    let mut modules = BTreeSet::new();
     for file in &parsed {
-        collect_crate_facts(&file.items, &mut names, &mut modules);
+        collect_crate_names(&file.items, &mut names);
     }
-    let mut scope = CrateScope::new(names, modules);
+    let mut scope = CrateScope::new(names);
     for file in parsed {
         scope.observe(&file.items);
     }
@@ -215,7 +214,7 @@ fn analyze_error_kind(
 ) -> Result<Option<usize>> {
     refuse_unverified_attributes(file, origin)?;
     refuse_nested_error_kinds(&file.items, origin)?;
-    refuse_error_kind_renames(&file.items, crate_scope, origin)?;
+    refuse_error_kind_renames(&file.items, origin)?;
     refuse_error_kind_redeclarations(&file.items, origin)?;
     refuse_item_macros(&file.items, origin, crate_scope)?;
     let mut definitions = file.items.iter().filter_map(|item| match item {
