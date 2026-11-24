@@ -26,7 +26,7 @@ jobs:
     permissions:
       contents: read
       id-token: write # OIDC workflow-source resolution
-    uses: leynos/shared-actions/.github/workflows/mutation-cargo.yml@7d751eded578e48dacf43ab173d5820e6437c474
+    uses: leynos/shared-actions/.github/workflows/mutation-cargo.yml@29b1772534b37ea996c24a2ccb462e717073155d
     with:
       # Virtual workspace: the library, derive macro, orthohelp cargo
       # subcommand, and example crates all live in subdirectories, so
