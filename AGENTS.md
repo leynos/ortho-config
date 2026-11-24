@@ -244,13 +244,16 @@ project:
   - `make test` executes:
 
     ```sh
+    cargo fetch --locked
     cargo test --all-targets --all-features
     ```
 
-    running the Rust workspace tests for every target and feature under
-    `GATE_RUSTFLAGS`, which restates the build standard alongside `-D warnings`.
-    It then runs the Python tests with pytest. The Cargo command does not run
-    Rust doctests.
+    first fetching the locked dependencies, so that nested builds the tests
+    start find the package cache warm (the offline-tests rule; it needs
+    `Cargo.lock` to be current), and then running the Rust workspace tests for
+    every target and feature under `GATE_RUSTFLAGS`, which restates the build
+    standard alongside `-D warnings`. It then runs the Python tests with
+    pytest. The Cargo test command does not run Rust doctests.
   - Use `make fmt` to apply the formatting fixes that `make check-fmt` reports.
     It runs `cargo fmt --all`, `mdtablefix`, and the Markdown lint fixer.
 - Clippy warnings MUST be disallowed.

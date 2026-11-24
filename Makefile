@@ -200,6 +200,7 @@ clean: ## Remove build artefacts
 	rm -rf $(PYTHON_VENV)
 
 test: check-build-tools python-test-deps ## Run tests with warnings treated as errors
+	$(GATE_RUSTFLAGS) $(CARGO) fetch --locked
 	$(GATE_RUSTFLAGS) $(CARGO) test --all-targets --all-features $(BUILD_JOBS)
 	$(PYTEST) $(PYTEST_FLAGS)
 
