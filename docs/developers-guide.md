@@ -4946,17 +4946,19 @@ block:
 
 ```yaml
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 ```
 
 Two halves matter, and each fails in a way nothing else would notice.
 
-- **The group keys on the pull request.** A group built from
+- **The group keys on the pull request.** A group built only from
   `github.run_id` is unique to one run, so it matches no predecessor and
-  cancels nothing while reading exactly like a concurrency control. A constant
-  group is the opposite failure: every open pull request shares one queue, and
-  the first push anywhere cancels the gates running everywhere else.
+  cancels nothing while reading exactly like a concurrency control; the run
+  identifier is only the fallback for events without a pull request, which
+  gives each push, schedule and dispatch a group of its own. A constant group
+  is the opposite failure: every open pull request shares one queue, and the
+  first push anywhere cancels the gates running everywhere else.
 - **Cancellation is conditioned on the event.** A literal
   `cancel-in-progress: true` reads as the stricter setting and is a regression.
   A push to `main`, a schedule, and a dispatch have no successor waiting, and
@@ -4967,17 +4969,6 @@ Two halves matter, and each fails in a way nothing else would notice.
 repository to carry a token, and the ones here automate pull-request
 housekeeping rather than building, so cancelling one mid-flight is a hazard
 with no minutes to win.
-
-### The cancellation contract
-
-`tests/workflow_contracts/concurrency_test.py` reads `.github/workflows` and
-asserts, for every workflow declaring a `pull_request` trigger, that it
-declares a concurrency group, that the group names no per-run expression, that
-the group names something that varies per pull request, and that
-`cancel-in-progress` is exactly the expression above. A further test asserts
-that discovery still finds the workflows it is expected to, so a broken read
-cannot empty the list and turn the rest into a vacuous pass. Run it with
-`make test-workflow-contracts`.
 
 ## Development build footprint
 
