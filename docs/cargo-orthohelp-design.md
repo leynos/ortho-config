@@ -367,10 +367,14 @@ in [ADR-0026](adrs/adr-0026-profile-field-redaction.md).
 The wire additions are additive. `FieldMetadata::profile_field` is an optional
 label, omitted when absent, and an unknown label fails deserialization rather
 than degrading to an ordinary field, so legacy IR reads as ordinary metadata.
-Agent context carries one record per protected field in `profiles.redaction[]`:
-`command_path`, `field_name`, the optional file `key_path`, and `exposure`.
-Records are sorted by identity and a duplicate `(command_path, field_name)` is
-rejected rather than resolved.
+When the documentation declares profiles support, agent context carries one
+record per protected field in `profiles.redaction[]`: `command_path`,
+`field_name`, the optional file `key_path`, and `exposure`. Records are sorted
+by identity and a duplicate `(command_path, field_name)` is rejected rather
+than resolved. A document without that declaration yields an unsupported
+declaration with no records, because the bridge returns before collecting them;
+values are still projected either way, since projection happens before the
+declaration is built.
 
 The boundary is structural, not textual. Help identifiers, descriptions, custom
 type names, links, and notes are published verbatim, so an author who writes a

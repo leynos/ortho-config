@@ -149,16 +149,17 @@ identifiers; they are outside profile-value redaction and must remain unchanged.
 `cargo-orthohelp/src/agent_context/mod.rs::bridge_ir_to_agent_context` builds
 context; `build_input` in `cargo-orthohelp/src/agent_context/input.rs`
 currently copies defaults and enumerated values.
-`cargo-orthohelp/src/ir.rs::localize_doc` and `localize_field` copy defaults
-and examples for human renderers. `roff/` and `powershell/maml/` under
-`cargo-orthohelp/src/` render those structures. Inspect `bridge.rs`,
-`generation.rs`, `cache.rs`, and `output.rs` there to cover intermediate and
-cached output, not only final files.
+`cargo-orthohelp/src/ir/mod.rs::localize_doc` and its private per-field
+conversion copy defaults and examples for human renderers. `roff/` and
+`powershell/maml/` under `cargo-orthohelp/src/` render those structures. Inspect
+`bridge.rs`, `generation.rs`, `cache.rs`, and `output.rs` there to cover
+intermediate and cached output, not only final files.
 
-`ortho_config/src/agent_context/profiles.rs::ProfilesDeclaration` currently
-contains support, selector, and optional listing-command metadata. Static
-context contains no active selection or profile bodies. `list_command`
-population and discovery/store helpers remain roadmap 9.1.3 work.
+`ortho_config/src/agent_context/profiles/mod.rs::ProfilesDeclaration` contains
+support, selector, optional listing-command metadata, the protected-field
+records, and the names-only catalogue. Static context contains no active
+selection or profile bodies. `list_command` population and discovery/store
+helpers remain roadmap 9.1.3 work.
 
 ## Behavioural contracts (implemented)
 
@@ -167,7 +168,7 @@ population and discovery/store helpers remain roadmap 9.1.3 work.
 Propose field syntax `#[ortho_config(profile_field = "secret")]` and
 `#[ortho_config(profile_field = "reference_only")]`. Introduce the shared
 `ProfileFieldExposure` enum with `Secret` and `ReferenceOnly` variants in a
-focused `ortho_config/src/docs/profile_redaction.rs` module. Add optional
+focused `ortho_config/src/docs/profile_redaction/mod.rs` module. Add optional
 `profile_field: Option<ProfileFieldExposure>` to `FieldMetadata`; absence means
 ordinary existing disclosure. Reject unknown labels and duplicate annotations
 with span-local macro diagnostics. Labels are mutually exclusive.

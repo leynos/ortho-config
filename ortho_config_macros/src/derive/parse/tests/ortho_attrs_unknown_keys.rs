@@ -219,3 +219,55 @@ fn parses_crate_path_with_prefix() -> Result<()> {
         "crate path should parse alongside prefix",
     )
 }
+
+/// An unknown value containing a top-level comma must still parse.
+///
+/// `skip_to_item_end` stops at an item separator, and a turbofish is not a
+/// delimiter group, so `factory::<A, B>()` presents a top-level comma. The
+/// previous `Expr` parse accepted that value, so splitting it here would break
+/// derives that compiled before. The trailing cases also prove the item
+/// boundary survives: the value's own comma cannot be consumed as the
+/// separator, and the separator after the value is left for the next item.
+#[rstest]
+#[case::turbofish_value(parse_quote! {
+    #[ortho_config(prefix = "CFG_", future = factory::<Alpha, Beta>())]
+})]
+#[case::turbofish_value_before_known_key(parse_quote! {
+    #[ortho_config(prefix = "CFG_", future = factory::<Alpha, Beta>(), crate = "my_config")]
+})]
+#[case::nested_turbofish_value(parse_quote! {
+    #[ortho_config(prefix = "CFG_", future = outer::<Inner<Alpha, Beta>, Gamma>())]
+})]
+fn unknown_value_with_top_level_comma_parses(#[case] attribute: syn::Attribute) -> Result<()> {
+    let input: DeriveInput = parse_quote! {
+        #attribute
+        struct Demo { field: String }
+    };
+    let (_, _, struct_attrs, _) = parse_input(&input).map_err(|err| anyhow!(err))?;
+    ensure!(
+        struct_attrs.prefix.as_deref() == Some("CFG_"),
+        "the known key before the unknown value must still be read"
+    );
+    Ok(())
+}
+
+/// The separator after an unknown expression value is left unread.
+///
+/// If the scan consumed the value's separator, the following known key would
+/// be parsed as part of the value and lost.
+#[test]
+fn unknown_turbofish_value_leaves_the_following_key_readable() -> Result<()> {
+    let input: DeriveInput = parse_quote! {
+        #[ortho_config(future = factory::<Alpha, Beta>(), crate = "my_config")]
+        struct Demo { field: String }
+    };
+    let (_, _, struct_attrs, _) = parse_input(&input).map_err(|err| anyhow!(err))?;
+    ensure!(
+        struct_attrs
+            .crate_path
+            .as_ref()
+            .is_some_and(|path| path.is_ident("my_config")),
+        "the key after the unknown value must still be read"
+    );
+    Ok(())
+}

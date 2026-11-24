@@ -36,8 +36,10 @@ where
 /// `flatten` in `#[serde(rename = "common", flatten)]` would never reach the
 /// enclosing callback. Reading one token tree at a time and stopping at a
 /// top-level comma leaves the enclosing `parse_nested_meta` loop positioned
-/// on the next item; a group token tree carries its own delimiters, so a
-/// comma nested inside parentheses or brackets cannot end the value early.
+/// on the next item. A group token tree carries its own delimiters, so a comma
+/// inside parentheses or brackets cannot end the value early, and the scan
+/// tracks a turbofish's angle brackets so that a comma in `factory::<A, B>()`
+/// is not mistaken for one either.
 pub(crate) fn discard_unknown(meta: &syn::meta::ParseNestedMeta) -> syn::Result<()> {
     if meta.input.peek(Token![=]) {
         skip_to_item_end(meta.value()?)?;
@@ -49,10 +51,48 @@ pub(crate) fn discard_unknown(meta: &syn::meta::ParseNestedMeta) -> syn::Result<
     Ok(())
 }
 
-/// Consumes tokens up to the next top-level comma, leaving the comma unread.
+/// Consumes tokens up to the next item separator, leaving the comma unread.
+///
+/// Tokens inside a delimiter group are already one tree, so their commas are
+/// invisible here. A turbofish is not a delimiter group, though: the comma in
+/// `factory::<A, B>()` is an ordinary top-level token, and a plain
+/// stop-at-every-comma scan would split the expression and make an unknown key
+/// that the previous `Expr` parse accepted fail to compile. The scan therefore
+/// tracks turbofish nesting — a `<` that directly follows `::` opens a level
+/// and a matching `>` closes it — and only treats a comma as the separator at
+/// depth zero. The arrow in `dyn Fn() -> T` must not close a level, hence the
+/// guard on a preceding `-`.
 fn skip_to_item_end(input: syn::parse::ParseStream<'_>) -> syn::Result<()> {
-    while !input.is_empty() && !input.peek(Token![,]) {
-        input.parse::<proc_macro2::TokenTree>()?;
+    let mut angle_depth = 0usize;
+    let mut colons = 0u8;
+    let mut after_dash = false;
+    while !input.is_empty() {
+        if angle_depth == 0 && input.peek(Token![,]) {
+            break;
+        }
+        let tree: proc_macro2::TokenTree = input.parse()?;
+        let (ch, was_dash) = match &tree {
+            proc_macro2::TokenTree::Punct(punct) => (Some(punct.as_char()), after_dash),
+            _ => (None, false),
+        };
+        match ch {
+            Some(':') => colons = colons.saturating_add(1),
+            // Inside a turbofish, a bare `<` opens a nested argument list,
+            // as in `outer::<Inner<A, B>, C>()`. Outside one, only `::<`
+            // starts an argument list, so a `<` used as a comparison cannot
+            // open a level.
+            Some('<') if angle_depth > 0 || colons >= 2 => {
+                angle_depth += 1;
+                colons = 0;
+            }
+            Some('>') if was_dash => colons = 0,
+            Some('>') if angle_depth > 0 => {
+                angle_depth -= 1;
+                colons = 0;
+            }
+            _ => colons = 0,
+        }
+        after_dash = ch == Some('-');
     }
     Ok(())
 }
