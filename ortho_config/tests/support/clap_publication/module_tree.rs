@@ -183,11 +183,16 @@ fn unconditional_module_chain_is_counted() -> Result<()> {
 #[case::poisoned_root("poisoned_root", "binds a derive named")]
 // A renamed re-export gives the inventory name to an enum declared under
 // another one, so the counted declaration is not the exported inventory.
-#[case::renamed_reexport("renamed_reexport", "by renaming another item to")]
+#[case::renamed_reexport("renamed_reexport", "cannot trace to the declaration it counts")]
 // A type alias reaches the same redirection without a `use`, so it is refused
 // at any depth as well.
 #[case::aliased_reexport("aliased_reexport", "as something other than the counted enum")]
 #[case::struct_reexport("struct_reexport", "as something other than the counted enum")]
+// An unrenamed re-export from another crate names an inventory the walk never
+// reads, so the local declaration cannot be certified as the exported one.
+#[case::external_reexport("external_reexport", "cannot trace to the declaration it counts")]
+// A condition the gate cannot evaluate does not exempt the alias shape.
+#[case::conditional_alias("conditional_alias", "as something other than the counted enum")]
 // A tree without a reported crate root is refused rather than guessed at.
 #[case::no_crate_root("no_crate_root", "expected a crate root lib.rs")]
 fn module_tree_is_refused(#[case] fixture: &str, #[case] expected: &str) -> Result<()> {
@@ -195,6 +200,23 @@ fn module_tree_is_refused(#[case] fixture: &str, #[case] expected: &str) -> Resu
 
     let error = refusal(count_error_kinds_under(&root).map(|_| ()));
     ensure_refusal(&error, expected)
+}
+
+/// The reviewed plain re-export of a local module's enum stays accepted.
+///
+/// This is the shape the resolved `clap_builder` source uses, so a refusal that
+/// fired here would refuse the real package. The re-export names the counted
+/// declaration itself, and `kind` is one of this crate's modules.
+#[test]
+fn reviewed_reexport_is_counted() -> Result<()> {
+    let root = fixture_root().join("module_tree/reviewed_reexport");
+
+    let count = count_error_kinds_under(&root)?;
+    ensure!(
+        count == 3,
+        "the reviewed-reexport fixture should count three variants, found {count}",
+    );
+    Ok(())
 }
 
 /// An unconditional inline module is followed rather than assumed opaque.

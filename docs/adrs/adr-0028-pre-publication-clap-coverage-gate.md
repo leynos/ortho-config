@@ -185,9 +185,11 @@ something the walk does not count. A renamed re-export
 (`pub type ErrorKind = crate::real::ActualErrorKind;`) both make the exported
 name lead to an enum the walk never counts while a file-level `ErrorKind` decoy
 stays countable; so does a struct, union, trait or module declared under the
-name. Each is refused at any depth, conditional or not. The reviewed plain
-re-export `pub use kind::ErrorKind;` keeps the declaration and the export the
-same item and stays accepted.
+name. An unrenamed path is accepted only when its root is one of this crate's
+own modules, because `pub use inventory_provider::ErrorKind;` can name another
+crate's inventory just as well. Each refusal applies at any depth, conditional
+or not. The reviewed `pub use kind::ErrorKind;` keeps the declaration and the
+export the same item and stays accepted.
 
 ## Alternatives rejected
 

@@ -600,8 +600,10 @@ resolves, so every other way of giving the name `ErrorKind` to something the
 walk does not count is refused: a renamed re-export such as
 `pub use crate::real::ActualErrorKind as ErrorKind;`, a type alias such as
 `pub type ErrorKind = crate::real::ActualErrorKind;`, and a struct, union,
-trait or module declared under the name. The plain `pub use kind::ErrorKind;`
-names the declaration itself and stays accepted.
+trait or module declared under the name. An unrenamed path is accepted only
+when its root is one of this crate's modules, so an external
+`pub use inventory_provider::ErrorKind;` is refused as well. The plain
+`pub use kind::ErrorKind;` names the declaration itself and stays accepted.
 
 The count is the total declared variant count for that builder package, not
 only the raisable variants; classification as translated or `DisplayOnly`

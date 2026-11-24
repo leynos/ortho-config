@@ -137,6 +137,12 @@ impl Imports {
 pub(super) struct CrateScope {
     /// Every name the crate declares as a macro or an import binding.
     names: BTreeSet<String>,
+    /// Every module the crate declares, by its bare name.
+    ///
+    /// A `use` path's first segment names either one of these modules or an
+    /// external crate, and only the second case can reach an inventory the
+    /// source walk never counted.
+    modules: BTreeSet<String>,
     /// Whether any module is annotated `#[macro_use]`.
     has_macro_use: bool,
     /// Whether any `extern crate` is annotated `#[macro_use]`.
@@ -144,13 +150,19 @@ pub(super) struct CrateScope {
 }
 
 impl CrateScope {
-    /// Build the scope from the crate-wide name set.
-    pub(super) const fn new(names: BTreeSet<String>) -> Self {
+    /// Build the scope from the crate-wide name and module sets.
+    pub(super) const fn new(names: BTreeSet<String>, modules: BTreeSet<String>) -> Self {
         Self {
             names,
+            modules,
             has_macro_use: false,
             has_external_macro_use: false,
         }
+    }
+
+    /// Whether `root` names one of this crate's own modules.
+    pub(super) fn is_local_module(&self, root: &str) -> bool {
+        self.modules.contains(root)
     }
 
     /// Record the `#[macro_use]` attributes one item list carries.

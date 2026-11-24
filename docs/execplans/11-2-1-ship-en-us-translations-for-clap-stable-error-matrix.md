@@ -1533,8 +1533,18 @@ stopping and reporting.
       somewhere the count never certified. The reviewed plain re-export
       `pub use kind::ErrorKind;` names the declaration itself and stays
       accepted, so the resolved `clap_builder` 4.6.7 source is unaffected.
-      Three fixtures join the refused-tree table: `renamed_reexport`,
-      `aliased_reexport` and `struct_reexport`.
+- [x] (2026-11-24) Round-26 refusal of an unrenamed external re-export and of
+      a conditional alias. `pub use inventory_provider::ErrorKind;` names
+      another crate's inventory while a local decoy supplies the count, so an
+      unrenamed path is accepted only when its root is one of this crate's own
+      modules. The module-name set comes from the same crate-wide walk that
+      already collects macro and import names. Five fixtures join the
+      refused-tree table — `renamed_reexport`, `aliased_reexport`,
+      `struct_reexport`, `external_reexport` and `conditional_alias` — and
+      `reviewed_reexport` mirrors the resolved `clap_builder` shape, which must
+      stay counted, so the refusals cannot become a blanket rejection. The
+      rename walker is split so CodeScene's Complex Method advisory clears, and
+      the item predicate is `const` for Clippy's `missing_const_for_fn`.
 
 - [x] (2026-11-21) Round-22 conflict dispositions. Five paths conflicted, and
       every one was resolved by preserving both sides' intent rather than by
