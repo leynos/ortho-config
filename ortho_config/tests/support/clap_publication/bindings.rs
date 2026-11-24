@@ -138,40 +138,62 @@ fn renamed_error_kind(items: &[Item], prefix: &str, scope: &CrateScope) -> Optio
     None
 }
 
-/// Whether one `use` tree can bind an inventory the walk never counted.
+/// What one `use` tree binds, in the terms the refusal needs to decide.
 ///
-/// A rename is the reported redirection: `… as ErrorKind` gives the name to an
-/// item declared under another. An unrenamed path is accepted only when its
-/// root is this crate — the reviewed `pub use kind::ErrorKind;` shape — because
-/// a path rooted at another crate can name that crate's own inventory while a
-/// file-level decoy in this one supplies the count.
-fn binds_unproven_inventory(tree: &syn::UseTree, scope: &CrateScope) -> bool {
-    tree_renames_error_kind(tree) || tree_reaches_foreign_error_kind(tree, true, scope)
+/// The root of the path decides whether an external inventory is even
+/// reachable, so the root is resolved before the leaf is interpreted: a rename
+/// from `ErrorKind` to `ErrorKind` only keeps the declaration when its path
+/// stays in this crate, and an external glob can bring in an `ErrorKind` the
+/// walk never reads even though its own leaf is not a name at all.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Binding {
+    /// The tree does not touch the inventory name.
+    Unrelated,
+    /// The tree aliases another item to `ErrorKind` in this crate.
+    LocalRename,
+    /// The tree re-exports or renames a name from another crate.
+    Foreign,
 }
 
-/// Whether an unrenamed path under `tree` reaches a foreign `ErrorKind`.
-///
-/// The walk carries whether every segment so far is still a local path: the
-/// first segment decides it, by naming one of this crate's modules or something
-/// else.
-fn tree_reaches_foreign_error_kind(
-    tree: &syn::UseTree,
-    is_local_so_far: bool,
-    scope: &CrateScope,
-) -> bool {
+/// Whether one `use` tree can bind an inventory the walk never counted.
+fn binds_unproven_inventory(tree: &syn::UseTree, scope: &CrateScope) -> bool {
+    matches!(
+        classify_binding(tree, true, scope),
+        Binding::LocalRename | Binding::Foreign
+    )
+}
+
+/// Classify one `use` tree, tracking whether its path is still local.
+fn classify_binding(tree: &syn::UseTree, is_local: bool, scope: &CrateScope) -> Binding {
     match tree {
         syn::UseTree::Path(path) => {
-            let is_local = is_local_segment(&identifier_name(&path.ident), is_local_so_far, scope);
-            if !is_local && tree_names_error_kind(&path.tree) {
-                return true;
-            }
-            tree_reaches_foreign_error_kind(&path.tree, is_local, scope)
+            let segment = identifier_name(&path.ident);
+            let next_is_local = is_local_segment(&segment, is_local, scope);
+            classify_binding(&path.tree, next_is_local, scope)
         }
         syn::UseTree::Group(group) => group
             .items
             .iter()
-            .any(|item| tree_reaches_foreign_error_kind(item, is_local_so_far, scope)),
-        syn::UseTree::Name(_) | syn::UseTree::Rename(_) | syn::UseTree::Glob(_) => false,
+            .map(|item| classify_binding(item, is_local, scope))
+            .fold(Binding::Unrelated, stronger_binding),
+        syn::UseTree::Name(name) => {
+            let ident = identifier_name(&name.ident);
+            leaf_binding(&ident, None, is_local)
+        }
+        syn::UseTree::Rename(rename) => {
+            let from = identifier_name(&rename.ident);
+            let to = identifier_name(&rename.rename);
+            leaf_binding(&from, Some(&to), is_local)
+        }
+        // A glob reaches whatever its module exports, so an external glob can
+        // bring in an inventory no local declaration bounds.
+        syn::UseTree::Glob(_) => {
+            if is_local {
+                Binding::Unrelated
+            } else {
+                Binding::Foreign
+            }
+        }
     }
 }
 
@@ -186,43 +208,32 @@ fn is_local_segment(segment: &str, is_local_so_far: bool, scope: &CrateScope) ->
     is_local_so_far && scope.is_local_module(segment)
 }
 
-/// Whether one `use` tree's leaf is the unrenamed name `ErrorKind`.
-fn tree_names_error_kind(tree: &syn::UseTree) -> bool {
-    any_leaf(tree, |_, _, to| to == "ErrorKind")
+/// Classify one leaf bound by a `use` tree.
+///
+/// `to` is the renamed binding's new name, or `None` for a plain import. A
+/// plain name or a same-name rename keeps the declaration only when the path
+/// stayed local; any other binding of the inventory name either aliases a local
+/// item or reaches a foreign one.
+fn leaf_binding(from: &str, to: Option<&str>, is_local: bool) -> Binding {
+    let bound = to.unwrap_or(from);
+    if bound != "ErrorKind" {
+        return Binding::Unrelated;
+    }
+    if !is_local {
+        return Binding::Foreign;
+    }
+    if to.is_some() && from != "ErrorKind" {
+        return Binding::LocalRename;
+    }
+    Binding::Unrelated
 }
 
-/// Whether one `use` tree renames a differently named item to `ErrorKind`.
-///
-/// A rename from `ErrorKind` to `ErrorKind` changes nothing and is therefore
-/// not reported here; only the rename that gives the inventory name to an item
-/// declared under another one is a hazard.
-fn tree_renames_error_kind(tree: &syn::UseTree) -> bool {
-    any_leaf(tree, |is_rename, from, to| {
-        is_rename && to == "ErrorKind" && from != "ErrorKind"
-    })
-}
-
-/// Whether any leaf of one `use` tree satisfies `predicate`.
-///
-/// The predicate receives the leaf's normalized names: whether it is a rename,
-/// the name it binds from, and the name it binds to. A plain name passes itself
-/// as both, so a caller that only cares what the leaf ends up called needs one
-/// comparison. Paths and groups are descended, so a decision never depends on
-/// where in the tree the interesting leaf sits.
-fn any_leaf(tree: &syn::UseTree, predicate: impl Fn(bool, &str, &str) -> bool + Copy) -> bool {
-    match tree {
-        syn::UseTree::Path(path) => any_leaf(&path.tree, predicate),
-        syn::UseTree::Group(group) => group.items.iter().any(|item| any_leaf(item, predicate)),
-        syn::UseTree::Name(name) => {
-            let ident = identifier_name(&name.ident);
-            predicate(false, &ident, &ident)
-        }
-        syn::UseTree::Rename(rename) => {
-            let from = identifier_name(&rename.ident);
-            let to = identifier_name(&rename.rename);
-            predicate(true, &from, &to)
-        }
-        syn::UseTree::Glob(_) => false,
+/// Keep the stronger of two bindings found in one group.
+const fn stronger_binding(current: Binding, next: Binding) -> Binding {
+    match (current, next) {
+        (Binding::Foreign, _) | (_, Binding::Foreign) => Binding::Foreign,
+        (Binding::LocalRename, _) | (_, Binding::LocalRename) => Binding::LocalRename,
+        _ => Binding::Unrelated,
     }
 }
 

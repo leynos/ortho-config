@@ -191,6 +191,12 @@ fn unconditional_module_chain_is_counted() -> Result<()> {
 // An unrenamed re-export from another crate names an inventory the walk never
 // reads, so the local declaration cannot be certified as the exported one.
 #[case::external_reexport("external_reexport", "cannot trace to the declaration it counts")]
+// A rename from a name to itself still reaches another crate's inventory when
+// the path's root is external.
+#[case::same_name_rename("same_name_rename", "cannot trace to the declaration it counts")]
+// A glob has no `ErrorKind` leaf at all, yet an external one can still supply
+// the exported inventory.
+#[case::external_glob("external_glob", "cannot trace to the declaration it counts")]
 // A condition the gate cannot evaluate does not exempt the alias shape.
 #[case::conditional_alias("conditional_alias", "as something other than the counted enum")]
 // A tree without a reported crate root is refused rather than guessed at.

@@ -1546,6 +1546,18 @@ stopping and reporting.
       rename walker is split so CodeScene's Complex Method advisory clears, and
       the item predicate is `const` for Clippy's `missing_const_for_fn`.
 
+- [x] (2026-11-24) Round-27 resolution of the binding before the leaf. The next
+      assessment found two shapes the leaf-only reading missed: a rename from
+      `ErrorKind` to `ErrorKind` keeps an external path, and
+      `pub use inventory_provider::*;` has no `ErrorKind` leaf at all yet can
+      still supply the exported inventory. `classify_binding` now resolves the
+      root before interpreting the leaf, so a same-name rename of a foreign
+      item is `Foreign` and an external glob is refused outright. Two fixtures
+      cover them — `same_name_rename` and `external_glob` — and
+      `reviewed_reexport` still proves the local plain re-export is counted.
+      CodeScene reports 10.0 for the module after one shared `any_leaf` walk
+      replaced two near-identical traversals.
+
 - [x] (2026-11-21) Round-22 conflict dispositions. Five paths conflicted, and
       every one was resolved by preserving both sides' intent rather than by
       choosing a side wholesale:
