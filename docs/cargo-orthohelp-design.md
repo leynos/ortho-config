@@ -757,9 +757,9 @@ resources through language-only matching.
 The catalogue is not yet in `ortho_l10n/locales/en-US/messages.ftl`. That
 resource holds the compatibility copy for the legacy CLI, Clap error, and
 profile-error paths; the heading strings are still the hardcoded table in
-`cargo-orthohelp/src/ir.rs` described below. The ownership statement above is
-the intended end state of the move, which this design's §4.2 layout is the
-first step towards.
+`cargo-orthohelp/src/ir/resolvers.rs` described below. The ownership statement
+above is the intended end state of the move, which this design's §4.2 layout is
+the first step towards.
 
 The catalogue is the fallback of record. `cargo-orthohelp` currently carries a
 hardcoded English table for the standard heading identifiers, which keeps raw

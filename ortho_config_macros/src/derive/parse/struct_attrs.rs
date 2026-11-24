@@ -51,48 +51,68 @@ pub(crate) fn discard_unknown(meta: &syn::meta::ParseNestedMeta) -> syn::Result<
     Ok(())
 }
 
+/// Tracks the turbofish nesting a token scan must respect.
+///
+/// A turbofish is not a delimiter group, so the comma in `factory::<A, B>()`
+/// is an ordinary top-level token. The scan therefore counts angle brackets:
+/// a `<` that follows `::` opens a level, and a `<` already inside a level
+/// opens a nested one, as in `outer::<Inner<A, B>, C>()`. A `>` closes a
+/// level, except after `-`, so the arrow in `dyn Fn() -> T` cannot. Only a
+/// comma at depth zero separates one item from the next.
+#[derive(Default)]
+struct AngleNesting {
+    /// How many turbofish argument lists are open.
+    depth: usize,
+    /// Consecutive `:` tokens seen, to recognise the `::<` opener.
+    colons: u8,
+    /// Whether the previous token was `-`, to recognise an arrow's `>`.
+    after_dash: bool,
+}
+
+impl AngleNesting {
+    /// Reports whether a comma here ends the value rather than nesting.
+    const fn at_top_level(&self) -> bool {
+        self.depth == 0
+    }
+
+    /// Updates the nesting from one token.
+    fn observe(&mut self, tree: &proc_macro2::TokenTree) {
+        let ch = match tree {
+            proc_macro2::TokenTree::Punct(punct) => Some(punct.as_char()),
+            _ => None,
+        };
+        match ch {
+            Some(':') => self.colons = self.colons.saturating_add(1),
+            Some('<') if self.depth > 0 || self.colons >= 2 => {
+                self.depth += 1;
+                self.colons = 0;
+            }
+            Some('>') if self.after_dash => self.colons = 0,
+            Some('>') if self.depth > 0 => {
+                self.depth -= 1;
+                self.colons = 0;
+            }
+            _ => self.colons = 0,
+        }
+        self.after_dash = ch == Some('-');
+    }
+}
+
 /// Consumes tokens up to the next item separator, leaving the comma unread.
 ///
-/// Tokens inside a delimiter group are already one tree, so their commas are
-/// invisible here. A turbofish is not a delimiter group, though: the comma in
-/// `factory::<A, B>()` is an ordinary top-level token, and a plain
-/// stop-at-every-comma scan would split the expression and make an unknown key
-/// that the previous `Expr` parse accepted fail to compile. The scan therefore
-/// tracks turbofish nesting — a `<` that directly follows `::` opens a level
-/// and a matching `>` closes it — and only treats a comma as the separator at
-/// depth zero. The arrow in `dyn Fn() -> T` must not close a level, hence the
-/// guard on a preceding `-`.
+/// Reading one token tree at a time and stopping at a top-level comma keeps
+/// the enclosing `parse_nested_meta` loop positioned on the next item, so a
+/// later `flatten` in `#[serde(rename = "common", flatten)]` still reaches its
+/// handler. The nesting rules that make "top-level" meaningful are in
+/// [`AngleNesting`].
 fn skip_to_item_end(input: syn::parse::ParseStream<'_>) -> syn::Result<()> {
-    let mut angle_depth = 0usize;
-    let mut colons = 0u8;
-    let mut after_dash = false;
+    let mut nesting = AngleNesting::default();
     while !input.is_empty() {
-        if angle_depth == 0 && input.peek(Token![,]) {
+        if nesting.at_top_level() && input.peek(Token![,]) {
             break;
         }
         let tree: proc_macro2::TokenTree = input.parse()?;
-        let (ch, was_dash) = match &tree {
-            proc_macro2::TokenTree::Punct(punct) => (Some(punct.as_char()), after_dash),
-            _ => (None, false),
-        };
-        match ch {
-            Some(':') => colons = colons.saturating_add(1),
-            // Inside a turbofish, a bare `<` opens a nested argument list,
-            // as in `outer::<Inner<A, B>, C>()`. Outside one, only `::<`
-            // starts an argument list, so a `<` used as a comparison cannot
-            // open a level.
-            Some('<') if angle_depth > 0 || colons >= 2 => {
-                angle_depth += 1;
-                colons = 0;
-            }
-            Some('>') if was_dash => colons = 0,
-            Some('>') if angle_depth > 0 => {
-                angle_depth -= 1;
-                colons = 0;
-            }
-            _ => colons = 0,
-        }
-        after_dash = ch == Some('-');
+        nesting.observe(&tree);
     }
     Ok(())
 }
