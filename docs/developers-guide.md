@@ -4956,9 +4956,9 @@ Two halves matter, and each fails in a way nothing else would notice.
   `github.run_id` is unique to one run, so it matches no predecessor and
   cancels nothing while reading exactly like a concurrency control; the run
   identifier is only the fallback for events without a pull request, which
-  gives each push, schedule and dispatch a group of its own. A constant
-  group is the opposite failure: every open pull request shares one queue, and
-  the first push anywhere cancels the gates running everywhere else.
+  gives each push, schedule and dispatch a group of its own. A constant group
+  is the opposite failure: every open pull request shares one queue, and the
+  first push anywhere cancels the gates running everywhere else.
 - **Cancellation is conditioned on the event.** A literal
   `cancel-in-progress: true` reads as the stricter setting and is a regression.
   A push to `main`, a schedule, and a dispatch have no successor waiting, and
