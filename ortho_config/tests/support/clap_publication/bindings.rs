@@ -188,28 +188,41 @@ fn is_local_segment(segment: &str, is_local_so_far: bool, scope: &CrateScope) ->
 
 /// Whether one `use` tree's leaf is the unrenamed name `ErrorKind`.
 fn tree_names_error_kind(tree: &syn::UseTree) -> bool {
-    match tree {
-        syn::UseTree::Path(path) => tree_names_error_kind(&path.tree),
-        syn::UseTree::Name(name) => identifier_name(&name.ident) == "ErrorKind",
-        syn::UseTree::Group(group) => group.items.iter().any(tree_names_error_kind),
-        syn::UseTree::Rename(_) | syn::UseTree::Glob(_) => false,
-    }
+    any_leaf(tree, |_, _, to| to == "ErrorKind")
 }
 
 /// Whether one `use` tree renames a differently named item to `ErrorKind`.
 ///
-/// A rename from `ErrorKind` to `ErrorKind` changes nothing, so it stays
-/// accepted; the hazard is the rename that gives the inventory name to an item
-/// declared under another one.
+/// A rename from `ErrorKind` to `ErrorKind` changes nothing and is therefore
+/// not reported here; only the rename that gives the inventory name to an item
+/// declared under another one is a hazard.
 fn tree_renames_error_kind(tree: &syn::UseTree) -> bool {
+    any_leaf(tree, |is_rename, from, to| {
+        is_rename && to == "ErrorKind" && from != "ErrorKind"
+    })
+}
+
+/// Whether any leaf of one `use` tree satisfies `predicate`.
+///
+/// The predicate receives the leaf's normalized names: whether it is a rename,
+/// the name it binds from, and the name it binds to. A plain name passes itself
+/// as both, so a caller that only cares what the leaf ends up called needs one
+/// comparison. Paths and groups are descended, so a decision never depends on
+/// where in the tree the interesting leaf sits.
+fn any_leaf(tree: &syn::UseTree, predicate: impl Fn(bool, &str, &str) -> bool + Copy) -> bool {
     match tree {
-        syn::UseTree::Path(path) => tree_renames_error_kind(&path.tree),
-        syn::UseTree::Rename(rename) => {
-            identifier_name(&rename.rename) == "ErrorKind"
-                && identifier_name(&rename.ident) != "ErrorKind"
+        syn::UseTree::Path(path) => any_leaf(&path.tree, predicate),
+        syn::UseTree::Group(group) => group.items.iter().any(|item| any_leaf(item, predicate)),
+        syn::UseTree::Name(name) => {
+            let ident = identifier_name(&name.ident);
+            predicate(false, &ident, &ident)
         }
-        syn::UseTree::Group(group) => group.items.iter().any(tree_renames_error_kind),
-        syn::UseTree::Name(_) | syn::UseTree::Glob(_) => false,
+        syn::UseTree::Rename(rename) => {
+            let from = identifier_name(&rename.ident);
+            let to = identifier_name(&rename.rename);
+            predicate(true, &from, &to)
+        }
+        syn::UseTree::Glob(_) => false,
     }
 }
 
