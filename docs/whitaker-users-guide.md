@@ -158,8 +158,8 @@ Whitaker lints are divided into two categories:
 
 The default `whitaker_suite` contains the experimental lints too, such as
 `rstest_helper_should_be_fixture` and `macro_aware_cognitive_complexity`, but
-does not run them unless they are selected. A repository selects one per lint
-in `dylint.toml`, as this one does for `macro_aware_cognitive_complexity`:
+does not run them unless they are selected. A repository selects one per lint in
+`dylint.toml`, as this one does for `macro_aware_cognitive_complexity`:
 
 ```toml
 [whitaker]
