@@ -118,12 +118,13 @@ struct PathWalk<'a> {
     is_local: bool,
     /// The first segment seen, which decides how a glob is judged.
     root: Option<&'a str>,
-    /// How many segments the path has, which decides how a glob is judged.
+    /// How many segments the path has, which bounds what a local path reaches.
     ///
-    /// A one-segment internal glob such as `use super::*;` reaches only the
-    /// enclosing module, which this walk has already audited. A longer internal
-    /// glob descends into a nested module whose own `use` items this walk never
-    /// reads, so it cannot be trusted by name alone.
+    /// A one-segment local path such as `use super::*;` or `use kind::…` reaches
+    /// only the enclosing module, which this walk has already audited. A longer
+    /// local path descends into a module whose own `use` items this walk never
+    /// reads, so an alias there can point at another crate and the path cannot
+    /// be trusted by name alone.
     segments: usize,
 }
 
@@ -179,20 +180,31 @@ fn classify_with_root(
             .fold(Binding::Unrelated, stronger_binding),
         syn::UseTree::Name(name) => {
             let ident = identifier_name(&name.ident);
-            leaf_binding(&ident, None, walk.is_local)
+            deep_local_leaf(&walk, &ident)
+                .unwrap_or_else(|| leaf_binding(&ident, None, walk.is_local))
         }
         syn::UseTree::Rename(rename) => {
             let from = identifier_name(&rename.ident);
             let to = identifier_name(&rename.rename);
-            leaf_binding(&from, Some(&to), walk.is_local)
+            deep_local_leaf(&walk, &to)
+                .unwrap_or_else(|| leaf_binding(&from, Some(&to), walk.is_local))
         }
-        // A glob reaches whatever its module exports, so an external glob may
-        // bring in an `ErrorKind` this walk never reads. The resolved source does
-        // carry one — `pub use anstyle::*;` — so the reviewed roots are an
-        // allow-list, in the same spirit as the closed attribute lists: a new
-        // external glob fails the gate until it has been reviewed.
+        // The same depth rule covers a glob: a deeper local path descends into
+        // a module whose own `use` items this walk never reads.
         syn::UseTree::Glob(_) => classify_glob(&walk, scope),
     }
+}
+
+/// The refusal for a local leaf reached through more than one segment.
+///
+/// `self::local::alias::ErrorKind` resolves `alias` in `local`'s scope, where it
+/// may be a `use` alias for another crate, while this walk checks segments
+/// against the enclosing item list. A one-segment local path reaches only the
+/// enclosing module, which the walk audits; a deeper one cannot be trusted by
+/// name, so its inventory leaf fails closed.
+fn deep_local_leaf(walk: &PathWalk<'_>, leaf: &str) -> Option<Binding> {
+    let is_deep_local = walk.is_local && walk.segments > 1;
+    (is_deep_local && leaf == "ErrorKind").then_some(Binding::Foreign)
 }
 
 /// Whether one `crate::`-rooted tree is one of the reviewed bindings.

@@ -1690,6 +1690,16 @@ stopping and reporting.
       `use super::*;` forms still count. The full target passes 106 tests and
       Clippy is clean.
 
+- [x] (2026-11-25) Round-36 applying the depth rule to explicit leaves. The
+      same nested-alias shape reached an explicit `ErrorKind` leaf, which the
+      depth rule had covered only for globs. A local path of more than one
+      segment now fails closed whether its leaf is a glob, a name or a rename,
+      and one segment still reaches only the enclosing module. The reviewed
+      source has no local multi-segment path to the name, so it still counts 17.
+      The `module_tree/nested_local_path` decoy is refused and the full target
+      passes 106 tests, with the real-source test passing on its own once the
+      host's `cargo metadata` contention cleared.
+
 - [x] (2026-11-21) Round-22 conflict dispositions. Five paths conflicted, and
       every one was resolved by preserving both sides' intent rather than by
       choosing a side wholesale:
