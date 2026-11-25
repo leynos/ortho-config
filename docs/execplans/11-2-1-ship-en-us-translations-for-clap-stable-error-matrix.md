@@ -1618,6 +1618,28 @@ stopping and reporting.
         real `use crate::error::ErrorKind;` and the reviewed `anstyle` glob both
         stay accepted, and the full target passes 101 tests.
 
+- [x] (2026-11-25) Round-31 closing the crate-path set instead of chasing
+      shapes. Two more shapes were reported — a later `crate::` segment
+      resolving to an alias inside an intermediate module, and an `extern
+      crate` alias borrowing a reviewed glob root. Six rounds of adding one
+      name check per shape had each been extended by the next, so the walk no
+      longer approximates a resolver: a `crate::`-rooted binding of the
+      inventory name is now a closed allow-list, `REVIEWED_CRATE_BINDINGS`,
+      holding the single path the resolved source uses. Every other
+      crate-rooted binding fails closed, which covers both reported shapes and
+      any later variation of them without further patching. `extern crate …
+      as` aliases now join the imported-name set the reviewed glob check
+      consults.
+      - A first attempt closed the external-glob set the same way and was
+        reverted: it refused innocent fixtures and the real package for reasons
+        unrelated to the inventory name, which the targeted `crate::` rule does
+        not.
+      - The real resolved source still counts 17, so the set is not a blanket
+        refusal of the package it exists to check.
+      - Two decoys cover the reported shapes, `nested_module_collision` and
+        `aliased_glob`; the full target passes 103 tests, and CodeScene reports
+        10.0 after the predicate was split rather than nested.
+
 - [x] (2026-11-21) Round-22 conflict dispositions. Five paths conflicted, and
       every one was resolved by preserving both sides' intent rather than by
       choosing a side wholesale:
@@ -2954,6 +2976,12 @@ Revision note (2026-11-24): keep every explicit `use` root bound to a name and
 trust a built-in derive name only when all of them are compiler roots. A type
 import of the same spelling no longer hides a procedural import in the other
 namespace; the reviewed count and the runtime consultation are unchanged.
+
+Revision note (2026-11-25): make a `crate::`-rooted binding of the inventory
+name a closed allow-list holding the resolved source's single path, because
+approximating module scope resolution left one shape per review round. Also
+count `extern crate … as` aliases among the names that void a reviewed glob
+root.
 
 Revision note (2026-11-24): refuse an inventory name bound outside the crate,
 including an absolute path and an unreviewed external glob, while keeping the

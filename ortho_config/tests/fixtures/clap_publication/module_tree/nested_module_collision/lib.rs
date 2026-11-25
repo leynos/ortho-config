@@ -1,22 +1,17 @@
-//! A decoy whose `crate::` path collides with a module nested elsewhere.
+//! A decoy whose `crate::` path traverses an alias inside a nested module.
 //!
-//! `crate::helper` resolves in the crate root's scope. A `mod helper` nested
-//! inside some other module is out of that scope, so a name-only check that
-//! collected module names crate-wide would treat this path as local while Rust
-//! resolves it to the `std::io` alias and exports `std::io::ErrorKind`. The gate
-//! therefore consults the crate root's own declarations. The tree is gate input
-//! rather than a compiled program.
+//! `crate::actual::helper` resolves `helper` in `actual`'s scope, where
+//! `pub use std::io as helper;` binds it to another crate. A per-segment name
+//! check cannot see that, so the reviewed crate paths are a closed list and
+//! this one fails closed. The tree is gate input rather than a compiled program.
 
 mod decoy;
+mod helper {}
 
-/// A module whose nested `helper` is not visible from the crate root.
-mod elsewhere {
-    mod helper {}
+mod actual {
+    pub use std::io as helper;
 }
 
-use std::io as helper;
-
-/// The module a consumer reaches the inventory through.
 pub mod error {
-    pub use crate::helper::ErrorKind;
+    pub use crate::actual::helper::ErrorKind;
 }

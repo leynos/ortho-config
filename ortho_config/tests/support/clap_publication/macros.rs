@@ -152,6 +152,13 @@ pub(super) fn collect_crate_facts(
                 names.extend(bound.explicit_names().cloned());
                 imports.extend(bound.explicit_names().cloned());
             }
+            Item::ExternCrate(declaration) => {
+                // `extern crate foo as anstyle;` binds `anstyle` to a different
+                // crate, so a reviewed glob root must not trust that spelling.
+                if let Some((_, rename)) = &declaration.rename {
+                    imports.insert(identifier_name(rename));
+                }
+            }
             Item::Mod(module) => {
                 modules.insert(module.ident.to_string());
                 if let Some((_, nested)) = &module.content {

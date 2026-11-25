@@ -203,6 +203,14 @@ fn unconditional_module_chain_is_counted() -> Result<()> {
 // A `crate::` path can traverse a `use` alias to a dependency, so the segment
 // after `crate` must name a module the crate declares.
 #[case::crate_alias_path("crate_alias_path", "cannot trace to the declaration it counts")]
+// `crate::a::helper` resolves `helper` in `a`'s scope, so a later segment can
+// be an alias even when its name is declared at the crate root.
+#[case::nested_module_collision(
+    "nested_module_collision",
+    "cannot trace to the declaration it counts"
+)]
+// A reviewed glob root spelled the same as an alias reaches another crate.
+#[case::aliased_glob("aliased_glob", "cannot trace to the declaration it counts")]
 // A `crate::` segment resolves in the crate root's scope, so a module nested
 // elsewhere cannot make it local.
 #[case::nested_module_collision(

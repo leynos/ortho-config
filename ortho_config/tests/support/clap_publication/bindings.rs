@@ -167,11 +167,59 @@ fn binds_unproven_inventory(
     scope: &CrateScope,
     imports: &Imports,
 ) -> bool {
+    if is_reviewed_crate_path(tree, is_absolute) {
+        return false;
+    }
+    if is_unreviewed_crate_path(tree, is_absolute) {
+        return true;
+    }
     matches!(
         classify_binding(tree, !is_absolute, scope, imports),
         Binding::LocalRename | Binding::Foreign
     )
 }
+
+/// Whether one `use` tree is a `crate::` path that binds the inventory name.
+///
+/// Such a tree is judged as a whole against the reviewed list, because a
+/// per-segment walk would have to reproduce module scope resolution and would
+/// still miss an alias declared inside an intermediate module.
+fn is_unreviewed_crate_path(tree: &syn::UseTree, is_absolute: bool) -> bool {
+    !is_absolute && starts_with_crate(tree) && binds_inventory_name(tree)
+}
+
+/// Whether one `use` tree is a reviewed `crate::` binding of the name.
+fn is_reviewed_crate_path(tree: &syn::UseTree, is_absolute: bool) -> bool {
+    is_unreviewed_crate_path(tree, is_absolute) && is_reviewed_crate_binding(tree)
+}
+
+/// Whether one `use` tree binds the inventory name anywhere in it.
+fn binds_inventory_name(tree: &syn::UseTree) -> bool {
+    match tree {
+        syn::UseTree::Name(name) => identifier_name(&name.ident) == "ErrorKind",
+        syn::UseTree::Rename(rename) => {
+            identifier_name(&rename.rename) == "ErrorKind"
+                || identifier_name(&rename.ident) == "ErrorKind"
+        }
+        syn::UseTree::Path(path) => binds_inventory_name(&path.tree),
+        syn::UseTree::Group(group) => group.items.iter().any(binds_inventory_name),
+        syn::UseTree::Glob(_) => false,
+    }
+}
+
+/// Whether one `use` tree's path begins with `crate`.
+fn starts_with_crate(tree: &syn::UseTree) -> bool {
+    matches!(tree, syn::UseTree::Path(path) if identifier_name(&path.ident) == "crate")
+}
+
+/// The `crate::`-rooted bindings of the inventory name the source ships.
+///
+/// This is a closed allow-list, because a per-segment name check cannot see
+/// that `crate::actual::helper` resolves to an alias declared inside `actual`.
+/// The resolved `clap_builder` 4.6.7 source binds the name this way from its
+/// builder and error modules (`use crate::error::ErrorKind;`), so any other
+/// crate-rooted binding fails the gate until a maintainer reviews it.
+const REVIEWED_CRATE_BINDINGS: [&[&str]; 1] = [&["crate", "error", "ErrorKind"]];
 
 /// The external glob roots the reviewed source ships and a reviewer accepted.
 ///
@@ -220,9 +268,12 @@ fn classify_with_root(
         syn::UseTree::Path(path) => {
             let segment = identifier_name(&path.ident);
             // A `crate::`-rooted path may name a module declared in another
-            // file, so it is local only while each segment names a module the
-            // crate declares. A `use dependency as helper;` alias does not, and
-            // `crate::helper::ErrorKind` then reaches the dependency.
+            // file, but every later segment has to resolve in the module before
+            // it. Rather than model each scope, the reviewed crate paths are a
+            // closed list: `crate::error::ErrorKind` is the source's only one, so
+            // any other `crate::` path fails closed. A per-segment name check
+            // cannot see that `crate::actual::helper` resolves to an alias
+            // declared inside `actual`.
             let is_local_here = is_local_segment(&segment, walk.is_local, imports)
                 || (walk.root == Some("crate") && scope.root_declares_module(&segment));
             let next = PathWalk {
@@ -252,6 +303,53 @@ fn classify_with_root(
         // external glob fails the gate until it has been reviewed.
         syn::UseTree::Glob(_) => classify_glob(walk.root, walk.is_local, scope),
     }
+}
+
+/// Whether one `crate::`-rooted tree is one of the reviewed bindings.
+///
+/// The tree is rendered as its written names, so the comparison is against the
+/// exact path the source uses rather than against any resolution the walk
+/// would have to reproduce.
+fn is_reviewed_crate_binding(tree: &syn::UseTree) -> bool {
+    // Only a tree whose leaves all reach a reviewed path is reviewed; a group
+    // carrying one reviewed and one unreviewed path is not.
+    let paths = written_paths(tree);
+    !paths.is_empty()
+        && paths.iter().all(|path| {
+            let names: Vec<&str> = path.iter().map(String::as_str).collect();
+            REVIEWED_CRATE_BINDINGS.contains(&names.as_slice())
+        })
+}
+
+/// Every complete path one `use` tree writes, with names normalized.
+///
+/// A group contributes one path per item; a rename or glob writes no complete
+/// path, because neither names a single resolvable item.
+fn written_paths(tree: &syn::UseTree) -> Vec<Vec<String>> {
+    fn walk(tree: &syn::UseTree, prefix: &mut Vec<String>, out: &mut Vec<Vec<String>>) {
+        match tree {
+            syn::UseTree::Path(path) => {
+                prefix.push(identifier_name(&path.ident));
+                walk(&path.tree, prefix, out);
+                prefix.pop();
+            }
+            syn::UseTree::Name(name) => {
+                prefix.push(identifier_name(&name.ident));
+                out.push(prefix.clone());
+                prefix.pop();
+            }
+            syn::UseTree::Group(group) => {
+                for item in &group.items {
+                    walk(item, prefix, out);
+                }
+            }
+            syn::UseTree::Rename(_) | syn::UseTree::Glob(_) => {}
+        }
+    }
+
+    let mut paths = Vec::new();
+    walk(tree, &mut Vec::new(), &mut paths);
+    paths
 }
 
 /// Classify one glob by whether its root is a reviewed external crate.
