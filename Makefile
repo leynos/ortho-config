@@ -130,8 +130,10 @@ PYTEST_FLAGS ?= --doctest-modules scripts/bump_version.py scripts/discard_build_
 # on the pre-flight skip, which v0.3.1 is the first release to carry
 # (leynos/lading#261). An unpinned `uvx --from git+...` would also change
 # what the release gate runs without anyone editing this repository.
-LADING_REF ?= b771852411b428ff6fc779cc3a68b153a8f2439a
-LADING ?= uvx --from git+https://github.com/leynos/lading@$(LADING_REF) lading
+LADING_REF ?= f2a24c51a59783318f76182053ade0ed1e1cd329
+# lading 0.4 requires CPython 3.14 or later, so the interpreter is named
+# rather than left to whatever `uv` finds first on the runner.
+LADING ?= uvx --python 3.14 --from git+https://github.com/leynos/lading@$(LADING_REF) lading
 POWERSHELL ?= pwsh
 
 # The shared package has a separate Python 3.14 requirement. Keep its isolated
