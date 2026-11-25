@@ -180,14 +180,6 @@ fn set_direction<T>(
     Ok(())
 }
 
-/// Parses the serialization-side `#[serde(rename_all = "...")]` rule.
-///
-/// Generated CLI extraction looks up keys in the serialized configuration
-/// object, so this is the rule it must reproduce.
-pub(crate) fn serde_rename_all(attrs: &[Attribute]) -> syn::Result<Option<SerdeRenameAll>> {
-    Ok(serde_rename_rules(attrs)?.serialize)
-}
-
 /// Field-level `rename` names, one per direction.
 pub(crate) type SerdeFieldRename = Directional<String>;
 

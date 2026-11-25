@@ -6,10 +6,11 @@
 use quote::quote;
 use syn::Ident;
 
+use crate::CliFieldInfo;
 use crate::derive::build::DefaultStructInit;
 
 pub(crate) mod cli;
-use cli::{build_cli_layer_tokens, build_cli_parse_tokens};
+use cli::{ExplicitSource, ParseBindings, build_cli_layer_tokens, build_cli_parse_tokens};
 
 mod discovery;
 use self::discovery::build_file_discovery;
@@ -91,18 +92,14 @@ pub(crate) struct LoadImplArgs<'a> {
     pub profiles: bool,
     /// The selector environment variable name (for example `APP_PROFILE`).
     pub profile_env_var: String,
-    /// Clap argument IDs of the config fields (excluding the generated
-    /// `profile` and `config_path` fields), used for value-source gating of
-    /// the CLI layer push.
-    pub cli_arg_ids: Vec<String>,
-    /// `(arg_id, serialized_key)` for every bool config field.
+    /// Per-field clap and serde spellings for the configuration fields.
     ///
-    /// Ordinary boolean absence is `None` and its serialized `null` is stripped.
-    /// Actual clap defaults can survive sanitization, however, and must not
-    /// mask the lower-precedence profile layer. Pruning checks `value_source`
-    /// through the argument ID, then removes the matching serialized JSON key;
-    /// an explicit command-line `false` is retained.
-    pub cli_bool_fields: Vec<(String, String)>,
+    /// Each entry supplies the argument ID asked of
+    /// `ArgMatches::value_source` and the serialized key used to move a value
+    /// out of the parsed CLI struct. Generated selectors such as `profile` and
+    /// `config_path` are excluded upstream because they are not configuration
+    /// values.
+    pub cli_field_info: &'a [CliFieldInfo],
 }
 
 /// Build the environment provider setup.
@@ -204,7 +201,7 @@ fn build_compose_layers_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStrea
     } = args;
     let defaults_ident = idents.defaults_ident;
     let default_struct_init = tokens.default_struct_init;
-    let cli_default_as_absent_fields = &default_struct_init.cli_default_as_absent_fields;
+    let cli_field_info = args.cli_field_info;
     let krate = tokens.krate;
     let file_discovery = build_file_discovery(tokens, *has_config_path);
     let env_section = build_env_section(tokens);
@@ -212,13 +209,14 @@ fn build_compose_layers_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStrea
     if *profiles {
         load_impl_profiles::build_profile_compose_layers_impl(args, &file_discovery, &env_section)
     } else {
-        let parse_setup = build_cli_parse_tokens(krate);
+        let parse_bindings = ParseBindings::new(*has_config_path, !cli_field_info.is_empty());
+        let parse_setup = build_cli_parse_tokens(krate, parse_bindings);
         let defaults = build_legacy_defaults(krate, defaults_ident, default_struct_init);
         let file_layers = build_legacy_file_layers(&file_discovery);
         let environment_layer = build_legacy_environment_layer(krate, &env_section);
-        let cli_push = build_cli_layer_tokens(krate, cli_default_as_absent_fields);
+        let cli_push = build_cli_layer_tokens(krate, cli_field_info, ExplicitSource::CommandLine);
         quote! {
-            use clap::{CommandFactory as _, FromArgMatches as _, Parser as _};
+            use clap::{CommandFactory as _, FromArgMatches as _};
             // Keep this path anchored under the resolved crate so derive users
             // do not need a direct `figment` dependency for macro-generated code.
             use #krate::figment::Figment;

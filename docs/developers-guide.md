@@ -148,6 +148,19 @@ accumulator as `OrthoError::DefaultValueConversion`; it must not be handled by
 `#[ortho_config(default = ...)]` remains higher precedence than inferred clap
 metadata.
 
+The generated CLI layer is sparse.
+`ortho_config_macros/src/derive/load_impl/cli.rs` copies only fields whose
+`ArgMatches::value_source` reports an explicit origin, so a parser default is
+absent from the layer while an explicit value equal to the default remains.
+This rule applies to every field, which is why the loader no longer carries
+per-attribute pruning lists for `cli_default_as_absent` or boolean defaults.
+The declarative path accepts only `CommandLine`; the profile-enabled path also
+accepts `EnvVariable` so an environment-filled argument keeps outranking the
+profile layer. The sparse CLI layer and the defaults layer both feed the
+configuration deserializer, so both name a field by its deserialization key;
+the serialized key is reserved for `CliValueExtractor`, which serializes the
+configuration struct.
+
 When changing this path, update parse-IR tests, generated-loader integration
 tests, and compile-fail coverage for unsupported shapes. Include cases where a
 file or environment value overrides the inferred default, while an explicit CLI
@@ -1740,8 +1753,9 @@ users' guide.
 Opted-in structs merge five tiers, lowest to highest: built-in defaults,
 configuration files, the selected profile, environment variables, and CLI
 flags. An explicit flag beats the profile even when the flag value equals the
-built-in default, so the generated CLI push consults clap's value-source
-information rather than relying on a value comparison alone.
+built-in default: the generated CLI layer is sparse and contains only fields
+whose clap value source marks them as explicit, so presence never depends on
+comparing values.
 
 Extraction runs over the *resolved file chain* — the first successful discovery
 candidate plus its `extends` chain — not over every candidate the discovery

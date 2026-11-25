@@ -1,222 +1,225 @@
 //! Generated CLI parsing and layering fragments for derived configuration loads.
+//!
+//! The CLI layer is built sparsely: only fields that clap attributes to an
+//! explicit value source are copied out of the parsed struct. Presence is
+//! therefore independent of the parsed value, so an explicit argument that
+//! restates a configured default still forms a layer, while a parser-filled
+//! default or an omitted argument does not.
 
+use crate::CliFieldInfo;
+use proc_macro2::TokenStream;
 use quote::quote;
+use syn::LitStr;
 
-/// Generate CLI parsing that retains clap's value-source metadata for layering.
-pub(super) fn build_cli_parse_tokens(krate: &proc_macro2::TokenStream) -> proc_macro2::TokenStream {
+/// Which parse results the generated compose method reads.
+///
+/// The parsed struct feeds the generated `config_path` selector and the CLI
+/// layer; `ArgMatches` feeds only the CLI layer. Binding a value nothing reads
+/// would need an artificial reference to stay warning-free, so the binding set
+/// is derived from the fields that actually consume it.
+#[derive(Clone, Copy)]
+pub(super) struct ParseBindings {
+    /// Whether the parsed struct is retained.
+    retain_cli: bool,
+    /// Whether `ArgMatches` is retained.
+    retain_matches: bool,
+}
+
+impl ParseBindings {
+    /// Derive the binding set from config-path presence and CLI fields.
+    ///
+    /// A config-path selector reads `cli.config_path` even when the struct has
+    /// no configuration fields, while `ArgMatches` is needed only to build the
+    /// sparse CLI layer.
+    pub(super) const fn new(has_config_path: bool, has_cli_fields: bool) -> Self {
+        Self {
+            retain_cli: has_config_path || has_cli_fields,
+            retain_matches: has_cli_fields,
+        }
+    }
+}
+
+/// Generate CLI parsing that retains the parse results the method reads.
+pub(super) fn build_cli_parse_tokens(krate: &TokenStream, bindings: ParseBindings) -> TokenStream {
+    let prefix = build_parse_prefix(krate);
+    let parse = if bindings.retain_cli {
+        build_value_parse(bindings.retain_matches)
+    } else {
+        build_validation_only_parse()
+    };
+    quote! { #prefix #parse }
+}
+
+/// Emit the argument collection and program label shared by every parse shape.
+fn build_parse_prefix(krate: &TokenStream) -> TokenStream {
     quote! {
         let args: Vec<std::ffi::OsString> = iter.into_iter().map(Into::into).collect();
         let program_label = #krate::program_label_from_args(&args);
-        let (cli, matches) = match Self::command().try_get_matches_from_mut(args) {
-            Ok(matches) => match Self::from_arg_matches(&matches) {
-                Ok(cli) => (Some(cli), Some(matches)),
+    }
+}
+
+/// Emit the error push shared by every parse shape.
+///
+/// Each call site is inside an `Err(error) =>` arm, where `error` is bound.
+fn push_parse_error() -> TokenStream {
+    quote! {
+        errors.push(std::sync::Arc::new(error.into()));
+    }
+}
+
+/// Parse for validation only; no values are bound.
+fn build_validation_only_parse() -> TokenStream {
+    let push_error = push_parse_error();
+    quote! {
+        if let Err(error) = Self::command()
+            .try_get_matches_from_mut(args)
+            .and_then(|matches| Self::from_arg_matches(&matches))
+        {
+            #push_error
+        }
+    }
+}
+
+/// Parse and bind the parsed struct, retaining `ArgMatches` when requested.
+///
+/// The tuple is always built because `ArgMatches` is needed to convert the
+/// parsed struct; the CLI-only shape discards it with `_matches` rather than
+/// omitting the conversion or adding an artificial read.
+fn build_value_parse(retain_matches: bool) -> TokenStream {
+    let push_error = push_parse_error();
+    let parsed = quote! {
+        let parsed = Self::command()
+            .try_get_matches_from_mut(args)
+            .and_then(|matches| {
+                Self::from_arg_matches(&matches).map(|cli| (cli, matches))
+            });
+    };
+    if retain_matches {
+        quote! {
+            #parsed
+            let (cli, matches) = match parsed {
+                Ok((cli, matches)) => (Some(cli), Some(matches)),
                 Err(error) => {
-                    errors.push(std::sync::Arc::new(error.into()));
+                    #push_error
                     (None, None)
                 }
-            },
-            Err(error) => {
-                errors.push(std::sync::Arc::new(error.into()));
-                (None, None)
-            }
-        };
-    }
-}
-
-/// Generate CLI layering that omits defaults which clap did not receive explicitly.
-pub(super) fn build_cli_layer_tokens(
-    krate: &proc_macro2::TokenStream,
-    cli_default_as_absent_fields: &[syn::LitStr],
-) -> proc_macro2::TokenStream {
-    let sanitized_layer = build_sanitized_cli_layer_tokens(krate, cli_default_as_absent_fields);
-    quote! {
-        if let (Some(cli), Some(matches)) = (cli.as_ref(), matches.as_ref()) {
-            #sanitized_layer
-        }
-    }
-}
-
-/// Generate sanitisation handling for the generated CLI layer.
-fn build_sanitized_cli_layer_tokens(
-    krate: &proc_macro2::TokenStream,
-    cli_default_as_absent_fields: &[syn::LitStr],
-) -> proc_macro2::TokenStream {
-    let prune_defaults =
-        build_default_as_absent_pruning_tokens(cli_default_as_absent_fields, false);
-    let push_cli = build_cli_push_tokens();
-    quote! {
-        match #krate::sanitize_value(cli) {
-            Ok(mut value) => {
-                #prune_defaults
-                #push_cli
-            }
-            Err(err) => errors.push(err),
-        }
-    }
-}
-
-/// Generate removal of default-derived fields from the generated CLI JSON object.
-///
-/// The emitted statements expect `matches: &clap::ArgMatches` in scope.
-/// Both the declarative and the profile-enabled CLI layers share this pruning
-/// so an inferred clap default cannot outrank a profile or file layer.
-///
-/// `retain_environment_values` decides whether an environment-sourced value
-/// counts as explicit input. The profile path passes `true` so the pruning
-/// agrees with the `EnvVariable` arm of `has_explicitly_provided_value` in
-/// the same generated block: the two value-source checks must not disagree
-/// about what counts as explicit input, or an environment-supplied value
-/// could be pruned out from under a profile. No generated configuration-field
-/// argument carries a clap `env` binding today, so the arm is latent rather
-/// than live. The declarative path passes `false`, keeping its long-standing
-/// command-line-only pruning.
-fn build_default_as_absent_pruning_tokens(
-    cli_default_as_absent_fields: &[syn::LitStr],
-    retain_environment_values: bool,
-) -> proc_macro2::TokenStream {
-    let explicit_source = if retain_environment_values {
-        quote! {
-            Some(
-                clap::parser::ValueSource::CommandLine
-                    | clap::parser::ValueSource::EnvVariable
-            )
+            };
         }
     } else {
-        quote! { Some(clap::parser::ValueSource::CommandLine) }
-    };
-    quote! {
-        let has_explicit_default_as_absent_value = false
-            #( || matches!(matches.value_source(#cli_default_as_absent_fields), #explicit_source) )*;
-        if let Some(values) = value.as_object_mut() {
-            #(
-                if !matches!(
-                    matches.value_source(#cli_default_as_absent_fields),
-                    #explicit_source
-                ) {
-                    values.remove(#cli_default_as_absent_fields);
-                }
-            )*
-        }
-    }
-}
-
-/// Generate the guard that decides whether the CLI layer may be pushed.
-///
-/// The CLI layer must be pushed whenever the user supplied *any* argument,
-/// regardless of whether the resulting sanitized object happens to equal the
-/// defaults object. Comparing whole objects instead silently discards the CLI
-/// layer for a single-field configuration whose explicit value matches the
-/// struct default, letting a lower-precedence file or environment value win
-/// over an explicit `--flag=false`. Ask clap's per-argument `value_source`
-/// instead, which reports `CommandLine` independently of the parsed value.
-///
-/// `has_explicit_default_as_absent_value` is retained in the condition even
-/// though a supplied `cli_default_as_absent` field already implies
-/// `CommandLine`: the pruning helper emits that binding in this same block, and
-/// naming it here is what keeps it read in generated user code compiled under
-/// `-D warnings`.
-fn build_cli_push_tokens() -> proc_macro2::TokenStream {
-    quote! {
-        let has_command_line_value = matches.ids().any(|id| {
-            matches.value_source(id.as_ref()) == Some(clap::parser::ValueSource::CommandLine)
-        });
-        if has_command_line_value || has_explicit_default_as_absent_value {
-            composer.push_cli(value);
-        }
-    }
-}
-
-/// Remove boolean fields that clap reports as `DefaultValue`.
-///
-/// Ordinary absence remains `None` and is stripped by `sanitize_value`.
-/// Actual boolean defaults can survive that pass and would mask values in the
-/// lower-precedence profile layer. Source checks distinguish those defaults
-/// from explicit `=false`, which must remain in the CLI layer.
-///
-/// This pruning applies independently of `cli_default_as_absent` opt-in.
-/// Environment-sourced values are retained, and the separate environment layer
-/// still supplies `<PREFIX>ENABLED=true` to the composer.
-fn build_bool_default_pruning_tokens(
-    cli_bool_fields: &[(String, String)],
-) -> proc_macro2::TokenStream {
-    if cli_bool_fields.is_empty() {
-        return proc_macro2::TokenStream::new();
-    }
-    let bool_pairs = cli_bool_fields.iter().map(|(arg_id, serialized_key)| {
-        let id_lit = syn::LitStr::new(arg_id, proc_macro2::Span::call_site());
-        let key_lit = syn::LitStr::new(serialized_key, proc_macro2::Span::call_site());
         quote! {
-            if matches.value_source(#id_lit)
-                == Some(clap::parser::ValueSource::DefaultValue)
-            {
-                values.remove(#key_lit);
-            }
-        }
-    });
-    quote! {
-        if let Some(values) = value.as_object_mut() {
-            #( #bool_pairs )*
+            #parsed
+            let cli = match parsed {
+                Ok((cli, _matches)) => Some(cli),
+                Err(error) => {
+                    #push_error
+                    None
+                }
+            };
         }
     }
 }
 
-/// Generate the CLI layer for structs that opt into profile support.
-///
-/// The push is gated on clap value sources rather than on the declarative
-/// default-as-absent list alone: `--profile` sits below explicit CLI input, so
-/// any config field clap reports as command-line *or* environment-filled must
-/// still reach the composer. The environment origin matters because the
-/// selector may itself be supplied through `<PREFIX>PROFILE`, and in that case
-/// the remaining environment-derived fields must keep outranking the profile.
-///
-/// Fields filled from an inferred clap default are pruned first, so a built-in
-/// default cannot mask a profile value. `cli_bool_fields` extends that pruning
-/// to boolean fields with actual default-origin values, independently of
-/// `cli_default_as_absent` opt-in.
-pub(super) fn build_profile_cli_layer_tokens(
-    krate: &proc_macro2::TokenStream,
-    cli_arg_ids: &[String],
-    cli_bool_fields: &[(String, String)],
-    cli_default_as_absent_fields: &[syn::LitStr],
-) -> proc_macro2::TokenStream {
-    let arg_id_lits: Vec<syn::LitStr> = cli_arg_ids
-        .iter()
-        .map(|id| syn::LitStr::new(id, proc_macro2::Span::call_site()))
-        .collect::<Vec<_>>();
-    let prune_defaults = build_default_as_absent_pruning_tokens(cli_default_as_absent_fields, true);
-    let prune_bool_defaults = build_bool_default_pruning_tokens(cli_bool_fields);
-    // `matches` is already `&ArgMatches` here, courtesy of the `if let` above.
-    let has_explicitly_provided = quote! {
-        let has_explicitly_provided_value = {
-            let provided = [ #( #arg_id_lits ),* ];
-            provided.iter().any(|id| {
-                matches!(
-                    matches.value_source(id),
-                    Some(
-                        clap::parser::ValueSource::CommandLine
-                            | clap::parser::ValueSource::EnvVariable
-                    )
+/// The clap value sources that count as explicit input for a compose path.
+#[derive(Clone, Copy)]
+pub(super) enum ExplicitSource {
+    /// Only values typed on the command line.
+    CommandLine,
+    /// Command-line values and values filled from a clap `env` binding.
+    CommandLineOrEnvironment,
+}
+
+impl ExplicitSource {
+    /// Render the `matches!` pattern that recognises this policy.
+    fn tokens(self) -> TokenStream {
+        match self {
+            Self::CommandLine => quote! { Some(clap::parser::ValueSource::CommandLine) },
+            Self::CommandLineOrEnvironment => quote! {
+                Some(
+                    clap::parser::ValueSource::CommandLine
+                        | clap::parser::ValueSource::EnvVariable
                 )
-            })
-        };
-    };
+            },
+        }
+    }
+}
+
+/// Emit a CLI layer containing only fields clap attributes to `explicit_source`.
+///
+/// The layer is pushed only when at least one field has an explicit source, so
+/// a load that supplies no configuration argument adds no CLI layer. A field
+/// whose source is a clap default is absent from the layer entirely, which is
+/// what makes the `cli_default_as_absent` pruning and the boolean-default
+/// pruning unnecessary: the sparse extraction applies the same rule to every
+/// field without a per-attribute list.
+///
+/// Each compose path chooses the sources it admits. The declarative path takes
+/// only `CommandLine`; the profile-enabled path also takes `EnvVariable`,
+/// because a profile sits below an environment-filled argument and no generated
+/// configuration-field argument binds an environment variable today.
+pub(super) fn build_cli_layer_tokens(
+    krate: &TokenStream,
+    cli_field_info: &[CliFieldInfo],
+    explicit_source: ExplicitSource,
+) -> TokenStream {
+    if cli_field_info.is_empty() {
+        // No configuration field can enter a CLI layer. The declarative parse
+        // is validation-only in this case, so there are no bindings to read.
+        return TokenStream::new();
+    }
+
+    let source_pattern = explicit_source.tokens();
+    let arg_ids: Vec<LitStr> = cli_field_info
+        .iter()
+        .map(|field| LitStr::new(&field.arg_id, proc_macro2::Span::call_site()))
+        .collect::<Vec<_>>();
+    let sparse_insertions: Vec<TokenStream> = cli_field_info
+        .iter()
+        .map(|field| sparse_insertion(field, &source_pattern))
+        .collect();
+
     quote! {
         if let (Some(cli), Some(matches)) = (cli.as_ref(), matches.as_ref()) {
-            match #krate::sanitize_value(cli) {
-                Ok(mut value) => {
-                    #prune_defaults
-                    #prune_bool_defaults
-                    #has_explicitly_provided
-                    let differs_from_defaults = defaults_value
-                        .as_ref()
-                        .map_or(true, |defaults| defaults != &value);
-                    let has_user_input = has_explicitly_provided_value
-                        || has_explicit_default_as_absent_value;
-                    if differs_from_defaults || has_user_input {
-                        composer.push_cli(value);
+            let has_explicit_cli_value = false
+                #( || matches!(matches.value_source(#arg_ids), #source_pattern) )*;
+            if has_explicit_cli_value {
+                match #krate::sanitize_value(cli) {
+                    Ok(#krate::serde_json::Value::Object(mut values)) => {
+                        let mut sparse = #krate::serde_json::Map::new();
+                        #( #sparse_insertions )*
+                        composer.push_cli(#krate::serde_json::Value::Object(sparse));
                     }
+                    Ok(other) => errors.push(::std::sync::Arc::new(
+                        #krate::OrthoError::Validation {
+                            key: ::std::string::String::from("cli"),
+                            message: ::std::format!(
+                                "expected parsed CLI values to serialize to an object, got {other:?}",
+                            ),
+                        },
+                    )),
+                    Err(err) => errors.push(err),
                 }
-                Err(err) => errors.push(err),
+            }
+        }
+    }
+}
+
+/// Emit the guarded move of one field from the sanitized CLI object.
+///
+/// Three spellings meet here. The argument ID answers `value_source`; the Rust
+/// member name is the key the synthetic CLI struct serializes; and the
+/// deserialized key is the configuration member the merge feeds to serde. They
+/// differ under `#[arg(id = "...")]`, `#[serde(rename = "...")]`, a
+/// serialize-only rename, or a container-level rename rule, so reading or
+/// writing with the wrong one drops an explicit value or places it where the
+/// deserializer cannot see it.
+fn sparse_insertion(field: &CliFieldInfo, explicit_source: &TokenStream) -> TokenStream {
+    let arg_id = LitStr::new(&field.arg_id, proc_macro2::Span::call_site());
+    let field_name = LitStr::new(&field.field_name, proc_macro2::Span::call_site());
+    let deserialized_key = LitStr::new(&field.deserialized_key, proc_macro2::Span::call_site());
+    quote! {
+        if matches!(matches.value_source(#arg_id), #explicit_source) {
+            if let Some(field_value) = values.remove(#field_name) {
+                sparse.insert(#deserialized_key.to_owned(), field_value);
             }
         }
     }
@@ -226,20 +229,12 @@ pub(super) fn build_profile_cli_layer_tokens(
 mod tests {
     //! Unit tests for the CLI-layer token builders.
     //!
-    //! These drive the two builders rather than the shared pruning helper, so a
-    //! call site that passed the wrong `retain_environment_values` value fails
-    //! here. Asserting on the helper alone cannot see its call sites, and the
-    //! two paths must not disagree: the profile path counts an
-    //! environment-sourced value as explicit input, while the declarative path
-    //! keeps its long-standing command-line-only pruning.
-    //!
-    //! The environment source is rendered three times by the profile path: the
-    //! pruning names it twice (the explicit-value check and the per-field
-    //! removal condition) and `has_explicitly_provided_value` names it once.
-    //! Counting occurrences therefore separates "the profile path is env-aware
-    //! in both checks" from "the flag never reached this call site" — a bare
-    //! `contains` cannot, because `has_explicitly_provided_value` renders the
-    //! same spelling whether or not the flag arrived.
+    //! These pin the source policy each builder passes to the shared sparse
+    //! extractor. The merged result is covered end to end by
+    //! `ortho_config/tests/cli_explicit_equals_default.rs`; these tests make
+    //! the generated contract visible, namely which clap value sources may
+    //! enter the declarative and profile-enabled layers, and that membership is
+    //! decided per field rather than by comparing whole objects.
 
     use super::*;
 
@@ -248,93 +243,158 @@ mod tests {
     /// The `ValueSource` spelling for an explicitly typed value.
     const CLI: &str = "CommandLine";
 
-    /// A single `cli_default_as_absent` field for the builders to prune.
-    fn pruned_field() -> Vec<syn::LitStr> {
-        vec![syn::LitStr::new("retries", proc_macro2::Span::call_site())]
+    /// One field with distinct member, clap, serialize, and deserialize spellings.
+    fn field(
+        field_name: &str,
+        arg_id: &str,
+        serialized_key: &str,
+        deserialized_key: &str,
+    ) -> CliFieldInfo {
+        CliFieldInfo {
+            field_name: field_name.to_owned(),
+            serialized_key: serialized_key.to_owned(),
+            deserialized_key: deserialized_key.to_owned(),
+            arg_id: arg_id.to_owned(),
+            is_default_as_absent: false,
+        }
     }
 
-    /// Counts how often a builder rendered a value source.
+    /// Counts how often a builder rendered a spelling.
     fn occurrences(rendered: &str, needle: &str) -> usize {
         rendered.matches(needle).count()
     }
 
-    /// The profile path must treat an environment-sourced value as explicit
-    /// input, so the pruning leaves it in the CLI layer.
+    /// Each compose path admits exactly the sources it documents.
     ///
-    /// The profile layer is inserted beneath the environment, so an
-    /// environment-filled value has to survive this pruning to reach the
-    /// composer at its documented rank. Pruning it here would let the profile
-    /// value outrank the environment and invert the tier order. No generated
-    /// configuration-field argument binds an environment variable today, so
-    /// the case is latent; the wiring is still pinned so the two generated
-    /// checks cannot drift apart.
-    ///
-    /// Three occurrences is the env-aware count: the pruning's explicit-value
-    /// check, the pruning's per-field removal condition, and
-    /// `has_explicitly_provided_value`. Passing `false` at this call site
-    /// leaves only the last, which is what makes this assertion detect a
-    /// swapped flag rather than merely restate the builder's input.
+    /// The declarative path takes only command-line values: its environment
+    /// value arrives through the environment layer, which is pushed above the
+    /// CLI layer. The profile path also takes `EnvVariable`, because an
+    /// environment-filled argument must stay above the profile layer. No
+    /// generated configuration-field argument binds an environment variable
+    /// today, so that arm is latent; it is pinned so the paths cannot drift.
     #[test]
-    fn profile_path_retains_environment_sourced_values() {
-        let rendered = build_profile_cli_layer_tokens(
+    fn layer_source_policy_matches_each_compose_path() {
+        for (source, allows_environment, context) in [
+            (ExplicitSource::CommandLine, false, "declarative"),
+            (
+                ExplicitSource::CommandLineOrEnvironment,
+                true,
+                "profile-enabled",
+            ),
+        ] {
+            let rendered =
+                build_cli_layer_tokens(&quote! { ::ortho_config }, &pruned_field(), source)
+                    .to_string();
+            assert_eq!(
+                occurrences(&rendered, ENV) > 0,
+                allows_environment,
+                "the {context} path must treat an environment value as explicit only when \
+                 documented: {rendered}"
+            );
+            assert!(
+                occurrences(&rendered, CLI) >= 1,
+                "the {context} path must still count an explicitly typed value: {rendered}"
+            );
+        }
+    }
+
+    /// Each field is read by its CLI member and stored under its config key.
+    #[test]
+    fn sparse_layer_maps_member_names_to_serialized_keys() {
+        let fields = [
+            field("port", "listen_port", "wire_port", "service_port"),
+            field("nickname", "nickname", "nickname", "display_name"),
+        ];
+        let rendered = build_cli_layer_tokens(
             &quote! { ::ortho_config },
-            &["retries".to_owned()],
-            &[],
-            &pruned_field(),
+            &fields,
+            ExplicitSource::CommandLine,
         )
         .to_string();
-        assert_eq!(
-            occurrences(&rendered, ENV),
-            3,
-            "the profile path must count an environment-filled value as explicit in both pruning \
-             checks and in `has_explicitly_provided_value`: {rendered}"
-        );
+        for needle in [
+            "\"listen_port\"",
+            "\"port\"",
+            "\"service_port\"",
+            "\"nickname\"",
+            "\"display_name\"",
+        ] {
+            assert!(
+                rendered.contains(needle),
+                "the sparse layer must name {needle}: {rendered}"
+            );
+        }
         assert!(
-            occurrences(&rendered, CLI) >= 1,
-            "the profile path must still count an explicitly typed value: {rendered}"
+            !rendered.contains("\"wire_port\""),
+            "the sparse layer must use the deserialization key, not the serialized one: \
+             {rendered}"
         );
     }
 
-    /// The declarative path keeps pruning only command-line values.
-    ///
-    /// Its environment value arrives through the environment layer, which is
-    /// pushed above the CLI layer, so retaining it here would add nothing and
-    /// would change the generated tokens for every existing user.
+    /// The layer no longer compares the whole CLI object with the defaults.
     #[test]
-    fn declarative_path_prunes_only_command_line_values() {
-        let rendered =
-            build_cli_layer_tokens(&quote! { ::ortho_config }, &pruned_field()).to_string();
-        assert_eq!(
-            occurrences(&rendered, ENV),
-            0,
-            "the declarative path must not treat an environment value as explicit: {rendered}"
+    fn sparse_layer_has_no_whole_object_comparison() {
+        let rendered = build_cli_layer_tokens(
+            &quote! { ::ortho_config },
+            &pruned_field(),
+            ExplicitSource::CommandLine,
+        )
+        .to_string();
+        assert!(
+            !rendered.contains("defaults_value") && !rendered.contains("differs_from_defaults"),
+            "the layer must decide membership per field, not by object equality: {rendered}"
         );
         assert!(
-            occurrences(&rendered, CLI) >= 1,
-            "the declarative path must still count an explicit value: {rendered}"
+            rendered.contains("has_explicit_cli_value") && rendered.contains("value_source"),
+            "the layer must gate on clap value sources: {rendered}"
+        );
+        assert!(
+            rendered.contains("sanitize_value") && rendered.contains("push_cli"),
+            "the layer must still sanitise and push the sparse object: {rendered}"
         );
     }
 
-    /// The declarative path reaches clap's value-source API, so that call is
-    /// not a profile-only marker.
+    /// A struct with no CLI field retains only the config-path selector.
     ///
-    /// `legacy_load_impl_has_no_profile_surface` must therefore not forbid
-    /// `value_source`: the declarative path routes both its `cli_default_as_absent`
-    /// pruning and its push gate through `ArgMatches::value_source`, and clap
-    /// exposes no CommandLine-only alternative — `args_present()` counts an
-    /// environment-filled value as explicit (`ValueSource::is_explicit` is
-    /// `self != DefaultValue`), which would invert the tier order this crate
-    /// documents. Guarding the call site here keeps the removal honest: if the
-    /// legacy path ever stops asking clap for value sources, this fails and the
-    /// forbidden list can be reconsidered.
+    /// No layer is emitted because no configuration value can enter one, but
+    /// the discovery chain reads `cli.config_path`, so the parsed struct must
+    /// remain bound. `ArgMatches` has no consumer and must not be bound.
     #[test]
-    fn declarative_path_asks_clap_for_value_sources() {
-        let rendered =
-            build_cli_layer_tokens(&quote! { ::ortho_config }, &pruned_field()).to_string();
+    fn empty_field_list_retains_only_the_config_path_selector() {
+        let layer =
+            build_cli_layer_tokens(&quote! { ::ortho_config }, &[], ExplicitSource::CommandLine)
+                .to_string();
         assert!(
-            rendered.contains("value_source"),
-            "the declarative path must consult clap's value sources, which is why the \
-             profile-surface test cannot forbid that spelling: {rendered}"
+            layer.is_empty(),
+            "the empty field list must emit no CLI layer: {layer}"
         );
+
+        let parse =
+            build_cli_parse_tokens(&quote! { ::ortho_config }, ParseBindings::new(true, false))
+                .to_string();
+        assert!(
+            parse.contains("let cli") && !parse.contains("let (cli"),
+            "the config-path selector must retain only the parsed struct: {parse}"
+        );
+        assert!(
+            !parse.contains("matches . as_ref") && !parse.contains("_parsed"),
+            "nothing may read ArgMatches when no CLI field exists: {parse}"
+        );
+
+        let validation =
+            build_cli_parse_tokens(&quote! { ::ortho_config }, ParseBindings::new(false, false))
+                .to_string();
+        assert!(
+            validation.contains("try_get_matches_from_mut") && validation.contains("errors . push"),
+            "the validation-only parse must still report parse errors: {validation}"
+        );
+        assert!(
+            !validation.contains("let cli") && !validation.contains("_parsed"),
+            "the validation-only parse must not bind values nothing reads: {validation}"
+        );
+    }
+
+    /// A single field for the builders to extract.
+    fn pruned_field() -> Vec<CliFieldInfo> {
+        vec![field("retries", "retries", "retries", "retries")]
     }
 }

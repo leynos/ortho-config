@@ -12,7 +12,7 @@ use syn::Ident;
 
 use crate::derive::load_impl::LoadImplArgs;
 use crate::derive::load_impl::LoadSourceTokens;
-use crate::derive::load_impl::cli::build_profile_cli_layer_tokens;
+use crate::derive::load_impl::cli::{ExplicitSource, build_cli_layer_tokens};
 
 /// Emit the profile-aware composition body, returning layers with their selection.
 ///
@@ -29,22 +29,19 @@ pub(crate) fn build_profile_compose_layers_impl(
     let LoadImplArgs {
         tokens,
         profile_env_var,
-        cli_arg_ids,
-        cli_bool_fields,
+        cli_field_info,
         ..
     } = args;
     let krate = tokens.krate;
-    let cli_default_as_absent_fields = &tokens.default_struct_init.cli_default_as_absent_fields;
     let parse_setup = build_profile_parse_setup(krate);
     let selection = build_profile_selection(krate, profile_env_var, tokens.sources.as_ref());
     let defaults = build_profile_defaults(args);
     let file_layers = build_profile_file_layers(krate, file_discovery);
     let environment_layer = build_profile_environment_layer(krate, env_section);
-    let cli_push = build_profile_cli_layer_tokens(
+    let cli_push = build_cli_layer_tokens(
         krate,
-        cli_arg_ids,
-        cli_bool_fields,
-        cli_default_as_absent_fields,
+        cli_field_info,
+        ExplicitSource::CommandLineOrEnvironment,
     );
 
     quote! {
@@ -77,7 +74,7 @@ pub(crate) fn build_profile_compose_layers_impl(
 /// per-field value sources.
 fn build_profile_parse_setup(krate: &proc_macro2::TokenStream) -> proc_macro2::TokenStream {
     quote! {
-        use clap::{CommandFactory as _, FromArgMatches as _, Parser as _};
+        use clap::{CommandFactory as _, FromArgMatches as _};
 
         let mut errors: Vec<std::sync::Arc<#krate::OrthoError>> = Vec::new();
         let args: Vec<std::ffi::OsString> = iter.into_iter().map(Into::into).collect();
@@ -192,7 +189,9 @@ fn build_profile_selection(
 ///
 /// Fallible `cli_default_as_absent` resolutions run before the defaults struct
 /// is built, so an inferred clap default is replayed through the parser rather
-/// than substituted directly for the field value.
+/// than substituted directly for the field value. The sanitized value is
+/// pushed directly; the CLI layer no longer needs a second copy to compare
+/// against, because its membership is decided from clap value sources.
 fn build_profile_defaults(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStream {
     let LoadImplArgs { idents, tokens, .. } = args;
     let defaults_ident = idents.defaults_ident;
@@ -204,12 +203,8 @@ fn build_profile_defaults(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStream {
         let mut composer = #krate::MergeComposer::with_capacity(5);
         #(#default_resolutions)*
         let defaults = #defaults_ident { #( #default_fields, )* };
-        let mut defaults_value = None;
         match #krate::sanitize_value(&defaults) {
-            Ok(value) => {
-                defaults_value = Some(value.clone());
-                composer.push_defaults(value);
-            }
+            Ok(value) => composer.push_defaults(value),
             Err(err) => errors.push(err),
         }
     }

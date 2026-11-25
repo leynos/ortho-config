@@ -113,6 +113,9 @@
 - [ADR-0025: Enumerate missing required values for selected subcommands](adrs/adr-0025-enumerate-missing-values-for-selected-subcommands.md):
   review the loader-scoped supply routes and the widened subcommand merge
   bounds that extend ADR-0024 to selected subcommands.
+- [ADR-0026: Derive CLI layer presence from clap value sources](adrs/adr-0026-derive-cli-layer-presence-from-value-sources.md):
+  review the sparse per-field layer, the retained command-line and environment
+  source policy, and the removal of whole-object default comparisons.
 - [Archived v0.8.0 roadmap](archive/v0-8-0-roadmap.md): review completed
   phases, steps, and tasks from the roadmap that preceded the active
   agent-native plan.

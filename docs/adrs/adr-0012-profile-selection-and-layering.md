@@ -8,6 +8,9 @@ merged as first-class per-file layers between files and environment, and
 surfaced through additive agent-context and documentation-IR metadata. The text
 is verified against the approved execution plan.
 
+Amended by [ADR-0026](adr-0026-derive-cli-layer-presence-from-value-sources.md)
+(2026-11-21).
+
 ## Date
 
 2026-08-07 (created); 2026-08-09 (accepted).
@@ -449,3 +452,14 @@ unknown keys. Downstream rollback notes should say both things.
 - [Design Document: The `OrthoConfig` Crate](../design.md) §4.3 and §4.10.
 - [Cargo book: profiles](https://doc.rust-lang.org/cargo/reference/profiles.html).
 - [AWS CLI: named profiles](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-files.html).
+
+## Amendments
+
+### 2026-11-21 — CLI layer presence is per field
+
+The "Flag-equals-default resolution" subsection described the legacy derive as
+keeping the whole-object comparison. That is no longer true. Both compose paths
+now build a sparse CLI layer from clap's per-field value sources, and the
+profile path no longer keeps the equality arm. The policy that a profile cannot
+outrank an environment-filled argument is retained by admitting `EnvVariable`
+in the profile sparse layer. ADR-0026 records the replacement decision.

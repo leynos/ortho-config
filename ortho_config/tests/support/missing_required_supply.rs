@@ -351,17 +351,18 @@ fn a_partially_supplied_optional_flatten_reports_nothing() -> Result<()> {
     Ok(())
 }
 
-/// A default the loader cannot read must not hide the requirement.
+/// A renamed default supplies its field; an unrelated requirement remains.
 ///
-/// The generated defaults struct keys every value by its Rust identifier, so a
-/// renamed field without a matching alias never receives it. Reporting the
-/// renamed key beside an unrelated requirement keeps the report honest.
+/// The defaults layer and the loader both use the configuration's
+/// deserialization key, so the default reaches `ref` rather than being
+/// stranded under the Rust identifier. The unrelated `region` requirement is
+/// still reported.
 #[test]
-fn a_renamed_default_is_reported_beside_another_missing_field() -> Result<()> {
+fn a_renamed_default_supplies_its_field_beside_another_missing_field() -> Result<()> {
     let missing = report(load::<RenamedDefaultRoot>(&[PROGRAM], &[]))?;
     ensure!(
-        paths(&missing) == ["ref", "region"],
-        "the unreachable default must not hide the requirement, got {:?}",
+        paths(&missing) == ["region"],
+        "the renamed default must supply its field, got {:?}",
         paths(&missing)
     );
     Ok(())

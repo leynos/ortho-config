@@ -34,7 +34,7 @@ use derive::generate::localization::{
 };
 use derive::generate::ortho_impl::generate_trait_implementation;
 use derive::generate::required_schema::RequiredSchemaSource;
-use derive::parse::{parse_input, serde_rename_all};
+use derive::parse::{parse_input, serde_rename_rules};
 
 /// Derive macro for the
 /// [`OrthoConfig`](https://docs.rs/ortho_config/latest/ortho_config/trait.OrthoConfig.html)
@@ -58,14 +58,14 @@ pub fn derive_ortho_config(input_tokens: TokenStream) -> TokenStream {
 /// convert them into a `compile_error!` invocation.
 fn expand_ortho_config(derive_input: &DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
     let (ident, fields, struct_attrs, field_attrs) = parse_input(derive_input)?;
-    let serde_rename_all = serde_rename_all(&derive_input.attrs)?;
+    let serde_rename_rules = serde_rename_rules(&derive_input.attrs)?;
     let krate = derive::crate_path::resolve(struct_attrs.crate_path.as_ref());
     let component_args = MacroComponentArgs {
         ident: &ident,
         fields: &fields,
         struct_attrs: &struct_attrs,
         field_attrs: &field_attrs,
-        serde_rename_all,
+        serde_rename_rules,
         krate: &krate,
     };
     let components = build_macro_components(&component_args)?;
@@ -94,7 +94,7 @@ fn expand_ortho_config(derive_input: &DeriveInput) -> syn::Result<proc_macro2::T
         fields: &fields,
         field_attrs: &field_attrs,
         struct_attrs: &struct_attrs,
-        serde_rename_all,
+        serde_deserialize_rename_all: serde_rename_rules.deserialize,
         cli_fields: &components.cli_field_metadata,
         localization_ids: &localization_ids,
         krate: &krate,
@@ -185,26 +185,37 @@ pub fn derive_subcommand_docs(input_tokens: TokenStream) -> TokenStream {
     }
 }
 
-/// Metadata about a field used for `CliValueExtractor` generation.
+/// Metadata about a configuration field's CLI and Serde spellings.
+///
+/// The value extractor and the generated sparse CLI layer both use these
+/// spellings to decide whether a field was supplied and where its parsed value
+/// lives.
 #[derive(Clone)]
 pub(crate) struct CliFieldInfo {
+    /// The Rust member name used by the generated CLI struct's serialization.
+    ///
+    /// The synthetic CLI struct keeps the source field's identifier and does
+    /// not copy a `#[serde(rename)]`, so this is the key the parsed CLI object
+    /// carries. It can differ from both [`Self::arg_id`] and
+    /// [`Self::serialized_key`].
+    pub field_name: String,
     /// The field name used by serde during serialization.
     ///
     /// This respects `#[serde(rename = "...")]` and `#[serde(rename_all = "...")]`
     /// so `CliValueExtractor` can reliably map values from `serde_json::to_value(self)`.
     pub serialized_key: String,
+    /// The key serde accepts for this field when deserializing.
+    ///
+    /// The defaults and sparse CLI layers are both inputs to the configuration
+    /// deserializer, so they must agree on this key. It differs from
+    /// [`Self::serialized_key`] under a serialize-only rename, and from
+    /// [`Self::field_name`] under any rename.
+    pub deserialized_key: String,
     /// The clap argument ID used with `ArgMatches::value_source()`.
     ///
     /// This is the `id = "..."` override from `#[arg(...)]`/`#[clap(...)]` when
     /// present, otherwise the field identifier (`snake_case`).
     pub arg_id: String,
-    /// Whether the field's declared type is `bool` (or `Option<bool>`).
-    ///
-    /// Selects optional boolean-value parsing: absence remains `None`, a bare
-    /// flag means `true`, and an explicit `=false` remains user input. Layer
-    /// builders also use this classification to prune actual clap defaults
-    /// without mistaking an explicit `false` for an absent value.
-    pub is_bool: bool,
     /// Whether this field has the `cli_default_as_absent` attribute.
     pub is_default_as_absent: bool,
 }

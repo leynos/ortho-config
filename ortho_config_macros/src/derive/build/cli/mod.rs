@@ -17,7 +17,6 @@ use std::collections::HashSet;
 use syn::{Ident, Type};
 
 pub(crate) use cli_flags::build_cli_struct_fields;
-pub(crate) use cli_flags::is_bool_type;
 pub(crate) use cli_flags::{CliFieldMetadata, build_cli_field_metadata};
 
 /// Emits an `Option<T>` type for CLI parsing while unwrapping one existing

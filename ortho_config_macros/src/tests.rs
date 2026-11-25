@@ -169,7 +169,10 @@ fn build_components_from_input(input: &DeriveInput) -> Result<MacroComponents> {
         fields: &fields,
         struct_attrs: &struct_attrs,
         field_attrs: &field_attrs,
-        serde_rename_all: None,
+        serde_rename_rules: crate::derive::parse::SerdeRenameRules {
+            serialize: None,
+            deserialize: None,
+        },
         krate: &krate,
     };
     build_macro_components(&args).map_err(|err| anyhow!(err))
@@ -266,7 +269,6 @@ fn build_legacy_load_impl() -> anyhow::Result<proc_macro2::TokenStream> {
     let default_struct_init = crate::derive::build::DefaultStructInit {
         resolutions: vec![],
         fields: vec![quote! { value: 7 }],
-        cli_default_as_absent_fields: vec![],
     };
     let config_env_var = quote! { "APP_CONFIG_PATH" };
     let dotfile_name = syn::LitStr::new(".app.toml", proc_macro2::Span::call_site());
@@ -291,8 +293,7 @@ fn build_legacy_load_impl() -> anyhow::Result<proc_macro2::TokenStream> {
         has_config_path: false,
         profiles: false,
         profile_env_var: String::from("PROFILE"),
-        cli_arg_ids: Vec::new(),
-        cli_bool_fields: Vec::new(),
+        cli_field_info: &[],
     }))
 }
 
@@ -327,19 +328,15 @@ fn legacy_load_impl_has_no_profile_surface() -> Result<()> {
     let generated = build_legacy_load_impl()?;
     let rendered = generated.to_string();
     // Each entry must be reachable *only* through the profile surface.
-    // `value_source` is deliberately absent: the declarative path has asked
-    // clap's `ArgMatches::value_source` since #463 (for `cli_default_as_absent`
-    // pruning and, since the boolean-override fix, for the CLI push gate), so
-    // forbidding it would fail a correct legacy impl. It read as profile-only
-    // here only because this fixture passes an empty `cli_default_as_absent`
-    // field list, which collapses the `#( ... )*` repetition that emits the
-    // call. `has_explicitly_provided_value` is the profile path's own
-    // explicit-input check and appears in no legacy builder, so it carries the
-    // same intent without the false positive.
+    // `value_source` is deliberately absent: both compose paths ask clap's
+    // `ArgMatches::value_source` per field, so forbidding it would fail a
+    // correct legacy impl. The shared sparse-layer builder is also why
+    // `has_explicit_cli_value` cannot appear here: it is emitted by the legacy
+    // path too. The remaining entries name the selection and extraction
+    // machinery that only an opted-in struct generates.
     for forbidden in [
         "extract_profile_layers",
         "SelectedProfile",
-        "has_explicitly_provided_value",
         "compose_layers_with_selection_from_iter",
         "load_with_profile",
     ] {

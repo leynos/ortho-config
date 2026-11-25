@@ -6,9 +6,12 @@
 use crate::CliFieldInfo;
 use crate::derive::build::{
     CliFieldMetadata, build_cli_field_metadata, build_cli_struct_fields, build_config_flag_field,
-    effective_config_cli_long, is_bool_type,
+    effective_config_cli_long,
 };
-use crate::derive::parse::{SerdeRenameAll, clap_arg_id_or_field_name, serde_serialized_field_key};
+use crate::derive::parse::{
+    SerdeRenameRules, clap_arg_id_or_field_name, clap_member_name, serde_deserialized_field_key,
+    serde_serialized_field_key,
+};
 
 use super::profile_flag::{ProfileFlagBuildInputs, build_profile_flag_field};
 
@@ -29,17 +32,20 @@ pub(crate) struct CliStructBuildResult {
 fn build_cli_field_info(
     field: &syn::Field,
     attrs: &crate::derive::parse::FieldAttrs,
-    serde_rename_all: Option<SerdeRenameAll>,
+    rename_rules: SerdeRenameRules,
 ) -> syn::Result<CliFieldInfo> {
     // The arg id is resolved by the shared helper so `CliValueExtractor` looks
     // the field up under the same id the generated `clap` attribute declares,
     // including the `r#`-stripping fallback for raw identifiers.
+    let field_name = clap_member_name(field)?;
     let arg_id = clap_arg_id_or_field_name(field)?;
-    let serialized_key = serde_serialized_field_key(field, serde_rename_all)?;
+    let serialized_key = serde_serialized_field_key(field, rename_rules.serialize)?;
+    let deserialized_key = serde_deserialized_field_key(field, rename_rules.deserialize)?;
     Ok(CliFieldInfo {
+        field_name,
         serialized_key,
+        deserialized_key,
         arg_id,
-        is_bool: is_bool_type(&field.ty),
         is_default_as_absent: attrs.cli_default_as_absent,
     })
 }
@@ -55,7 +61,7 @@ fn build_cli_field_info(
 /// - `fields`: Struct fields used to generate CLI tokens.
 /// - `field_attrs`: Per-field attributes controlling CLI generation.
 /// - `struct_attrs`: Struct-level attributes including discovery settings.
-/// - `serde_rename_all`: Optional serde rename-all strategy.
+/// - `serde_rename_rules`: Container-level Serde naming rules per direction.
 ///
 /// # Errors
 ///
@@ -64,7 +70,7 @@ pub(crate) fn build_cli_struct_tokens(
     fields: &[syn::Field],
     field_attrs: &[crate::derive::parse::FieldAttrs],
     struct_attrs: &crate::derive::parse::StructAttrs,
-    serde_rename_all: Option<SerdeRenameAll>,
+    serde_rename_rules: SerdeRenameRules,
 ) -> syn::Result<CliStructBuildResult> {
     let mut cli_struct = build_cli_struct_fields(fields, field_attrs)?;
     if !cli_struct.field_names.contains("config_path") {
@@ -87,7 +93,7 @@ pub(crate) fn build_cli_struct_tokens(
         ProfileFlagBuildInputs {
             fields,
             field_attrs,
-            serde_rename_all,
+            serde_rename_all: serde_rename_rules.serialize,
             used_longs: &cli_struct.used_longs,
             field_names: &cli_struct.field_names,
         },
@@ -103,7 +109,7 @@ pub(crate) fn build_cli_struct_tokens(
         .iter()
         .zip(field_attrs)
         .filter(|(_, attrs)| attrs.cli.is_option())
-        .map(|(field, attrs)| build_cli_field_info(field, attrs, serde_rename_all))
+        .map(|(field, attrs)| build_cli_field_info(field, attrs, serde_rename_rules))
         .collect::<syn::Result<Vec<_>>>()?;
 
     Ok(CliStructBuildResult {
