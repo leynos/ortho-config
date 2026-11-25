@@ -5,25 +5,27 @@ Status: IN PROGRESS
 The matrix, the en-US strings, the runtime consultation, the pre-publication
 gate, the consumer and developer documentation, and the roadmap checkbox are
 all in place; M3 is delivered and delivery continues through review and merge.
-The branch has been replayed onto `origin/main` at `0dbd7bd7`, after main
-released v0.11.0 and published its own ADR-0023, so this branch's notes are
-re-versioned to v0.12.0 and its gate ADR is renumbered to 0024. Candidate
-`a0ba5f1b` passed the full nine-gate certificate; its two documentation
-successors `6d421d5f` and `5ab1e7e9` are green in hosted CI and were certified
-for the Markdown gates alone, as Progress records. A whole-plan assessment of
-`5ab1e7e9` then returned "not yet complete" with two fail-closed gaps in the
-source walk, both repaired in a candidate that passed its own nine-gate
-certificate and a hosted run including CodeScene. The replayed candidate
-`02c37347` has since passed the same certificate, and the published head
-`4908409f` — that candidate plus its record — is green on every hosted job. A
-whole-plan assessment of `4908409f` then returned "not yet complete" with two
-further fail-closed gaps in the source walk, both repaired with a control
-apiece in candidate `b3b9d21f`, which passed the same certificate and a hosted
-run. A whole-plan assessment of `b3b9d21f` then returned "not yet complete"
-with two more: a local `macro_rules!` that shadows the standard macro an inert
-list trusts, and a conditional inline module whose declared file the walk
-skipped. Both are repaired in code head `2522013d`, which carries a full local
-certificate, and the record head `213fd827` is green on every job of the
+The branch was first replayed onto `origin/main` at `0dbd7bd7`, after main
+released v0.11.0 and published its own ADR-0023, so this branch's notes were
+re-versioned to v0.12.0 and its gate ADR was renumbered then to 0024. It now
+sits on `origin/main` at `c2d63075`, and the gate ADR is **ADR-0027**: main has
+since published ADR-0024 through ADR-0026, so the renumbers at each replay
+followed. Candidate `a0ba5f1b` passed the full nine-gate certificate; its two
+documentation successors `6d421d5f` and `5ab1e7e9` are green in hosted CI and
+were certified for the Markdown gates alone, as Progress records. A whole-plan
+assessment of `5ab1e7e9` then returned "not yet complete" with two fail-closed
+gaps in the source walk, both repaired in a candidate that passed its own
+nine-gate certificate and a hosted run including CodeScene. The replayed
+candidate `02c37347` has since passed the same certificate, and the published
+head `4908409f` — that candidate plus its record — is green on every hosted
+job. A whole-plan assessment of `4908409f` then returned "not yet complete"
+with two further fail-closed gaps in the source walk, both repaired with a
+control apiece in candidate `b3b9d21f`, which passed the same certificate and a
+hosted run. A whole-plan assessment of `b3b9d21f` then returned "not yet
+complete" with two more: a local `macro_rules!` that shadows the standard macro
+an inert list trusts, and a conditional inline module whose declared file the
+walk skipped. Both are repaired in code head `2522013d`, which carries a full
+local certificate, and the record head `213fd827` is green on every job of the
 pull-request lane (2026-11-20). The hosted CodeScene check then flagged one
 advisory duplication in the new symlink controls; candidate `bb0fa4a3` extracts
 their shared staging, passed the re-taken certificate, and is green on every
@@ -1837,6 +1839,17 @@ stopping and reporting.
       `renamed_anstyle`, so such a matcher finds two candidates and fails while
       the correct one selects `other`. The focused control passes.
 
+- [x] (2026-11-25) Round-48 replay onto `origin/main` `c2d63075` and the
+      header's current state. Main advanced nine commits, including PR #593,
+      which published **ADR-0026 (profile field redaction)** — the number this
+      branch's gate ADR had taken in the previous replay. The 90-commit series
+      was replayed with the documented Weave bypass. Conflicts: the contents
+      index (main's ADR-0026 entry beside ours), the v0.11.0 migration guide
+      (main's new section 15 and its "Four areas" count), and two Outcome
+      paragraphs. The gate ADR is now **ADR-0027**, and the header names the
+      current base and ADR while keeping the earlier replay as history. The
+      full target passes 110 tests on the replayed head, Clippy is clean, and
+      the PR reports `MERGEABLE` again.
 - [x] (2026-11-21) Round-22 conflict dispositions. Five paths conflicted, and
       every one was resolved by preserving both sides' intent rather than by
       choosing a side wholesale:
