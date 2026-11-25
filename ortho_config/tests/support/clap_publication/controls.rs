@@ -9,13 +9,13 @@
 
 use anyhow::{Context, Result, ensure};
 use camino::{Utf8Path, Utf8PathBuf};
-use cargo_metadata::{NodeDep, Target};
+use cargo_metadata::{Metadata, Package, Target};
 
 use super::compare_count;
 use super::files::read_text;
 use super::identity::{
-    REVIEWED_ANSTYLE, REVIEWED_CLAP, REVIEWED_CLAP_BUILDER, edge_binds, verify_lock_edge,
-    verify_lock_identity, verify_lock_stage,
+    REVIEWED_ANSTYLE, REVIEWED_CLAP, REVIEWED_CLAP_BUILDER, resolved_dependency, verify_lock_edge,
+    verify_lock_identity, verify_lock_stage, verify_metadata_identity,
 };
 use super::library::unique_library_root;
 use super::lock::{Lockfile, select_unique};
@@ -257,28 +257,38 @@ fn changed_glob_checksum_is_refused_by_the_lock_stage() -> Result<()> {
     ensure_refusal(&error, "reviewed checksum")
 }
 
-/// A renamed graph edge is matched by its binding, not its package name.
+/// A renamed graph edge is resolved by its binding, not its package name.
 ///
-/// Cargo records the import binding in the edge name, so a rename must be
-/// reached under that binding while a different crate sharing the package name
-/// must not match it. The edges are deserialized because `NodeDep` is
-/// non-exhaustive.
+/// This drives the gate's own resolution path rather than the predicate beside
+/// it. The synthetic graph binds the name `anstyle` to a package called `other`
+/// and also carries an unreferenced package actually called `anstyle`, so
+/// resolution must select `other` and the identity check must refuse it as
+/// unreviewed. Reverting the edge match to the package name selects the decoy
+/// and fails the first assertion.
 #[test]
-fn renamed_edge_is_matched_by_its_binding() -> Result<()> {
-    let renamed: NodeDep = serde_json::from_str(
-        r#"{"name": "anstyle", "pkg": "other 1.0.0 (registry+x)", "dep_kinds": []}"#,
-    )?;
-    let rebound: NodeDep = serde_json::from_str(
-        r#"{"name": "renamed", "pkg": "anstyle 1.0.14 (registry+x)", "dep_kinds": []}"#,
-    )?;
+fn renamed_edge_resolves_through_its_binding() -> Result<()> {
+    let metadata: Metadata = serde_json::from_str(&read_fixture("metadata/renamed_edge.json")?)?;
+    let builder = find_package(&metadata, "clap_builder")?;
 
+    let selected = resolved_dependency(&metadata, builder, REVIEWED_ANSTYLE.name)?;
     ensure!(
-        edge_binds(&renamed, "anstyle"),
-        "the renamed edge should bind the requested name",
+        selected.name == "other",
+        "the binding should select the package it names, found {}",
+        selected.name,
     );
-    ensure!(
-        !edge_binds(&rebound, "anstyle"),
-        "an edge under another binding must not match the requested name",
-    );
-    Ok(())
+    let error = refusal(verify_metadata_identity(selected, &REVIEWED_ANSTYLE));
+    ensure_refusal(&error, "reviewed")
+}
+
+/// The one package in a synthetic graph with this name.
+fn find_package<'a>(metadata: &'a Metadata, name: &str) -> Result<&'a Package> {
+    let mut matches = metadata
+        .packages
+        .iter()
+        .filter(|package| package.name == name);
+    let found = matches
+        .next()
+        .with_context(|| format!("no {name} package"))?;
+    ensure!(matches.next().is_none(), "more than one {name} package");
+    Ok(found)
 }

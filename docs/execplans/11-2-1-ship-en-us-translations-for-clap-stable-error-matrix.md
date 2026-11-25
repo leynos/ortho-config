@@ -1816,6 +1816,19 @@ stopping and reporting.
       The full target passes 110 tests, Clippy is clean and CodeScene reports
       10.0.
 
+- [x] (2026-11-25) Round-46 driving the renamed-edge control through the gate's
+      resolution. The predicate test would have passed had `normal_dependency`
+      reverted to matching `package.name`, so the control now builds a
+      synthetic `Metadata` graph — kept as `metadata/renamed_edge.json`, since
+      the struct is non-exhaustive — in which the binding `anstyle` names a
+      package called `other` while an unreferenced package really is named
+      `anstyle`. `renamed_edge_resolves_through_its_binding` drives
+      `resolved_dependency`, requires `other` to be selected, and requires the
+      identity check to refuse it. A behavioural mutation adding
+      `&& package.name == name` to the matcher failed the control with "the
+      resolved graph has no normal anstyle dependency"; the file was restored
+      byte-identically under SHA-256. The full target passes 110 tests and
+      Clippy is clean.
 - [x] (2026-11-21) Round-22 conflict dispositions. Five paths conflicted, and
       every one was resolved by preserving both sides' intent rather than by
       choosing a side wholesale:
