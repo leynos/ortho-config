@@ -88,5 +88,11 @@ fn verified_lock(metadata: &Metadata, clap: &Package, builder: &Package) -> Resu
     let locked_builder = select_lock_package(lock.packages(), builder)?;
     verify_lock_identity(locked_clap, &REVIEWED_CLAP)?;
     verify_lock_identity(locked_builder, &REVIEWED_CLAP_BUILDER)?;
+    // The reviewed glob crate is pinned by the same lock checksum, so its
+    // contents are the ones a reviewer accepted rather than whatever the
+    // registry happens to serve.
+    let anstyle = resolved_dependency(metadata, builder, REVIEWED_ANSTYLE.name)?;
+    let locked_anstyle = select_lock_package(lock.packages(), anstyle)?;
+    verify_lock_identity(locked_anstyle, &REVIEWED_ANSTYLE)?;
     verify_lock_edge(locked_clap)
 }

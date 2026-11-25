@@ -14,10 +14,10 @@ use cargo_metadata::Target;
 use super::compare_count;
 use super::files::read_text;
 use super::identity::{
-    REVIEWED_CLAP, REVIEWED_CLAP_BUILDER, verify_lock_edge, verify_lock_identity,
+    REVIEWED_ANSTYLE, REVIEWED_CLAP, REVIEWED_CLAP_BUILDER, verify_lock_edge, verify_lock_identity,
 };
 use super::library::unique_library_root;
-use super::lock::{Lockfile, select_unique};
+use super::lock::{LockedPackage, Lockfile, select_unique};
 use super::source::count_error_kind_variants;
 use crate::clap_reviewed::CLAP_ERROR_KIND_COUNT;
 
@@ -229,4 +229,28 @@ fn two_library_targets_are_refused() -> Result<()> {
 
     let error = refusal(unique_library_root(&targets).map(|_| ()));
     ensure_refusal(&error, "2 library targets")
+}
+
+/// A changed checksum for the pinned glob crate is refused by the gate.
+///
+/// The reviewed artefact is trusted because its identity is pinned, so the
+/// comparison itself is exercised: only the checksum changes here, and the
+/// identity check must refuse it rather than pass on the name and version.
+#[test]
+fn changed_glob_checksum_is_refused() -> Result<()> {
+    let mut drifted = LockedPackage {
+        name: REVIEWED_ANSTYLE.name.to_owned(),
+        version: REVIEWED_ANSTYLE.version.to_owned(),
+        source: Some(REVIEWED_ANSTYLE.source.to_owned()),
+        checksum: Some(
+            "0000000000000000000000000000000000000000000000000000000000000000".to_owned(),
+        ),
+        dependencies: Vec::new(),
+    };
+
+    verify_lock_identity(&drifted, &REVIEWED_ANSTYLE)
+        .expect_err("a changed checksum must be refused");
+
+    drifted.checksum = Some(REVIEWED_ANSTYLE.checksum.to_owned());
+    verify_lock_identity(&drifted, &REVIEWED_ANSTYLE)
 }

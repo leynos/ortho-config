@@ -1787,6 +1787,15 @@ stopping and reporting.
       defence in depth, and the resolved `anstyle` 1.0.14 satisfies both. The
       full target passes 108 tests and Clippy is clean.
 
+- [x] (2026-11-25) Round-44 enforcing the checksum pin. The pin was recorded
+      but never compared: `verify_metadata_identity` checks name, version and
+      source only, and `verified_lock` compared lock checksums for `clap` and
+      `clap_builder` alone, so `REVIEWED_ANSTYLE.checksum` was unused. The glob
+      crate's lock entry is now selected from the dependency edge and checked
+      with `verify_lock_identity`, and a negative control
+      (`changed_glob_checksum_is_refused`) changes only the checksum and
+      requires the identity check to refuse it. The full target passes 109
+      tests, Clippy is clean and CodeScene reports 10.0.
 - [x] (2026-11-21) Round-22 conflict dispositions. Five paths conflicted, and
       every one was resolved by preserving both sides' intent rather than by
       choosing a side wholesale:
