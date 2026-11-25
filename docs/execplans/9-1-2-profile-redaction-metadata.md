@@ -1,6 +1,12 @@
 # Add profile redaction metadata (9.1.2)
 
-Status: COMPLETE — M1–M3 delivered; PR publication and review tracking follow
+Status: M1–M3 DELIVERED — one acceptance gate is open. Every ordinary gate
+except `make test` passes on this host, and `make test` times out in
+`cargo-orthohelp`'s trybuild child under shared compiler-admission pressure
+with no compiler diagnostic, so it is recorded as a timeout rather than a pass.
+Whether the hosted and `--no-fail-fast` evidence discharges that criterion is a
+maintainer decision, recorded under Progress (2026-11-24 and 2026-11-25); this
+plan does not claim the gate passed. PR publication and review tracking follow
 in the pull request.
 
 This execution plan is a living document. Keep Constraints, Tolerances, Risks,
