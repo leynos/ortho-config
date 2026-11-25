@@ -1774,6 +1774,19 @@ stopping and reporting.
       dry run` step failed on the previous head for reasons unrelated to this
       diff: the publish step is the known main-owned release-ordering blocker
       recorded as issue #414.
+
+- [x] (2026-11-25) Round-43 pinning the glob crate by identity. Two more
+      static-audit gaps were reported — a leading `::` on a dependency glob and
+      a symlinked dependency module — and each round of the static audit had
+      found one more shape it could not prove. No static audit of an arbitrary
+      crate can establish a negative about every shape it might contain, so the
+      trust is now made reviewable instead of unbounded: the glob's crate is
+      pinned by name, version, source and checksum in `REVIEWED_ANSTYLE`,
+      exactly as `clap` and `clap_builder` are. Any change to that crate's
+      contents fails the gate for review. The static audit stays as
+      defence in depth, and the resolved `anstyle` 1.0.14 satisfies both. The
+      full target passes 108 tests and Clippy is clean.
+
 - [x] (2026-11-21) Round-22 conflict dispositions. Five paths conflicted, and
       every one was resolved by preserving both sides' intent rather than by
       choosing a side wholesale:

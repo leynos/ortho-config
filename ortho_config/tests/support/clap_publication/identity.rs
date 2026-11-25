@@ -60,6 +60,21 @@ pub(crate) fn resolved_dependency<'a>(
     normal_dependency(metadata, node, name)
 }
 
+/// The reviewed crate behind the source's one external glob.
+///
+/// The gate trusts `clap_builder`'s `pub use anstyle::*;`, so the crate that
+/// name resolves to is pinned here exactly as `clap` and `clap_builder` are: a
+/// version or checksum change fails the gate until a maintainer reviews the new
+/// contents. That is what makes the trust reviewable — no static audit of an
+/// arbitrary crate can prove a negative about every shape it might contain, but
+/// a pinned checksum makes any change visible.
+pub(crate) const REVIEWED_ANSTYLE: ReviewedPackage = ReviewedPackage {
+    name: "anstyle",
+    version: "1.0.14",
+    source: "registry+https://github.com/rust-lang/crates.io-index",
+    checksum: "940b3a0ca603d1eade50a4846a2afffd5ef57a9feac2c0e2ec2e14f9ead76000",
+};
+
 /// The facade crate whose production dependency selects `clap`.
 const FACADE_PACKAGE: &str = "ortho_config";
 

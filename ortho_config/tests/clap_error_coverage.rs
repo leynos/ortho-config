@@ -22,9 +22,9 @@ use anyhow::Result;
 use camino::Utf8Path;
 use cargo_metadata::{Metadata, Package};
 use clap_publication::{
-    Lockfile, REVIEWED_CLAP, REVIEWED_CLAP_BUILDER, REVIEWED_EXTERNAL_GLOBS, compare_count,
-    count_resolved_error_kinds, load_metadata, ortho_config_package, read_text, resolved_clap,
-    resolved_clap_builder, resolved_dependency, reviewed_glob_supplies_no_inventory,
+    Lockfile, REVIEWED_ANSTYLE, REVIEWED_CLAP, REVIEWED_CLAP_BUILDER, REVIEWED_EXTERNAL_GLOBS,
+    compare_count, count_resolved_error_kinds, load_metadata, ortho_config_package, read_text,
+    resolved_clap, resolved_clap_builder, resolved_dependency, reviewed_glob_supplies_no_inventory,
     select_lock_package, verify_lock_edge, verify_lock_identity, verify_metadata_identity,
 };
 
@@ -62,6 +62,9 @@ fn verified_inventory(metadata: &Metadata) -> Result<usize> {
 fn verified_reviewed_globs(metadata: &Metadata, builder: &Package) -> Result<()> {
     for name in REVIEWED_EXTERNAL_GLOBS {
         let package = resolved_dependency(metadata, builder, name)?;
+        // The crate is pinned by identity, so any change to its contents fails
+        // the gate for review rather than passing an unbounded static audit.
+        verify_metadata_identity(package, &REVIEWED_ANSTYLE)?;
         reviewed_glob_supplies_no_inventory(package)?;
     }
     Ok(())
