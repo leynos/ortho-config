@@ -160,7 +160,7 @@ pub(super) fn collect_crate_facts(
                 }
             }
             Item::Mod(module) => {
-                modules.insert(module.ident.to_string());
+                modules.insert(identifier_name(&module.ident));
                 if let Some((_, nested)) = &module.content {
                     collect_crate_facts(nested, names, modules, imports);
                 }

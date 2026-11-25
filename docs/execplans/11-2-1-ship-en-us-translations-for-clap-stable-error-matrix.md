@@ -1669,6 +1669,16 @@ stopping and reporting.
       `pub use anstyle::*;` still counts. The full target passes 104 tests and
       Clippy is clean.
 
+- [x] (2026-11-25) Round-34 normalizing a module's name where it is collected.
+      The collectors stored `module.ident.to_string()`, which keeps an `r#`
+      prefix, while path comparisons normalized through `identifier_name`. A
+      `mod r#anstyle` therefore evaded both the local-module check and the
+      reviewed-glob check. Both collectors now normalize with the same helper
+      the comparisons use, so one rule lives in one place. The
+      `module_tree/raw_local_module_glob` decoy is refused, the plain
+      local-module control still fails, and the real `pub use anstyle::*;`
+      still counts. The full target passes 105 tests and Clippy is clean.
+
 - [x] (2026-11-21) Round-22 conflict dispositions. Five paths conflicted, and
       every one was resolved by preserving both sides' intent rather than by
       choosing a side wholesale:

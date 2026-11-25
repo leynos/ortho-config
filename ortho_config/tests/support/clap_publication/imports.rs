@@ -64,7 +64,7 @@ impl Imports {
             match item {
                 Item::Use(declaration) => imports.add_tree(&declaration.tree, None),
                 Item::Mod(module) => {
-                    imports.modules.insert(module.ident.to_string());
+                    imports.modules.insert(identifier_name(&module.ident));
                 }
                 _ => {}
             }
@@ -221,7 +221,7 @@ impl CrateScope {
             .items
             .iter()
             .filter_map(|item| match item {
-                Item::Mod(module) => Some(module.ident.to_string()),
+                Item::Mod(module) => Some(identifier_name(&module.ident)),
                 _ => None,
             })
             .collect();
