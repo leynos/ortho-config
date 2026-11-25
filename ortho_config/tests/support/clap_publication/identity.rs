@@ -260,7 +260,12 @@ fn normal_dependency<'a>(metadata: &'a Metadata, node: &Node, name: &str) -> Res
     let mut matches = Vec::new();
     for dependency in &node.deps {
         let package = dependency_package(metadata, dependency)?;
-        if package.name == name {
+        // Cargo records the import binding in the edge name, so a renamed
+        // dependency is reached under its binding while `package.name` stays
+        // the underlying package. Matching the package alone would miss a
+        // `anstyle = { package = "…" }` rename and could match a different
+        // crate that happens to share the package name.
+        if dependency.name == name {
             ensure!(
                 has_only_normal_kinds(dependency),
                 "the {name} edge is not a normal dependency: {:?}",

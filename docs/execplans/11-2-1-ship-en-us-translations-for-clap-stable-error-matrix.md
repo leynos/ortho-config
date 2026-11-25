@@ -1721,6 +1721,21 @@ stopping and reporting.
       `anstyle` 1.0.14 declares no `ErrorKind`, so the real source still counts
       17, and the property is now established rather than assumed. CodeScene
       reports 10.0 for the three touched modules.
+
+- [x] (2026-11-25) Round-39 completing the export audit. Two findings: the
+      audit read only file-level items and treated every glob leaf as safe, so a
+      nested `pub enum ErrorKind` re-exported through a glob was invisible; and
+      `normal_dependency` matched `package.name` rather than the edge's
+      `NodeDep.name`, which is the import binding Cargo records, so a renamed
+      dependency would be missed. The walk now descends inline modules and reads
+      `macro_rules!` transcriptions, treats a glob as unproven unless it
+      re-exports a sibling module the file declares (the reviewed `anstyle`
+      shape) or reaches `crate`/`self`/`super`, and matches the edge by its
+      binding name. The audit moved to a colocated `glob_exports.rs` (160 lines)
+      so `source.rs` stays under the cap and each file has one concern. The real
+      `anstyle` 1.0.14 passes the stricter walk, the full target passes 108
+      tests, and CodeScene reports 10.0 for all three modules.
+
 - [x] (2026-11-21) Round-22 conflict dispositions. Five paths conflicted, and
       every one was resolved by preserving both sides' intent rather than by
       choosing a side wholesale:

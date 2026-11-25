@@ -68,61 +68,6 @@ pub(crate) fn count_resolved_error_kinds(package: &Package) -> Result<usize> {
     count_error_kinds_from(source_root, Utf8Path::new(name))
 }
 
-/// Whether a reviewed glob's crate declares the inventory name at all.
-///
-/// The gate trusts a glob rooted at a reviewed crate because that crate's `*`
-/// cannot supply an inventory the walk never counts. Taking the spelling on
-/// trust is what earlier rounds kept finding holes in, so the property is
-/// checked: resolve the reviewed crate from the same graph and refuse the gate
-/// if any of its names is `ErrorKind`, at any depth.
-pub(crate) fn reviewed_glob_supplies_no_inventory(package: &Package) -> Result<()> {
-    let crate_root = library_crate_root(package)?;
-    let (Some(source_root), Some(name)) = (crate_root.parent(), crate_root.file_name()) else {
-        bail!("{crate_root} should sit in a source directory and name a file");
-    };
-    let directory = Dir::open_ambient_dir(source_root, ambient_authority())
-        .with_context(|| format!("open {source_root} to audit {} exports", package.name))?;
-    let sources = rust_sources(&directory, Utf8Path::new(""))?;
-    let parsed = parse_sources(&directory, source_root, &sources)?;
-    for (relative, file) in &parsed {
-        if file_mentions_error_kind(&file.items) {
-            bail!(
-                "the reviewed glob crate {} declares `ErrorKind` in {relative}, so its glob can \
-                 supply an inventory the count never certifies",
-                package.name,
-            );
-        }
-    }
-    let _ = name;
-    Ok(())
-}
-
-/// Whether any top-level item of one file names `ErrorKind` as a declaration.
-fn file_mentions_error_kind(items: &[Item]) -> bool {
-    items.iter().any(|item| match item {
-        Item::Enum(definition) => is_error_kind_name(&definition.ident),
-        Item::Struct(item_struct) => is_error_kind_name(&item_struct.ident),
-        Item::Union(union) => is_error_kind_name(&union.ident),
-        Item::Type(alias) => is_error_kind_name(&alias.ident),
-        Item::Trait(trait_item) => is_error_kind_name(&trait_item.ident),
-        Item::Use(declaration) => written_use_binds_error_kind(&declaration.tree),
-        _ => false,
-    })
-}
-
-/// Whether one `use` tree names `ErrorKind` at any leaf.
-fn written_use_binds_error_kind(tree: &syn::UseTree) -> bool {
-    match tree {
-        syn::UseTree::Name(name) => is_error_kind_name(&name.ident),
-        syn::UseTree::Rename(rename) => {
-            is_error_kind_name(&rename.ident) || is_error_kind_name(&rename.rename)
-        }
-        syn::UseTree::Path(path) => written_use_binds_error_kind(&path.tree),
-        syn::UseTree::Group(group) => group.items.iter().any(written_use_binds_error_kind),
-        syn::UseTree::Glob(_) => false,
-    }
-}
-
 /// Count the `ErrorKind` variants declared by a source tree rooted at `root`.
 ///
 /// The fixture controls use this directly, so a committed tree can prove each
@@ -184,7 +129,7 @@ pub(super) fn count_error_kind_variants(source: &str, origin: &Utf8Path) -> Resu
 /// a glob that re-exports a macro declared elsewhere in the crate is not
 /// mistaken for one that could import an unknown name. Parsing once also keeps
 /// the later audit from reading the tree twice.
-fn parse_sources(
+pub(super) fn parse_sources(
     directory: &Dir,
     source_root: &Utf8Path,
     sources: &[Utf8PathBuf],
@@ -220,7 +165,7 @@ fn crate_scope_of<'a>(files: impl IntoIterator<Item = &'a syn::File>) -> CrateSc
 }
 
 /// Every `.rs` file below `directory`, as paths relative to the root.
-fn rust_sources(directory: &Dir, prefix: &Utf8Path) -> Result<Vec<Utf8PathBuf>> {
+pub(super) fn rust_sources(directory: &Dir, prefix: &Utf8Path) -> Result<Vec<Utf8PathBuf>> {
     let mut sources = Vec::new();
     collect_sources(directory, prefix, &mut sources)?;
     sources.sort();
