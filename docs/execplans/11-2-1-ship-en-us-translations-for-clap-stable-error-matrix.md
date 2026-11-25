@@ -1700,6 +1700,17 @@ stopping and reporting.
       passes 106 tests, with the real-source test passing on its own once the
       host's `cargo metadata` contention cleared.
 
+- [x] (2026-11-25) Round-37 requiring every leaf of a reviewed group to be
+      reviewed. `written_paths` reports only the leaves it can render, so
+      `pub use crate::{error::ErrorKind, helper::*};` passed the allow-list on
+      its reviewed leaf while the glob supplied another crate's inventory. A
+      group is now reviewed only when its total leaf count equals the number of
+      rendered paths and every one is reviewed, so a glob or rename beside a
+      reviewed path fails closed. The
+      `module_tree/grouped_foreign_glob` decoy is refused and the reviewed
+      `crate::error::ErrorKind` control still counts. The full target passes 108
+      tests and CodeScene reports 10.0.
+
 - [x] (2026-11-21) Round-22 conflict dispositions. Five paths conflicted, and
       every one was resolved by preserving both sides' intent rather than by
       choosing a side wholesale:

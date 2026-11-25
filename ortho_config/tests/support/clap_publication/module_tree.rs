@@ -234,6 +234,9 @@ fn unconditional_module_chain_is_counted() -> Result<()> {
 #[case::nested_local_glob("nested_local_glob", "cannot trace to the declaration it counts")]
 // The same depth rule covers an explicit inventory leaf, not only a glob.
 #[case::nested_local_path("nested_local_path", "cannot trace to the declaration it counts")]
+// A reviewed path grouped with a foreign glob passes an allow-list check that
+// reads only the reviewed leaf, so every leaf of a group has to be reviewed.
+#[case::grouped_foreign_glob("grouped_foreign_glob", "cannot trace to the declaration it counts")]
 // A condition the gate cannot evaluate does not exempt the alias shape.
 #[case::conditional_alias("conditional_alias", "as something other than the counted enum")]
 // A tree without a reported crate root is refused rather than guessed at.

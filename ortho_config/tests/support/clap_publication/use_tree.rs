@@ -213,14 +213,26 @@ fn deep_local_leaf(walk: &PathWalk<'_>, leaf: &str) -> Option<Binding> {
 /// exact path the source uses rather than against any resolution the walk
 /// would have to reproduce.
 fn is_reviewed_crate_binding(tree: &syn::UseTree) -> bool {
-    // Only a tree whose leaves all reach a reviewed path is reviewed; a group
-    // carrying one reviewed and one unreviewed path is not.
+    // Every leaf has to be a reviewed path. `written_paths` reports only the
+    // name leaves it can render, so a group carrying a reviewed path beside a
+    // glob or a rename would otherwise pass on its reviewed leaf alone; the
+    // leaf count catches that.
     let paths = written_paths(tree);
     !paths.is_empty()
+        && leaf_count(tree) == paths.len()
         && paths.iter().all(|path| {
             let names: Vec<&str> = path.iter().map(String::as_str).collect();
             REVIEWED_CRATE_BINDINGS.contains(&names.as_slice())
         })
+}
+
+/// How many leaves one `use` tree has, counting globs and renames too.
+fn leaf_count(tree: &syn::UseTree) -> usize {
+    match tree {
+        syn::UseTree::Path(path) => leaf_count(&path.tree),
+        syn::UseTree::Group(group) => group.items.iter().map(leaf_count).sum(),
+        syn::UseTree::Name(_) | syn::UseTree::Rename(_) | syn::UseTree::Glob(_) => 1,
+    }
 }
 
 /// Every complete path one `use` tree writes, with names normalized.
