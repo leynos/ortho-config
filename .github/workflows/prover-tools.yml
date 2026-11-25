@@ -29,7 +29,7 @@ on:
 # A superseded pull-request run has nothing left to teach, so cancel it. A
 # dispatch or scheduled run has no successor and always completes.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # Default the token to no scopes; the job opts in explicitly.
