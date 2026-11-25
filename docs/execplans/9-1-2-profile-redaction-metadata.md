@@ -1421,6 +1421,26 @@ that substitution discharges the plan's `make test` acceptance criterion — is
 recorded here as open rather than answered by this agent, because accepting
 substitute evidence for a defined gate is the maintainer's call.
 
+2026-11-25, third replay and final certificate: `main` advanced to `e0835640`
+(#742, #743, #744 — the shared PR-comment workflow, the spelling gate's Python
+3.14, and the lading pin), and the replay completed with no conflicts. At
+`ba695a33`, every gate other than `make test` passes on this host in one
+sequential run: `check-fmt`, `markdownlint` (with the spelling gate), `nixie`,
+`lint-clippy`, `lint-whitaker`, `docstring-coverage` (1065 items, 100%),
+`verus` (27 verified, 0 errors), `cargo test --workspace --doc --all-features`
+(10 doctest suites, 0 failures), `test-workflow-contracts`, `msrv-build` and
+the Makefile's pytest recipe (128 passed, 5 skipped). Hosted CI is green at the
+same head.
+
+`make test` alone remains a timeout: `cargo-orthohelp`'s
+`must_use_compile_tests` exhausts its 900 s trybuild child budget under this
+host's shared four-slot compiler admission, with zero rustc or clippy
+diagnostics, across six attempts including one whose scratch tree a prior run
+of that target had warmed. The same target and the `ortho_l10n` boundary suite
+pass in both hosted `build-test` legs at this head, and a local
+`--no-fail-fast` workspace run passed 121 binaries with no failures. The
+acceptance question above therefore stands unchanged and explicitly open.
+
 2026-11-22, replayed again: `main` advanced to `c4377e48` (#433 bounded IR
 cache reads, #724 phrase-checker bump) while the assessments were running, and
 the second replay completed with no conflicts. Two review findings were then
