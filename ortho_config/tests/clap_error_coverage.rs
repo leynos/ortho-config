@@ -22,8 +22,9 @@ use anyhow::Result;
 use camino::Utf8Path;
 use cargo_metadata::{Metadata, Package};
 use clap_publication::{
-    Lockfile, REVIEWED_CLAP, REVIEWED_CLAP_BUILDER, compare_count, count_resolved_error_kinds,
-    load_metadata, ortho_config_package, read_text, resolved_clap, resolved_clap_builder,
+    Lockfile, REVIEWED_CLAP, REVIEWED_CLAP_BUILDER, REVIEWED_EXTERNAL_GLOBS, compare_count,
+    count_resolved_error_kinds, load_metadata, ortho_config_package, read_text, resolved_clap,
+    resolved_clap_builder, resolved_dependency, reviewed_glob_supplies_no_inventory,
     select_lock_package, verify_lock_edge, verify_lock_identity, verify_metadata_identity,
 };
 
@@ -49,7 +50,21 @@ fn resolved_clap_builder_inventory_matches_the_reviewed_total() -> Result<()> {
 fn verified_inventory(metadata: &Metadata) -> Result<usize> {
     let (clap, builder) = verified_metadata(metadata)?;
     verified_lock(metadata, clap, builder)?;
+    verified_reviewed_globs(metadata, builder)?;
     count_resolved_error_kinds(builder)
+}
+
+/// Verify every reviewed glob's crate cannot supply an uncounted inventory.
+///
+/// The classifier trusts a glob rooted at a reviewed crate, so the property it
+/// relies on is checked rather than assumed: each reviewed crate is resolved
+/// from this graph and refused if it declares the inventory name at all.
+fn verified_reviewed_globs(metadata: &Metadata, builder: &Package) -> Result<()> {
+    for name in REVIEWED_EXTERNAL_GLOBS {
+        let package = resolved_dependency(metadata, builder, name)?;
+        reviewed_glob_supplies_no_inventory(package)?;
+    }
+    Ok(())
 }
 
 /// Resolve `clap` and `clap_builder` and verify both metadata identities.

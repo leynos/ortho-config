@@ -109,7 +109,7 @@ const REVIEWED_CRATE_BINDINGS: [&[&str]; 1] = [&["crate", "error", "ErrorKind"]]
 /// because it can supply an inventory this walk never reads, so the list is
 /// closed: an upstream release that adds one fails the gate until a maintainer
 /// reviews what the new crate exports.
-const REVIEWED_EXTERNAL_GLOBS: [&str; 1] = ["anstyle"];
+pub(crate) const REVIEWED_EXTERNAL_GLOBS: [&str; 1] = ["anstyle"];
 
 /// The state one `use` tree's walk carries from segment to segment.
 #[derive(Clone, Copy)]

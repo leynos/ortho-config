@@ -46,6 +46,20 @@ pub(crate) const REVIEWED_CLAP_BUILDER: ReviewedPackage = ReviewedPackage {
     checksum: "ec0797fb7aeb1406c84efac526901f7ec3ead2124f946b494e72879d4b54704d",
 };
 
+/// Resolve a direct normal dependency of `builder` by name.
+///
+/// The reviewed external glob needs this: the gate trusts a glob rooted at
+/// `anstyle`, so it has to establish that the crate that root names is the one
+/// the reviewed graph resolves, rather than take the spelling on trust.
+pub(crate) fn resolved_dependency<'a>(
+    metadata: &'a Metadata,
+    builder: &Package,
+    name: &str,
+) -> Result<&'a Package> {
+    let node = resolve_node(metadata, builder)?;
+    normal_dependency(metadata, node, name)
+}
+
 /// The facade crate whose production dependency selects `clap`.
 const FACADE_PACKAGE: &str = "ortho_config";
 
@@ -284,6 +298,6 @@ fn has_only_normal_kinds(dependency: &NodeDep) -> bool {
 }
 
 /// The package's source identity as metadata reports it.
-fn metadata_source(package: &Package) -> Option<String> {
+pub(crate) fn metadata_source(package: &Package) -> Option<String> {
     package.source.as_ref().map(ToString::to_string)
 }

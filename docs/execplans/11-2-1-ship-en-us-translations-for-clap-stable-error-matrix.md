@@ -1711,6 +1711,16 @@ stopping and reporting.
       `crate::error::ErrorKind` control still counts. The full target passes 108
       tests and CodeScene reports 10.0.
 
+- [x] (2026-11-25) Round-38 verifying the reviewed glob's own crate. The gate
+      trusted a glob rooted at `anstyle` on its spelling without checking the
+      crate it names. Rather than assert that `anstyle` exports no inventory,
+      the gate now resolves each reviewed glob crate from the same graph and
+      refuses it if any of its names is `ErrorKind`, at any depth:
+      `reviewed_glob_supplies_no_inventory` walks the resolved crate's sources
+      and `verified_reviewed_globs` wires it into the main test. The resolved
+      `anstyle` 1.0.14 declares no `ErrorKind`, so the real source still counts
+      17, and the property is now established rather than assumed. CodeScene
+      reports 10.0 for the three touched modules.
 - [x] (2026-11-21) Round-22 conflict dispositions. Five paths conflicted, and
       every one was resolved by preserving both sides' intent rather than by
       choosing a side wholesale:
