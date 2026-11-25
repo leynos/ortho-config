@@ -113,7 +113,7 @@ CV005_CONTRACTS = $(UV_ENV) $(UV) tool run --python 3.13 \
 # binary and owns the shared dictionary, so CI consumes it through the
 # spellcheck target and the Makefile and CI cannot drift apart.
 TYPOS_CONFIG_BUILDER_VERSION ?= v0.1.4
-TYPOS_CONFIG_BUILDER = $(UV_ENV) $(UV) tool run --from \
+TYPOS_CONFIG_BUILDER = $(UV_ENV) $(UV) tool run --python 3.14 --from \
 	"git+https://github.com/leynos/typos-config-builder.git@$(TYPOS_CONFIG_BUILDER_VERSION)" \
 	typos-config-builder
 PUBLISH_CHECK_FLAGS ?=
