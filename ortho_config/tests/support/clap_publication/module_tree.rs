@@ -211,15 +211,18 @@ fn unconditional_module_chain_is_counted() -> Result<()> {
 )]
 // A reviewed glob root spelled the same as an alias reaches another crate.
 #[case::aliased_glob("aliased_glob", "cannot trace to the declaration it counts")]
-// A `crate::` segment resolves in the crate root's scope, so a module nested
-// elsewhere cannot make it local.
-#[case::nested_module_collision(
-    "nested_module_collision",
+// An `extern crate … as` alias borrows a reviewed glob root for another crate,
+// so the alias route has its own control beside the `use`-alias one.
+#[case::extern_crate_aliased_glob(
+    "extern_crate_aliased_glob",
     "cannot trace to the declaration it counts"
 )]
-// A reviewed glob root spelled the same as a local alias reaches another
-// crate, so the spelling alone is not enough to trust it.
-#[case::aliased_glob("aliased_glob", "cannot trace to the declaration it counts")]
+// The reviewed `crate::` path is trusted only when its first segment after
+// `crate` is a module the crate root declares, not an alias for another crate.
+#[case::aliased_module_segment(
+    "aliased_module_segment",
+    "cannot trace to the declaration it counts"
+)]
 // A condition the gate cannot evaluate does not exempt the alias shape.
 #[case::conditional_alias("conditional_alias", "as something other than the counted enum")]
 // A tree without a reported crate root is refused rather than guessed at.

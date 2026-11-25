@@ -41,7 +41,7 @@ pub(super) fn binds_unproven_inventory(
     scope: &CrateScope,
     imports: &Imports,
 ) -> bool {
-    if is_reviewed_crate_path(tree, is_absolute) {
+    if is_reviewed_crate_path(tree, is_absolute, scope) {
         return false;
     }
     if is_unreviewed_crate_path(tree, is_absolute) {
@@ -63,8 +63,15 @@ fn is_unreviewed_crate_path(tree: &syn::UseTree, is_absolute: bool) -> bool {
 }
 
 /// Whether one `use` tree is a reviewed `crate::` binding of the name.
-fn is_reviewed_crate_path(tree: &syn::UseTree, is_absolute: bool) -> bool {
-    is_unreviewed_crate_path(tree, is_absolute) && is_reviewed_crate_binding(tree)
+///
+/// The reviewed spelling alone is not enough: `pub use std::io as error;` binds
+/// the reviewed path's first segment to another crate, so `crate::error::
+/// ErrorKind` then matches the spelling while exporting a different inventory.
+/// The path is trusted only when the crate root declares `error` as a module.
+fn is_reviewed_crate_path(tree: &syn::UseTree, is_absolute: bool, scope: &CrateScope) -> bool {
+    is_unreviewed_crate_path(tree, is_absolute)
+        && is_reviewed_crate_binding(tree)
+        && scope.root_declares_module("error")
 }
 
 /// Whether one `use` tree binds the inventory name anywhere in it.

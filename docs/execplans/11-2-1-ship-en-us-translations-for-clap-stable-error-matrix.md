@@ -1640,6 +1640,25 @@ stopping and reporting.
         `aliased_glob`; the full target passes 103 tests, and CodeScene reports
         10.0 after the predicate was split rather than nested.
 
+- [x] (2026-11-25) Round-32 binding the reviewed path's own segments. The next
+      assessment found that the reviewed spelling was trusted before its
+      segments were resolved: `pub use std::io as error;` makes
+      `crate::error::ErrorKind` match the reviewed path while exporting
+      `std::io::ErrorKind`. The reviewed path is now trusted only when the crate
+      root declares its first segment as a module, so an alias voids it. The new
+      `module_tree/aliased_module_segment` decoy is refused and the real
+      `use crate::error::ErrorKind;` is still counted.
+      - The `extern crate … as` collection had no control of its own: the
+        `aliased_glob` fixture used `use`, and the table registered both new
+        fixtures twice from an earlier insertion. The duplicate registrations
+        are replaced by a distinct `extern_crate_aliased_glob` fixture using
+        `extern crate std as anstyle;` beside `pub use anstyle::io::*;`, and the
+        `use`-alias control is retained.
+      - The 424-line `bindings.rs` was split into `bindings.rs` (154 lines) and
+        a colocated `use_tree.rs` (296 lines); both are under the 400-line cap.
+      - The full target passes 103 tests, Clippy is clean, and CodeScene
+        reports 10.0 for both modules.
+
 - [x] (2026-11-21) Round-22 conflict dispositions. Five paths conflicted, and
       every one was resolved by preserving both sides' intent rather than by
       choosing a side wholesale:
