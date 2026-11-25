@@ -133,7 +133,7 @@ PYTEST_FLAGS ?= --doctest-modules scripts/bump_version.py scripts/discard_build_
 LADING_REF ?= f2a24c51a59783318f76182053ade0ed1e1cd329
 # lading 0.4 requires CPython 3.14 or later, so the interpreter is named
 # rather than left to whatever `uv` finds first on the runner.
-LADING ?= uvx --python 3.14 --from git+https://github.com/leynos/lading@$(LADING_REF) lading
+LADING ?= uvx --python cpython@3.14 --from git+https://github.com/leynos/lading@$(LADING_REF) lading
 POWERSHELL ?= pwsh
 
 # The shared package has a separate Python 3.14 requirement. Keep its isolated
