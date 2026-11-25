@@ -73,6 +73,11 @@ const SIMPLE_RUNS: &[SimpleRun] = &[
         stdout: "verbose=true\n",
     },
     SimpleRun {
+        id: "guide-localization-isolation",
+        args: &[],
+        stdout: "error: Missing required argument: <PATH>\n",
+    },
+    SimpleRun {
         id: "guide-hermetic-discovery",
         args: &[],
         stdout: "candidate=/srv/acme/server.toml\n",

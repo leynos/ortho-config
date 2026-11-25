@@ -1338,6 +1338,70 @@ identifiers must use an explicit root rather than the binary name. Missing
 translations fall back to the original `clap` text and emit a warning event, so
 users still receive a useful error.
 
+### Remove Unicode isolation marks from localized output
+
+Fluent isolates interpolated values with two invisible characters: U+2068 FIRST
+STRONG ISOLATE and U+2069 POP DIRECTIONAL ISOLATE. A localized missing-argument
+error therefore carries a mark on each side of the interpolated value, where
+unlocalized copy has none. The marks keep right-to-left substitutions in the
+intended order inside left-to-right copy, but they also cause trouble:
+
+- some terminals, fonts, and log viewers draw them as boxes or question marks;
+- they defeat `grep`, exact string comparison, and snapshot assertions on
+  diagnostics;
+- they travel into captured logs and continuous integration output.
+
+`FluentLocalizerBuilder::with_use_isolating(false)` removes the marks from both
+the consumer catalogue and the embedded defaults, so the built-in clap error
+copy loses them too. Leaving the setting unset keeps Fluent's `true` default
+and therefore today's output:
+
+<!-- tested-example: guide-localization-isolation -->
+```rust
+use clap::{ColorChoice, CommandFactory, Parser};
+use ortho_config::{
+    FluentLocalizer, LocalizeCmd, NoOpLocalizer, langid, localize_clap_error,
+};
+
+#[derive(Debug, Parser)]
+#[command(name = "acme", bin_name = "acme", color = ColorChoice::Never)]
+struct Cli {
+    /// File to read.
+    path: String,
+}
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let localizer = FluentLocalizer::builder(langid!("en-US"))
+        .with_use_isolating(false)
+        .try_build()?;
+
+    let command = Cli::command().localize(&NoOpLocalizer::new());
+    let error = match command.try_get_matches_from(["acme"]) {
+        Ok(_) => return Err("the required positional should be missing".into()),
+        Err(error) => error,
+    };
+    let message = localize_clap_error(error, &localizer).to_string();
+    let first_line = message
+        .lines()
+        .next()
+        .ok_or("the localized error should have a message line")?;
+    println!("{first_line}");
+    Ok(())
+}
+```
+
+The program prints the first line of the localized error:
+
+<!-- tested-example: guide-localization-isolation-output -->
+```plaintext
+error: Missing required argument: <PATH>
+```
+
+Isolation protects right-to-left values, so weigh the risk before disabling it:
+a catalogue that interpolates right-to-left text into left-to-right copy may
+render in the wrong visual order without the marks. The option controls one
+Fluent formatting setting and is not general bidirectional sanitization.
+
 ### Use the generated message identifiers
 
 Derived configurations implement `OrthoConfigLocalization`. Refer to Fluent
