@@ -18,6 +18,7 @@ use syn::Item;
 use super::audit::is_error_kind_name;
 use super::library::library_crate_root;
 use super::source::{parse_sources, rust_sources};
+use super::tokens::identifier_name;
 
 /// Whether a reviewed glob's crate declares the inventory name at all.
 ///
@@ -80,7 +81,7 @@ fn unproven_item(item: &Item, items: &[Item]) -> Option<&'static str> {
         Item::Use(declaration) if unproven_glob(&declaration.tree, items) => {
             Some(" a glob re-export")
         }
-        Item::Macro(invocation) if macro_may_produce_inventory(invocation) => {
+        Item::Macro(invocation) if macro_may_produce_inventory(invocation, items) => {
             Some(" an item-producing macro")
         }
         _ => None,
@@ -101,9 +102,44 @@ fn names_inventory(ident: &syn::Ident) -> Option<&'static str> {
 /// A `macro_rules!` body can only produce what its own tokens spell, so the
 /// transcription is read for the name; `include!` splices a file the walk never
 /// opens, so it is unproven whatever its argument.
-fn macro_may_produce_inventory(invocation: &syn::ItemMacro) -> bool {
-    invocation.mac.path.is_ident("include")
+fn macro_may_produce_inventory(invocation: &syn::ItemMacro, items: &[Item]) -> bool {
+    // A `macro_rules!` definition declares nothing at item level; only a call
+    // to it can.
+    if invocation.mac.path.is_ident("macro_rules") {
+        return false;
+    }
+    // `include!` splices a file this walk never opens, so it is unproven
+    // whatever its argument. Any other item macro is unproven unless a
+    // `macro_rules!` of the same name is declared here and its whole
+    // transcription — including a wrapper that re-emits another macro — spells
+    // no `ErrorKind` and calls nothing this walk cannot read.
+    if invocation.mac.path.is_ident("include")
         || invocation.mac.tokens.to_string().contains("ErrorKind")
+    {
+        return true;
+    }
+    local_transcription(items, &invocation.mac.path)
+        .is_none_or(|tokens| transcription_is_unproven(&tokens))
+}
+
+/// The tokens of a local `macro_rules!` definition with this name, if any.
+fn local_transcription(items: &[Item], path: &syn::Path) -> Option<String> {
+    let name = path.get_ident()?;
+    items.iter().find_map(|item| {
+        let Item::Macro(definition) = item else {
+            return None;
+        };
+        if !definition.mac.path.is_ident("macro_rules") {
+            return None;
+        }
+        let tokens = definition.mac.tokens.to_string();
+        tokens.starts_with(&name.to_string()).then_some(tokens)
+    })
+}
+
+/// Whether a local transcription's tokens can reach an unproven shape.
+fn transcription_is_unproven(tokens: &str) -> bool {
+    tokens.contains("ErrorKind") || tokens.contains("include") || tokens.contains("!(")
 }
 
 /// Join one inline module name onto the path of its enclosing modules.
@@ -130,20 +166,28 @@ fn in_place(prefix: &str) -> String {
 /// reads that module's own source next. Anything else — a deeper path, an
 /// external crate, or a glob inside a group — is unproven.
 fn unproven_glob(tree: &syn::UseTree, items: &[Item]) -> bool {
-    let syn::UseTree::Path(path) = tree else {
-        return matches!(tree, syn::UseTree::Glob(_));
-    };
-    let syn::UseTree::Glob(_) = &*path.tree else {
-        return matches!(tree, syn::UseTree::Group(_) | syn::UseTree::Glob(_));
-    };
-    // `super`, `self` and `crate` reach only modules this walk already reads.
-    if matches!(path.ident.to_string().as_str(), "crate" | "self" | "super") {
-        return false;
+    match tree {
+        syn::UseTree::Glob(_) | syn::UseTree::Group(_) => true,
+        syn::UseTree::Rename(_) | syn::UseTree::Name(_) => false,
+        syn::UseTree::Path(path) => {
+            let root = identifier_name(&path.ident);
+            // `super`, `self` and `crate` reach only modules this walk reads.
+            if matches!(root.as_str(), "crate" | "self" | "super") {
+                return false;
+            }
+            // A sibling-module glob carries only names read from that module's
+            // own source, which is the reviewed `anstyle` shape.
+            let is_sibling = matches!(&*path.tree, syn::UseTree::Glob(_));
+            !(is_sibling && declares_module(items, &root))
+        }
     }
-    let declared = items
+}
+
+/// Whether one item list declares a module with this name.
+fn declares_module(items: &[Item], name: &str) -> bool {
+    items
         .iter()
-        .any(|item| matches!(item, Item::Mod(module) if module.ident == path.ident));
-    !declared
+        .any(|item| matches!(item, Item::Mod(module) if identifier_name(&module.ident) == name))
 }
 
 /// Whether one `use` tree names `ErrorKind` at any leaf.

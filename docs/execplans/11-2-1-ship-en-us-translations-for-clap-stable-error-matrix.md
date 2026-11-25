@@ -1736,6 +1736,17 @@ stopping and reporting.
       `anstyle` 1.0.14 passes the stricter walk, the full target passes 108
       tests, and CodeScene reports 10.0 for all three modules.
 
+- [x] (2026-11-25) Round-40 judging a dependency glob by its whole root, and a
+      local macro by its transcription. Two more shapes: the glob rule inspected
+      only one path segment, so `pub use std::io::*;` slipped through, and the
+      macro rule only saw a literal `include!` or `ErrorKind`, so a wrapper
+      macro re-emitting `include!("hidden.inc")` slipped through. A glob is now
+      judged by the root it writes and is unproven unless that root is a sibling
+      module the file declares or `crate`/`self`/`super`; an item macro is
+      unproven unless a local `macro_rules!` of that name transcribes nothing
+      unreadable. A `macro_rules!` definition itself declares nothing, so it is
+      skipped. The real `anstyle` 1.0.14 passes both stricter rules, the full
+      target passes 108 tests, Clippy is clean and CodeScene reports 10.0.
 - [x] (2026-11-21) Round-22 conflict dispositions. Five paths conflicted, and
       every one was resolved by preserving both sides' intent rather than by
       choosing a side wholesale:
