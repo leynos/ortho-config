@@ -16,7 +16,7 @@ use quote::quote;
 use crate::derive::build::CliFieldMetadata;
 use crate::derive::generate::localization::ArgIdsModel;
 use crate::derive::generate::localization::suffix::MessageSuffix;
-use crate::derive::parse::{FieldAttrs, SerdeRenameAll, serde_serialized_field_key};
+use crate::derive::parse::FieldAttrs;
 
 use self::emission::render_field_metadata;
 use self::resolution::{resolve_required, resolve_value_type};
@@ -60,7 +60,6 @@ pub(super) fn build_fields_metadata(args: &FieldDocArgs<'_>) -> syn::Result<Vec<
     let mut builder = FieldMetaBuilder {
         app_name: args.app_name,
         prefix: args.prefix,
-        serde_rename_all: args.serde_rename_all,
         cli_lookup,
         localization_args: args
             .localization_ids
@@ -93,8 +92,6 @@ struct FieldMetaBuilder<'a> {
     app_name: &'a AppName,
     /// Environment-variable prefix for this struct, when one is configured.
     prefix: Option<&'a str>,
-    /// Container-level renaming applied when deriving a field's file key.
-    serde_rename_all: Option<SerdeRenameAll>,
     /// CLI metadata collected for the struct, keyed by field name.
     cli_lookup: HashMap<&'a str, &'a CliFieldMetadata>,
     /// Localization argument ids for the struct, keyed by field name.
@@ -283,15 +280,17 @@ impl<'a> FieldMetaBuilder<'a> {
 
     /// Resolves and validates the file key path before tokenizing it.
     ///
-    /// An explicit documentation key takes precedence over Serde's serialized
-    /// field key, including the struct-level rename rule. Duplicate resolved
-    /// paths are rejected to keep file-source metadata unambiguous.
+    /// An explicit documentation key takes precedence over the configuration
+    /// key Serde reads for the field, which is cached on [`FieldAttrs`] during
+    /// parsing. Duplicate resolved paths are rejected to keep file-source
+    /// metadata unambiguous.
     fn build_file_tokens(&mut self, context: &FieldContext<'_>) -> syn::Result<TokenStream> {
-        let key_path = if let Some(key) = context.attrs.doc.file_key_path.clone() {
-            key
-        } else {
-            serde_serialized_field_key(context.field, self.serde_rename_all)?
-        };
+        let key_path = context
+            .attrs
+            .doc
+            .file_key_path
+            .clone()
+            .unwrap_or_else(|| context.attrs.serialized_key.clone());
         validate_file_key(context.name, &key_path)?;
         ensure_unique("file", context.name, &key_path, &mut self.file_seen)?;
         let lit = syn::LitStr::new(&key_path, proc_macro2::Span::call_site());

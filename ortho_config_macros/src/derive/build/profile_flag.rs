@@ -13,9 +13,7 @@ use quote::quote_spanned;
 use syn::Ident;
 
 use crate::derive::build::env::compute_profile_env_var;
-use crate::derive::parse::{
-    FieldAttrs, SerdeRenameAll, StructAttrs, clap_field_env, serde_serialized_field_key,
-};
+use crate::derive::parse::{FieldAttrs, StructAttrs, clap_field_env};
 
 use super::cli::validate_cli_long;
 
@@ -26,8 +24,6 @@ pub(super) struct ProfileFlagBuildInputs<'a> {
     pub(super) fields: &'a [syn::Field],
     /// Parsed field metadata aligned with `fields` by index.
     pub(super) field_attrs: &'a [FieldAttrs],
-    /// Struct-level rename rule needed to compute each serialized key.
-    pub(super) serde_rename_all: Option<SerdeRenameAll>,
     /// Existing CLI long names against which the reserved flag is checked.
     pub(super) used_longs: &'a HashSet<String>,
     /// Rust field names used to reject the reserved `profile` member.
@@ -50,7 +46,6 @@ pub(super) fn build_profile_flag_field(
     let ProfileFlagBuildInputs {
         fields,
         field_attrs,
-        serde_rename_all,
         used_longs,
         field_names,
     } = inputs;
@@ -63,7 +58,7 @@ pub(super) fn build_profile_flag_field(
             "generated profile field conflicts with user-defined field 'profile'",
         ));
     }
-    validate_profile_serialized_key(fields, field_attrs, serde_rename_all)?;
+    validate_profile_serialized_key(fields, field_attrs)?;
 
     // Projection (b): the `--profile` long flag.
     validate_cli_long(&name, "profile")?;
@@ -96,13 +91,12 @@ pub(super) fn build_profile_flag_field(
 fn validate_profile_serialized_key(
     fields: &[syn::Field],
     field_attrs: &[FieldAttrs],
-    serde_rename_all: Option<SerdeRenameAll>,
 ) -> syn::Result<()> {
     for (field, attrs) in fields.iter().zip(field_attrs) {
         if attrs.cli.is_subcommand() {
             continue;
         }
-        if serde_serialized_field_key(field, serde_rename_all)? == "profile" {
+        if attrs.serialized_key == "profile" {
             return Err(syn::Error::new_spanned(
                 field,
                 "generated profile field conflicts with a field serialized as 'profile'",
@@ -148,14 +142,12 @@ mod tests {
     fn build(input: &syn::DeriveInput) -> Result<syn::Result<Option<proc_macro2::TokenStream>>> {
         let (_, fields, struct_attrs, field_attrs) =
             parse_input(input).map_err(|err| anyhow!(err))?;
-        let serde_rename_all = None;
         let cli_struct = build_cli_struct_fields(&fields, &field_attrs)?;
         Ok(build_profile_flag_field(
             &struct_attrs,
             ProfileFlagBuildInputs {
                 fields: &fields,
                 field_attrs: &field_attrs,
-                serde_rename_all,
                 used_longs: &cli_struct.used_longs,
                 field_names: &cli_struct.field_names,
             },

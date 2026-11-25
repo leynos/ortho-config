@@ -56,13 +56,13 @@ pub(crate) fn generate_declarative_state_struct(
     krate: &TokenStream,
 ) -> TokenStream {
     let unique_fields = unique_append_fields(&strategies.append);
-    let append_state_fields = unique_fields.iter().map(|(name, _ty)| {
+    let append_state_fields = unique_fields.iter().map(|(name, _ty, _key)| {
         let state_field_ident = format_ident!("append_{}", name);
         quote! {
             #state_field_ident: Option<Vec<#krate::serde_json::Value>>
         }
     });
-    let map_replace_fields = strategies.map_replace.iter().map(|(name, _ty)| {
+    let map_replace_fields = strategies.map_replace.iter().map(|(name, _ty, _key)| {
         let state_field_ident = format_ident!("replace_{}", name);
         quote! {
             #state_field_ident: Option<#krate::serde_json::Value>

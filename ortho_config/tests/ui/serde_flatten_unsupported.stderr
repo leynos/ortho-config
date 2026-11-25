@@ -1,0 +1,6 @@
+error: `#[serde(flatten)]` is unsupported on field `extra` because the generated CLI would parse it as a single argument; add `#[ortho_config(skip_cli)]`, or remove the flatten
+  --> tests/ui/serde_flatten_unsupported.rs:17:5
+   |
+17 | /     #[serde(flatten)]
+18 | |     extra: Child,
+   | |________________^

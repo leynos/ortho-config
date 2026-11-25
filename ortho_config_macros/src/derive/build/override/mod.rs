@@ -17,12 +17,17 @@ use self::tokens::{build_post_extract_tokens, build_pre_merge_tokens};
 use crate::derive::parse::{FieldAttrs, MergeStrategy, btree_map_inner, vec_inner};
 
 /// Collection strategy metadata gathered from struct fields.
+///
+/// Each entry carries the Rust identifier (used for generated state field
+/// names), the collection type, and the configuration key the field is
+/// serialized under. The key is what layer JSON is keyed by; the identifier is
+/// only an implementation detail of the generated merge state.
 #[derive(Default)]
 pub(crate) struct CollectionStrategies {
     /// Vector fields accumulated across layers using append semantics.
-    pub append: Vec<(Ident, Type)>,
+    pub append: Vec<(Ident, Type, String)>,
     /// Map fields whose most recent supplied value replaces earlier maps.
-    pub map_replace: Vec<(Ident, Type)>,
+    pub map_replace: Vec<(Ident, Type, String)>,
 }
 
 /// Applies the default or explicit strategy for a vector field.
@@ -34,10 +39,14 @@ fn process_vec_field(
     name: Ident,
     vec_ty: &Type,
     attrs: &FieldAttrs,
-) -> syn::Result<Option<(Ident, Type)>> {
+) -> syn::Result<Option<(Ident, Type, String)>> {
     let strategy = attrs.merge_strategy.unwrap_or(MergeStrategy::Append);
     match strategy {
-        MergeStrategy::Append => Ok(Some((name, (*vec_ty).clone()))),
+        MergeStrategy::Append => Ok(Some((
+            name,
+            (*vec_ty).clone(),
+            attrs.serialized_key.clone(),
+        ))),
         MergeStrategy::Replace => Ok(None),
         MergeStrategy::Keyed => Err(syn::Error::new_spanned(
             field,
@@ -55,14 +64,14 @@ fn process_btree_map_field(
     name: Ident,
     field_ty: &Type,
     attrs: &FieldAttrs,
-) -> syn::Result<Option<(Ident, Type)>> {
+) -> syn::Result<Option<(Ident, Type, String)>> {
     let strategy = attrs.merge_strategy.unwrap_or(MergeStrategy::Keyed);
     match strategy {
         MergeStrategy::Append => Err(syn::Error::new_spanned(
             field,
             "append merge strategy is not supported for BTreeMap fields",
         )),
-        MergeStrategy::Replace => Ok(Some((name, field_ty.clone()))),
+        MergeStrategy::Replace => Ok(Some((name, field_ty.clone(), attrs.serialized_key.clone()))),
         MergeStrategy::Keyed => Ok(None),
     }
 }
@@ -206,13 +215,13 @@ pub(crate) fn build_override_struct(
     strategies: &CollectionStrategies,
 ) -> (proc_macro2::TokenStream, proc_macro2::TokenStream) {
     let ident = format_ident!("__{}CollectionOverride", base);
-    let vec_fields = strategies.append.iter().map(|(name, ty)| {
+    let vec_fields = strategies.append.iter().map(|(name, ty, _)| {
         quote! {
             #[serde(skip_serializing_if = "Option::is_none")]
             pub #name: Option<Vec<#ty>>
         }
     });
-    let map_fields = strategies.map_replace.iter().map(|(name, _ty)| {
+    let map_fields = strategies.map_replace.iter().map(|(name, _ty, _)| {
         quote! {
             #[serde(skip_serializing_if = "Option::is_none")]
             pub #name: Option<ortho_config::serde_json::Value>
@@ -222,11 +231,11 @@ pub(crate) fn build_override_struct(
     let init_vec = strategies
         .append
         .iter()
-        .map(|(name, _)| quote! { #name: None });
+        .map(|(name, _, _)| quote! { #name: None });
     let init_map = strategies
         .map_replace
         .iter()
-        .map(|(name, _)| quote! { #name: None });
+        .map(|(name, _, _)| quote! { #name: None });
     let init = init_vec.chain(init_map);
     let ts = quote! {
         #[derive(serde::Serialize)]

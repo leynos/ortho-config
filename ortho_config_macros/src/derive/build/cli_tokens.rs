@@ -35,9 +35,14 @@ fn build_cli_field_info(
     // the field up under the same id the generated `clap` attribute declares,
     // including the `r#`-stripping fallback for raw identifiers.
     let arg_id = clap_arg_id_or_field_name(field)?;
+    // Two keys are needed because a directional Serde rename can make the
+    // caller's serialized spelling differ from the key the configuration type
+    // deserializes. Extraction reads the serialized object; layering writes the
+    // configuration key.
     let serialized_key = serde_serialized_field_key(field, serde_rename_all)?;
     Ok(CliFieldInfo {
         serialized_key,
+        layer_key: attrs.serialized_key.clone(),
         arg_id,
         is_bool: is_bool_type(&field.ty),
         is_default_as_absent: attrs.cli_default_as_absent,
@@ -55,7 +60,8 @@ fn build_cli_field_info(
 /// - `fields`: Struct fields used to generate CLI tokens.
 /// - `field_attrs`: Per-field attributes controlling CLI generation.
 /// - `struct_attrs`: Struct-level attributes including discovery settings.
-/// - `serde_rename_all`: Optional serde rename-all strategy.
+/// - `serde_rename_all`: Optional serialization-side serde rename-all rule,
+///   used to locate fields in a caller-authored parser's serialized output.
 ///
 /// # Errors
 ///
@@ -87,7 +93,6 @@ pub(crate) fn build_cli_struct_tokens(
         ProfileFlagBuildInputs {
             fields,
             field_attrs,
-            serde_rename_all,
             used_longs: &cli_struct.used_longs,
             field_names: &cli_struct.field_names,
         },

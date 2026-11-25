@@ -30,14 +30,18 @@ pub(crate) fn build_default_struct_fields(
         .iter()
         .zip(field_attrs.iter())
         .filter(|(_, attrs)| !attrs.cli.is_subcommand())
-        .map(|(f, _)| {
+        .map(|(f, attrs)| {
             let name = match require_named_field(f) {
                 Ok(ident) => ident,
                 Err(err) => return err,
             };
             let ty = option_type_tokens(&f.ty);
+            // The defaults struct serializes to the lowest-precedence layer, so
+            // it must use the configuration key rather than the Rust field
+            // name; otherwise a renamed default is never read by the final type.
+            let key_lit = syn::LitStr::new(&attrs.serialized_key, name.span());
             quote! {
-                #[serde(skip_serializing_if = "Option::is_none")]
+                #[serde(rename = #key_lit, skip_serializing_if = "Option::is_none")]
                 pub #name: #ty
             }
         })
@@ -52,9 +56,13 @@ pub(crate) struct DefaultStructInit {
     /// Initializer entries in source-field order, with explicit defaults taking
     /// precedence over inferred Clap defaults.
     pub fields: Vec<proc_macro2::TokenStream>,
-    /// Field names whose parser defaults must be treated as absent when the
-    /// user did not explicitly supply a CLI value.
-    pub cli_default_as_absent_fields: Vec<syn::LitStr>,
+    /// `(arg_id, layer_key)` pairs for fields whose parser defaults must be
+    /// treated as absent when the user did not explicitly supply a CLI value.
+    ///
+    /// The argument ID answers `ArgMatches::value_source`; the layer key names
+    /// the member to remove from the serialized CLI object. They differ for a
+    /// field with `#[serde(rename)]`.
+    pub cli_default_as_absent_fields: Vec<(syn::LitStr, syn::LitStr)>,
 }
 
 /// Resolves field defaults in the same order as runtime configuration loading.
@@ -82,7 +90,10 @@ pub(crate) fn build_default_struct_init(
                 }
             };
             if attr.cli_default_as_absent {
-                cli_default_as_absent_fields.push(syn::LitStr::new(&name.to_string(), name.span()));
+                cli_default_as_absent_fields.push((
+                    syn::LitStr::new(&name.to_string(), name.span()),
+                    syn::LitStr::new(&attr.serialized_key, name.span()),
+                ));
             }
             if let Some(expr) = &attr.default {
                 default_fields.push(quote! { #name: Some(#expr) });
@@ -182,5 +193,69 @@ fn clap_value_default_expr(default: &ClapDefaultValue) -> proc_macro2::TokenStre
                 .map_err(|_| ())?;
             #extraction
         })()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    //! Unit tests for the generated defaults struct and its pruning metadata.
+
+    use super::{build_default_struct_fields, build_default_struct_init};
+    use crate::derive::parse::parse_input;
+    use anyhow::{Result, anyhow, ensure};
+    use quote::quote;
+
+    /// A renamed field's defaults entry serializes under the configuration key.
+    ///
+    /// The defaults layer is deserialized by the final configuration type, so
+    /// keeping the Rust identifier would make a declared default invisible.
+    #[test]
+    fn defaults_fields_serialize_under_the_config_key() -> Result<()> {
+        let input: syn::DeriveInput = syn::parse_quote! {
+            #[serde(rename_all = "kebab-case")]
+            struct Demo {
+                #[ortho_config(default = 3)]
+                retry_count: u32,
+            }
+        };
+        let (_, fields, _, attrs) = parse_input(&input).map_err(|err| anyhow!(err))?;
+        let rendered = build_default_struct_fields(&fields, &attrs)
+            .first()
+            .map(std::string::ToString::to_string)
+            .ok_or_else(|| anyhow!("expected one generated defaults field"))?;
+        ensure!(
+            rendered.contains("rename = \"retry-count\""),
+            "expected the defaults field to serialize under the configuration key: {rendered}"
+        );
+        Ok(())
+    }
+
+    /// The pruning metadata pairs the clap argument ID with the layer key.
+    ///
+    /// Pruning asks clap about the argument and removes the serialized member,
+    /// which differ after a rename.
+    #[test]
+    fn default_as_absent_metadata_keeps_both_keys() -> Result<()> {
+        let input: syn::DeriveInput = syn::parse_quote! {
+            struct Demo {
+                #[serde(rename = "retry-count")]
+                #[arg(long, default_value_t = 3)]
+                #[ortho_config(cli_default_as_absent)]
+                retry_count: u32,
+            }
+        };
+        let (_, fields, _, attrs) = parse_input(&input).map_err(|err| anyhow!(err))?;
+        let init = build_default_struct_init(&fields, &attrs, &quote! { ortho_config });
+        let (arg_id, layer_key) = init
+            .cli_default_as_absent_fields
+            .first()
+            .ok_or_else(|| anyhow!("expected pruning metadata for the field"))?;
+        ensure!(
+            arg_id.value() == "retry_count" && layer_key.value() == "retry-count",
+            "expected (retry_count, retry-count), got ({}, {})",
+            arg_id.value(),
+            layer_key.value()
+        );
+        Ok(())
     }
 }

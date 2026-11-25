@@ -88,7 +88,7 @@ fn collect_collection_strategies_selects_collections(demo_input: Result<DemoInpu
         "expected single map replace field, found {}",
         strategies.map_replace.len()
     );
-    let (map_ident, map_ty) = strategies
+    let (map_ident, map_ty, map_key) = strategies
         .map_replace
         .first()
         .expect("map replace strategies should contain an entry");
@@ -99,6 +99,10 @@ fn collect_collection_strategies_selects_collections(demo_input: Result<DemoInpu
     ensure!(
         map_ty.to_token_stream().to_string() == "std :: collections :: BTreeMap < String , u32 >",
         "unexpected map field type: {map_ty:?}",
+    );
+    ensure!(
+        map_key == "field3",
+        "an unrenamed field should merge under its identifier, found {map_key}"
     );
     Ok(())
 }
@@ -217,4 +221,71 @@ fn collect_collection_strategies_skips_keyed_map_entry() -> Result<()> {
         false,
         "keyed map strategy should not populate replace list",
     )
+}
+
+/// A renamed `Vec` field must record the key the layer JSON actually carries.
+///
+/// The declarative merger extracts contributions from each layer by key, so
+/// keeping the Rust identifier here would let a renamed field fall through to
+/// whole-array replacement.
+#[rstest]
+#[case::field_rename(
+    syn::parse_quote! {
+        struct DemoRenamedVec {
+            #[serde(rename = "values-list")]
+            #[ortho_config(merge_strategy = "append")]
+            values: Vec<String>,
+        }
+    },
+    "values-list"
+)]
+#[case::container_rename_all(
+    syn::parse_quote! {
+        #[serde(rename_all = "kebab-case")]
+        struct DemoRenamedContainer {
+            #[ortho_config(merge_strategy = "append")]
+            extra_values: Vec<String>,
+        }
+    },
+    "extra-values"
+)]
+fn collect_collection_strategies_uses_serde_key(
+    #[case] input: syn::DeriveInput,
+    #[case] expected_key: &str,
+) -> Result<()> {
+    let strategies = collect_strategies(&input)?;
+    let (_, _, key) = strategies
+        .append
+        .first()
+        .expect("the append strategy should contain an entry");
+    ensure!(
+        key == expected_key,
+        "expected the configuration key {expected_key}, found {key}"
+    );
+    Ok(())
+}
+
+/// A renamed replace-strategy map records the configuration key too.
+///
+/// Map replacement extracts the whole map from each layer by that key, so the
+/// identifier would leave a renamed map out of the replacement accumulator.
+#[test]
+fn collect_collection_strategies_uses_serde_key_for_replaced_maps() -> Result<()> {
+    let input: syn::DeriveInput = syn::parse_quote! {
+        struct DemoRenamedMap {
+            #[serde(rename = "settings")]
+            #[ortho_config(merge_strategy = "replace")]
+            rules: std::collections::BTreeMap<String, u32>,
+        }
+    };
+    let strategies = collect_strategies(&input)?;
+    let (_, _, key) = strategies
+        .map_replace
+        .first()
+        .ok_or_else(|| anyhow!("the replace strategy should contain an entry"))?;
+    ensure!(
+        key == "settings",
+        "expected the configuration key settings, found {key}"
+    );
+    Ok(())
 }

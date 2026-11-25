@@ -22,6 +22,12 @@ pub(super) struct CollectionTokens {
 
 /// Builds corresponding merge, destructuring, and insertion fragments from one
 /// ordered collection field iterator.
+///
+/// The generated state field is named from the Rust identifier, while the JSON
+/// member removed from each layer and reinserted into the overlay uses the
+/// configuration key. A `#[serde(rename)]` on a `Vec` or `BTreeMap` field
+/// therefore still reaches its merge strategy instead of falling through to
+/// whole-array or whole-map replacement.
 fn build_collection_tokens<'a, I, F, G>(
     fields: I,
     prefix: &str,
@@ -29,7 +35,7 @@ fn build_collection_tokens<'a, I, F, G>(
     insert_fn: G,
 ) -> CollectionTokens
 where
-    I: IntoIterator<Item = (&'a syn::Ident, &'a syn::Type)>,
+    I: IntoIterator<Item = (&'a syn::Ident, &'a syn::Type, &'a String)>,
     F: Fn(&syn::Ident, &proc_macro2::Ident, &str) -> TokenStream,
     G: Fn(&syn::Ident, &proc_macro2::Ident, &str) -> TokenStream,
 {
@@ -37,12 +43,11 @@ where
     let mut destructured = Vec::new();
     let mut inserts = Vec::new();
 
-    for (field_ident, _ty) in fields {
+    for (field_ident, _ty, serialized_key) in fields {
         let state_field_ident = format_ident!("{}{}", prefix, field_ident);
-        let field_name = field_ident.to_string();
-        merge_logic.push(merge_fn(field_ident, &state_field_ident, &field_name));
+        merge_logic.push(merge_fn(field_ident, &state_field_ident, serialized_key));
         destructured.push(quote! { #state_field_ident });
-        inserts.push(insert_fn(field_ident, &state_field_ident, &field_name));
+        inserts.push(insert_fn(field_ident, &state_field_ident, serialized_key));
     }
 
     CollectionTokens {
@@ -100,7 +105,10 @@ pub(super) fn append_collection_tokens(
 /// map is the value written to the final overlay.
 pub(super) fn map_collection_tokens(strategies: &CollectionStrategies) -> CollectionTokens {
     build_collection_tokens(
-        strategies.map_replace.iter().map(|(ident, ty)| (ident, ty)),
+        strategies
+            .map_replace
+            .iter()
+            .map(|(ident, ty, key)| (ident, ty, key)),
         "replace_",
         |_, state_field_ident, field_name| {
             quote! {
@@ -121,8 +129,8 @@ pub(super) fn map_collection_tokens(strategies: &CollectionStrategies) -> Collec
 
 /// Deduplicate append fields by identifier.
 ///
-/// Returns a vector of unique `(ident, type)` pairs, preserving the first
-/// occurrence for each identifier in the input slice.
+/// Returns a vector of unique `(ident, type, key)` entries, preserving the
+/// first occurrence for each identifier in the input slice.
 ///
 /// # Examples
 ///
@@ -130,25 +138,25 @@ pub(super) fn map_collection_tokens(strategies: &CollectionStrategies) -> Collec
 /// use syn::parse_str;
 ///
 /// let fields = vec![
-///     (parse_str("items").unwrap(), parse_str("String").unwrap()),
-///     (parse_str("items").unwrap(), parse_str("String").unwrap()),
-///     (parse_str("tags").unwrap(), parse_str("String").unwrap()),
+///     (parse_str("items").unwrap(), parse_str("String").unwrap(), "items".to_owned()),
+///     (parse_str("items").unwrap(), parse_str("String").unwrap(), "items".to_owned()),
+///     (parse_str("tags").unwrap(), parse_str("String").unwrap(), "labels".to_owned()),
 /// ];
 ///
 /// let unique = unique_append_fields(&fields);
 /// assert_eq!(unique.len(), 2);
 /// assert_eq!(unique[0].0.to_string(), "items");
-/// assert_eq!(unique[1].0.to_string(), "tags");
+/// assert_eq!(unique[1].2, "labels");
 /// ```
 pub(crate) fn unique_append_fields(
-    append_fields: &[(syn::Ident, syn::Type)],
-) -> Vec<(&syn::Ident, &syn::Type)> {
+    append_fields: &[(syn::Ident, syn::Type, String)],
+) -> Vec<(&syn::Ident, &syn::Type, &String)> {
     let mut seen = HashSet::new();
     append_fields
         .iter()
-        .filter_map(|(ident, ty)| {
-            let key = ident.to_string();
-            seen.insert(key).then_some((ident, ty))
+        .filter_map(|(ident, ty, key)| {
+            let ident_key = ident.to_string();
+            seen.insert(ident_key).then_some((ident, ty, key))
         })
         .collect()
 }

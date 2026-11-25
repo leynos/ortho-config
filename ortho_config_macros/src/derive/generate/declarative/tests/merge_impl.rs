@@ -69,16 +69,22 @@ fn map_only_strategies() -> Result<CollectionStrategies> {
         map_replace: vec![(
             parse_ident("rules")?,
             parse_type("std::collections::BTreeMap<String, u32>")?,
+            String::from("rules"),
         )],
     })
 }
 
 fn mixed_strategies() -> Result<CollectionStrategies> {
     Ok(CollectionStrategies {
-        append: vec![(parse_ident("items")?, parse_type("String")?)],
+        append: vec![(
+            parse_ident("items")?,
+            parse_type("String")?,
+            String::from("items"),
+        )],
         map_replace: vec![(
             parse_ident("rules")?,
             parse_type("std::collections::BTreeMap<String, u32>")?,
+            String::from("rules"),
         )],
     })
 }

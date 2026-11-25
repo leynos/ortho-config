@@ -485,6 +485,22 @@ Serde itself does. `serde_serialized_field_key` is the mirror for
 serialization. Generated CLI extraction uses the serialized-side helpers,
 because it looks keys up in the serialized configuration object.
 
+`FieldAttrs::serialized_key` caches the deserialization key for every field.
+That is the key a configuration source must use, because each generated layer
+is serialized only so the final configuration type can deserialize it. The
+generated defaults and CLI structs therefore emit a per-field
+`#[serde(rename = "<key>")]`, and `CollectionStrategies` carries the same key
+so declarative append and map replacement remove and reinsert the member each
+layer actually holds. `CliFieldInfo` keeps a separate serialized-side key for a
+caller-authored parser: `extract_user_provided` removes that spelling and
+inserts the configuration key, which remains correct for a directional rename.
+
+A flattened field has no single configuration key.
+`reject_incompatible_flatten` accepts the schema-only shape (`skip_cli`, no
+declared default, no merge strategy, and no `Vec` default append) and rejects
+shapes whose generated CLI, default, or collection layer would name a member
+Serde never reads.
+
 This path applies no `heck` case conversion. `heck` remains a dependency for
 other modules, such as `subcommand_docs.rs`, but the schema reproduces Serde's
 own struct-field rules in `SerdeRenameAll::apply`: `lowercase` and `snake_case`

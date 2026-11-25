@@ -10,7 +10,7 @@ use syn::Ident;
 
 use crate::derive::build::CliFieldMetadata;
 use crate::derive::generate::localization::LocalizationIds;
-use crate::derive::parse::{FieldAttrs, SerdeRenameAll};
+use crate::derive::parse::FieldAttrs;
 
 use super::super::AppName;
 use super::value_types::ValueTypeModel;
@@ -30,8 +30,6 @@ pub(crate) struct FieldDocArgs<'a> {
     pub fields: &'a [syn::Field],
     /// One parsed attribute set per entry in `fields`.
     pub field_attrs: &'a [FieldAttrs],
-    /// Container-level renaming applied when deriving a field's file key.
-    pub serde_rename_all: Option<SerdeRenameAll>,
     /// CLI metadata already collected for this struct's fields.
     pub cli_fields: &'a [CliFieldMetadata],
     /// Catalogue identifiers generated for this struct.

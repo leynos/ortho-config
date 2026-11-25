@@ -1,0 +1,7 @@
+error: `#[serde(flatten)]` is unsupported on field `extra` because its default would be layered under a key the configuration never reads; remove the declared default, or remove the flatten
+  --> tests/ui/serde_flatten_default_unsupported.rs:18:5
+   |
+18 | /     #[serde(flatten)]
+19 | |     #[ortho_config(skip_cli, default = Child { host: String::from("localhost") })]
+20 | |     extra: Child,
+   | |________________^

@@ -38,7 +38,27 @@ pub(super) fn expected_declarative_merge_impl_empty() -> Result<TokenStream2> {
     TokenStream2::from_str(fixture).map_err(|err| anyhow!("parse merge impl fixture: {err}"))
 }
 
+/// Builds append strategies whose layer key matches each Rust identifier.
+///
+/// Existing cases use identifiers that are also their configuration keys; a
+/// case that exercises a Serde rename builds its entries with
+/// [`append_strategies_with_keys`] instead.
 pub(super) fn append_strategies(fields: Vec<(syn::Ident, syn::Type)>) -> CollectionStrategies {
+    append_strategies_with_keys(
+        fields
+            .into_iter()
+            .map(|(ident, ty)| {
+                let key = ident.to_string();
+                (ident, ty, key)
+            })
+            .collect(),
+    )
+}
+
+/// Builds append strategies with explicit configuration keys.
+pub(super) fn append_strategies_with_keys(
+    fields: Vec<(syn::Ident, syn::Type, String)>,
+) -> CollectionStrategies {
     CollectionStrategies {
         append: fields,
         map_replace: Vec::new(),

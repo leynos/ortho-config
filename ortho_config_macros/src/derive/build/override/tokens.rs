@@ -10,7 +10,7 @@ pub(super) fn build_append_blocks(strategies: &CollectionStrategies) -> Vec<Toke
     strategies
         .append
         .iter()
-        .map(|(name, ty)| {
+        .map(|(name, ty, _key)| {
             quote! {
                 {
                     let mut vec_acc: Vec<#ty> = Vec::new();
@@ -37,10 +37,10 @@ pub(super) fn build_map_state_tokens(strategies: &CollectionStrategies) -> Optio
         return None;
     }
 
-    let fields = strategies.map_replace.iter().map(|(name, ty)| {
+    let fields = strategies.map_replace.iter().map(|(name, ty, _)| {
         quote! { #name: Option<#ty>, }
     });
-    let init = strategies.map_replace.iter().map(|(name, _)| {
+    let init = strategies.map_replace.iter().map(|(name, _, _)| {
         quote! { #name: None }
     });
     Some(quote! {
@@ -90,7 +90,7 @@ pub(super) fn build_map_merge_blocks(strategies: &CollectionStrategies) -> Vec<T
     strategies
         .map_replace
         .iter()
-        .map(|(name, ty)| {
+        .map(|(name, ty, _key)| {
             let state_field = quote! { replace.#name };
             let context = ExtractContext {
                 name,
@@ -116,7 +116,7 @@ pub(super) fn build_map_assignment_blocks(strategies: &CollectionStrategies) -> 
     strategies
         .map_replace
         .iter()
-        .map(|(name, _ty)| {
+        .map(|(name, _ty, _key)| {
             quote! {
                 if let Some(value) = replace.#name.take() {
                     cfg.#name = value;

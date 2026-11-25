@@ -34,7 +34,7 @@ use derive::generate::localization::{
 };
 use derive::generate::ortho_impl::generate_trait_implementation;
 use derive::generate::required_schema::RequiredSchemaSource;
-use derive::parse::{parse_input, serde_rename_all};
+use derive::parse::{parse_input, reject_incompatible_flatten, serde_rename_all};
 
 /// Derive macro for the
 /// [`OrthoConfig`](https://docs.rs/ortho_config/latest/ortho_config/trait.OrthoConfig.html)
@@ -58,6 +58,11 @@ pub fn derive_ortho_config(input_tokens: TokenStream) -> TokenStream {
 /// convert them into a `compile_error!` invocation.
 fn expand_ortho_config(derive_input: &DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
     let (ident, fields, struct_attrs, field_attrs) = parse_input(derive_input)?;
+    // The schema-only derive inspects flattened fields through Serde's own
+    // composition, but a generated CLI, default, or collection layer cannot
+    // name a key for one. Reject those shapes here rather than emitting a
+    // layer member the final type never reads.
+    reject_incompatible_flatten(&fields, &field_attrs)?;
     let serde_rename_all = serde_rename_all(&derive_input.attrs)?;
     let krate = derive::crate_path::resolve(struct_attrs.crate_path.as_ref());
     let component_args = MacroComponentArgs {
@@ -94,7 +99,6 @@ fn expand_ortho_config(derive_input: &DeriveInput) -> syn::Result<proc_macro2::T
         fields: &fields,
         field_attrs: &field_attrs,
         struct_attrs: &struct_attrs,
-        serde_rename_all,
         cli_fields: &components.cli_field_metadata,
         localization_ids: &localization_ids,
         krate: &krate,
@@ -190,9 +194,18 @@ pub fn derive_subcommand_docs(input_tokens: TokenStream) -> TokenStream {
 pub(crate) struct CliFieldInfo {
     /// The field name used by serde during serialization.
     ///
-    /// This respects `#[serde(rename = "...")]` and `#[serde(rename_all = "...")]`
-    /// so `CliValueExtractor` can reliably map values from `serde_json::to_value(self)`.
+    /// This respects the serialization side of `#[serde(rename = "...")]` and
+    /// `#[serde(rename_all = "...")]` so `CliValueExtractor` can reliably map
+    /// values from `serde_json::to_value(self)` for a caller-authored parser
+    /// type.
     pub serialized_key: String,
+    /// The key the final configuration type accepts for this field.
+    ///
+    /// Generated layer structs serialize under this key, and the composed
+    /// layers are deserialized by the same name. It differs from
+    /// [`Self::serialized_key`] only for a directional Serde rename, where the
+    /// caller's serializer and the configuration deserializer disagree.
+    pub layer_key: String,
     /// The clap argument ID used with `ArgMatches::value_source()`.
     ///
     /// This is the `id = "..."` override from `#[arg(...)]`/`#[clap(...)]` when

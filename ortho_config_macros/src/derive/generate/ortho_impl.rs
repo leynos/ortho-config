@@ -65,13 +65,17 @@ pub(crate) fn generate_ortho_impl(
 /// and inserts it into the output map. For fields with `cli_default_as_absent`,
 /// checks `value_source()` to ensure only explicitly provided values are included.
 fn generate_field_extraction(field: &CliFieldInfo) -> TokenStream {
-    let field_key = &field.serialized_key;
+    let serialized_key = &field.serialized_key;
+    let layer_key = &field.layer_key;
     let arg_id = &field.arg_id;
 
-    // Common logic for moving a value from base_map to the output map
+    // Common logic for moving a value from base_map to the output map. The
+    // lookup uses the caller's serialized spelling; the insertion uses the key
+    // the configuration type deserializes, which differ for directional Serde
+    // renames.
     let move_value = quote! {
-        if let Some(value) = base_map.remove(#field_key) {
-            map.insert(#field_key.to_owned(), value);
+        if let Some(value) = base_map.remove(#serialized_key) {
+            map.insert(#layer_key.to_owned(), value);
         }
     };
 
@@ -236,6 +240,7 @@ mod tests {
         let ident = parse_str("ServeArgs").context("parse ServeArgs ident")?;
         let fields = [crate::CliFieldInfo {
             serialized_key: "port".to_owned(),
+            layer_key: "port".to_owned(),
             arg_id: "port".to_owned(),
             is_bool: false,
             is_default_as_absent: true,
