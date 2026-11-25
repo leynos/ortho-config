@@ -152,23 +152,6 @@ pub(crate) fn resolved_clap_builder<'a>(
     normal_dependency(metadata, node, REVIEWED_CLAP_BUILDER.name)
 }
 
-/// Select the lock entry describing `package`, by name and exact version.
-pub(crate) fn select_lock_package<'a>(
-    packages: &'a [LockedPackage],
-    package: &Package,
-) -> Result<&'a LockedPackage> {
-    let name: &str = package.name.as_ref();
-    let locked = super::lock::select_unique(packages, name)?;
-    ensure!(
-        locked.version == package.version.to_string(),
-        "Cargo.lock records {} {} but cargo metadata resolved {}",
-        locked.name,
-        locked.version,
-        package.version,
-    );
-    Ok(locked)
-}
-
 /// Confirm one lock entry is exactly the reviewed identity.
 pub(crate) fn verify_lock_identity(
     locked: &LockedPackage,
@@ -280,7 +263,7 @@ fn normal_dependency<'a>(metadata: &'a Metadata, node: &Node, name: &str) -> Res
         // the underlying package. Matching the package alone would miss a
         // `anstyle = { package = "…" }` rename and could match a different
         // crate that happens to share the package name.
-        if dependency.name == name {
+        if edge_binds(dependency, name) {
             ensure!(
                 has_only_normal_kinds(dependency),
                 "the {name} edge is not a normal dependency: {:?}",
@@ -315,6 +298,60 @@ fn has_only_normal_kinds(dependency: &NodeDep) -> bool {
             .dep_kinds
             .iter()
             .all(|info| info.kind == DependencyKind::Normal)
+}
+
+/// Verify the lock entries the reviewed identities require.
+///
+/// This is the stage the gate runs, and it is separate from discovery so a
+/// doctored lock document can exercise the same identity checks rather than a
+/// helper that happens to be called beside them.
+pub(crate) fn verify_lock_stage(document: &str, resolved: &[(&str, &str)]) -> Result<()> {
+    let lock = super::lock::Lockfile::parse(document)?;
+    let locked_clap = select_resolved(lock.packages(), resolved, REVIEWED_CLAP.name)?;
+    let locked_builder = select_resolved(lock.packages(), resolved, REVIEWED_CLAP_BUILDER.name)?;
+    verify_lock_identity(locked_clap, &REVIEWED_CLAP)?;
+    verify_lock_identity(locked_builder, &REVIEWED_CLAP_BUILDER)?;
+    // The reviewed glob crate is pinned by the same lock checksum, so its
+    // contents are the ones a reviewer accepted rather than whatever the
+    // registry happens to serve.
+    let locked_anstyle = select_resolved(lock.packages(), resolved, REVIEWED_ANSTYLE.name)?;
+    verify_lock_identity(locked_anstyle, &REVIEWED_ANSTYLE)?;
+    verify_lock_edge(locked_clap)
+}
+
+/// Select the lock entry for one reviewed package at its resolved version.
+///
+/// `resolved` pairs each reviewed package name with the version the graph
+/// actually resolved, so the stage refuses a lock that disagrees with metadata
+/// as well as one whose identity differs from the reviewed one.
+fn select_resolved<'a>(
+    packages: &'a [LockedPackage],
+    resolved: &[(&str, &str)],
+    name: &str,
+) -> Result<&'a LockedPackage> {
+    let version = resolved
+        .iter()
+        .find_map(|(resolved_name, version)| (*resolved_name == name).then_some(*version))
+        .with_context(|| format!("the resolved graph reported no {name} package"))?;
+    let locked = super::lock::select_unique(packages, name)?;
+    ensure!(
+        locked.version == version,
+        "Cargo.lock records {} {} but cargo metadata resolved {}",
+        locked.name,
+        locked.version,
+        version,
+    );
+    Ok(locked)
+}
+
+/// Whether one graph edge names the requested dependency binding.
+///
+/// Cargo records the import binding in the edge name, so a renamed dependency
+/// is reached under that binding while the underlying package keeps its own
+/// name. The package name is deliberately not consulted: matching it would miss
+/// a rename and could match a different crate that shares a name.
+pub(crate) fn edge_binds(edge: &NodeDep, requested: &str) -> bool {
+    edge.name == requested
 }
 
 /// The package's source identity as metadata reports it.

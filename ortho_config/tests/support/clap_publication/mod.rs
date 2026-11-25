@@ -54,10 +54,9 @@ pub(crate) use files::read_text;
 pub(crate) use glob_exports::reviewed_glob_supplies_no_inventory;
 pub(crate) use identity::{
     REVIEWED_ANSTYLE, REVIEWED_CLAP, REVIEWED_CLAP_BUILDER, load_metadata, ortho_config_package,
-    resolved_clap, resolved_clap_builder, resolved_dependency, select_lock_package,
-    verify_lock_edge, verify_lock_identity, verify_metadata_identity,
+    resolved_clap, resolved_clap_builder, resolved_dependency, verify_lock_stage,
+    verify_metadata_identity,
 };
-pub(crate) use lock::Lockfile;
 pub(crate) use source::count_resolved_error_kinds;
 pub(crate) use use_tree::REVIEWED_EXTERNAL_GLOBS;
 

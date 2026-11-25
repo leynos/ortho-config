@@ -193,6 +193,15 @@ exports. Each refusal applies at any depth, conditional or not. The reviewed
 `pub use kind::ErrorKind;` keeps the declaration and the export the same item
 and stays accepted.
 
+One external glob is accepted, and it is reviewed rather than inferred: the
+resolved source's `pub use anstyle::*;`. Its crate is pinned by name, version,
+source and checksum, the pin is compared against `Cargo.lock`, and the gate
+refuses the crate if any name in its sources is `ErrorKind`. A glob rooted
+anywhere else, or at a changed version of that crate, fails the gate until it
+is reviewed. The static walk over that crate's sources is defence in depth; it
+is not a proof about arbitrary dependency sources, and the guarantee rests on
+the pinned identity.
+
 ## Alternatives rejected
 
 - **Build script (the superseded §6.1.1).** It cannot see consumer resolution,

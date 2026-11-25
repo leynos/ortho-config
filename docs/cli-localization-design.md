@@ -607,6 +607,13 @@ and an external glob such as `pub use inventory_provider::*;` are refused as
 well. The plain `pub use kind::ErrorKind;` names the declaration itself and
 stays accepted.
 
+One exception is reviewed rather than refused: the resolved source's own
+`pub use anstyle::*;`. Its crate is a reviewed identity — name, version, source
+and checksum, checked against `Cargo.lock` — and the gate refuses it if any
+name it declares is `ErrorKind`, so the exception is bounded by the artefact a
+reviewer accepted rather than by its spelling. A different or changed glob root
+fails the gate until it is reviewed.
+
 The count is the total declared variant count for that builder package, not
 only the raisable variants; classification as translated or `DisplayOnly`
 remains in `CLAP_ERROR_IDS`. The reviewed identity and its total are explicit

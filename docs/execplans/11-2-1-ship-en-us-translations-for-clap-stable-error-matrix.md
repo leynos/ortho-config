@@ -1796,6 +1796,26 @@ stopping and reporting.
       (`changed_glob_checksum_is_refused`) changes only the checksum and
       requires the identity check to refuse it. The full target passes 109
       tests, Clippy is clean and CodeScene reports 10.0.
+
+- [x] (2026-11-25) Round-45 making the checksum control gate-level, pinning the
+      renamed-edge behaviour, and correcting the documents. Three findings, all
+      fair: the checksum control called `verify_lock_identity` directly, so
+      removing the stage's glob check would not have failed any test; the
+      renamed-edge matching had no metadata control; and the design and ADR
+      said every accepted path needs a local-module root while the gate also
+      accepts the reviewed external glob. The lock stage is now
+      `verify_lock_stage(document, resolved)` — the function the gate calls,
+      taking the resolved versions rather than `Package` values so a synthetic
+      lock can drive it — and `changed_glob_checksum_is_refused_by_the_lock_stage`
+      runs it against a committed fixture lock, refused when only the glob
+      checksum changes. `renamed_edge_is_matched_by_its_binding` deserializes
+      two `NodeDep` edges (the type is non-exhaustive) and shows the binding
+      matches while a same-package different-binding edge does not. Both
+      documents now state the reviewed external-glob exception, its identity
+      boundary and that the static walk is defence in depth rather than a proof.
+      The full target passes 110 tests, Clippy is clean and CodeScene reports
+      10.0.
+
 - [x] (2026-11-21) Round-22 conflict dispositions. Five paths conflicted, and
       every one was resolved by preserving both sides' intent rather than by
       choosing a side wholesale:

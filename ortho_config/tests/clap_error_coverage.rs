@@ -22,10 +22,10 @@ use anyhow::Result;
 use camino::Utf8Path;
 use cargo_metadata::{Metadata, Package};
 use clap_publication::{
-    Lockfile, REVIEWED_ANSTYLE, REVIEWED_CLAP, REVIEWED_CLAP_BUILDER, REVIEWED_EXTERNAL_GLOBS,
-    compare_count, count_resolved_error_kinds, load_metadata, ortho_config_package, read_text,
-    resolved_clap, resolved_clap_builder, resolved_dependency, reviewed_glob_supplies_no_inventory,
-    select_lock_package, verify_lock_edge, verify_lock_identity, verify_metadata_identity,
+    REVIEWED_ANSTYLE, REVIEWED_CLAP, REVIEWED_CLAP_BUILDER, REVIEWED_EXTERNAL_GLOBS, compare_count,
+    count_resolved_error_kinds, load_metadata, ortho_config_package, read_text, resolved_clap,
+    resolved_clap_builder, resolved_dependency, reviewed_glob_supplies_no_inventory,
+    verify_lock_stage, verify_metadata_identity,
 };
 
 /// The resolved builder inventory equals the reviewed total.
@@ -83,16 +83,15 @@ fn verified_metadata(metadata: &Metadata) -> Result<(&Package, &Package)> {
 /// Verify the locked identities and the single normal facade edge.
 fn verified_lock(metadata: &Metadata, clap: &Package, builder: &Package) -> Result<()> {
     let lock_text = read_text(&metadata.workspace_root.join("Cargo.lock"))?;
-    let lock = Lockfile::parse(&lock_text)?;
-    let locked_clap = select_lock_package(lock.packages(), clap)?;
-    let locked_builder = select_lock_package(lock.packages(), builder)?;
-    verify_lock_identity(locked_clap, &REVIEWED_CLAP)?;
-    verify_lock_identity(locked_builder, &REVIEWED_CLAP_BUILDER)?;
-    // The reviewed glob crate is pinned by the same lock checksum, so its
-    // contents are the ones a reviewer accepted rather than whatever the
-    // registry happens to serve.
     let anstyle = resolved_dependency(metadata, builder, REVIEWED_ANSTYLE.name)?;
-    let locked_anstyle = select_lock_package(lock.packages(), anstyle)?;
-    verify_lock_identity(locked_anstyle, &REVIEWED_ANSTYLE)?;
-    verify_lock_edge(locked_clap)
+    let versions = [
+        (REVIEWED_CLAP.name, clap.version.to_string()),
+        (REVIEWED_CLAP_BUILDER.name, builder.version.to_string()),
+        (REVIEWED_ANSTYLE.name, anstyle.version.to_string()),
+    ];
+    let resolved: Vec<(&str, &str)> = versions
+        .iter()
+        .map(|(name, version)| (*name, version.as_str()))
+        .collect();
+    verify_lock_stage(&lock_text, &resolved)
 }

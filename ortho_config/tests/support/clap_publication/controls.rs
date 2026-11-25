@@ -9,15 +9,16 @@
 
 use anyhow::{Context, Result, ensure};
 use camino::{Utf8Path, Utf8PathBuf};
-use cargo_metadata::Target;
+use cargo_metadata::{NodeDep, Target};
 
 use super::compare_count;
 use super::files::read_text;
 use super::identity::{
-    REVIEWED_ANSTYLE, REVIEWED_CLAP, REVIEWED_CLAP_BUILDER, verify_lock_edge, verify_lock_identity,
+    REVIEWED_ANSTYLE, REVIEWED_CLAP, REVIEWED_CLAP_BUILDER, edge_binds, verify_lock_edge,
+    verify_lock_identity, verify_lock_stage,
 };
 use super::library::unique_library_root;
-use super::lock::{LockedPackage, Lockfile, select_unique};
+use super::lock::{Lockfile, select_unique};
 use super::source::count_error_kind_variants;
 use crate::clap_reviewed::CLAP_ERROR_KIND_COUNT;
 
@@ -231,26 +232,53 @@ fn two_library_targets_are_refused() -> Result<()> {
     ensure_refusal(&error, "2 library targets")
 }
 
-/// A changed checksum for the pinned glob crate is refused by the gate.
+/// A changed checksum in the lock is refused by the gate's own lock stage.
 ///
-/// The reviewed artefact is trusted because its identity is pinned, so the
-/// comparison itself is exercised: only the checksum changes here, and the
-/// identity check must refuse it rather than pass on the name and version.
+/// This drives [`verify_lock_stage`], the function the gate calls, rather than
+/// the identity helper beside it: a lock identical to the reviewed one except
+/// for the glob crate's checksum must be refused, and the same lock with the
+/// reviewed checksum must pass. Removing the stage's glob check fails this.
 #[test]
-fn changed_glob_checksum_is_refused() -> Result<()> {
-    let mut drifted = LockedPackage {
-        name: REVIEWED_ANSTYLE.name.to_owned(),
-        version: REVIEWED_ANSTYLE.version.to_owned(),
-        source: Some(REVIEWED_ANSTYLE.source.to_owned()),
-        checksum: Some(
-            "0000000000000000000000000000000000000000000000000000000000000000".to_owned(),
-        ),
-        dependencies: Vec::new(),
-    };
+fn changed_glob_checksum_is_refused_by_the_lock_stage() -> Result<()> {
+    let reviewed = read_fixture("lock/reviewed_stage.lock")?;
+    let resolved = [
+        (REVIEWED_CLAP.name, REVIEWED_CLAP.version),
+        (REVIEWED_CLAP_BUILDER.name, REVIEWED_CLAP_BUILDER.version),
+        (REVIEWED_ANSTYLE.name, REVIEWED_ANSTYLE.version),
+    ];
+    verify_lock_stage(&reviewed, &resolved)?;
 
-    verify_lock_identity(&drifted, &REVIEWED_ANSTYLE)
-        .expect_err("a changed checksum must be refused");
+    let drifted = reviewed.replacen(REVIEWED_ANSTYLE.checksum, &"0".repeat(64), 1);
+    ensure!(
+        drifted != reviewed,
+        "the fixture lock should carry the reviewed glob checksum",
+    );
+    let error = refusal(verify_lock_stage(&drifted, &resolved));
+    ensure_refusal(&error, "reviewed checksum")
+}
 
-    drifted.checksum = Some(REVIEWED_ANSTYLE.checksum.to_owned());
-    verify_lock_identity(&drifted, &REVIEWED_ANSTYLE)
+/// A renamed graph edge is matched by its binding, not its package name.
+///
+/// Cargo records the import binding in the edge name, so a rename must be
+/// reached under that binding while a different crate sharing the package name
+/// must not match it. The edges are deserialized because `NodeDep` is
+/// non-exhaustive.
+#[test]
+fn renamed_edge_is_matched_by_its_binding() -> Result<()> {
+    let renamed: NodeDep = serde_json::from_str(
+        r#"{"name": "anstyle", "pkg": "other 1.0.0 (registry+x)", "dep_kinds": []}"#,
+    )?;
+    let rebound: NodeDep = serde_json::from_str(
+        r#"{"name": "renamed", "pkg": "anstyle 1.0.14 (registry+x)", "dep_kinds": []}"#,
+    )?;
+
+    ensure!(
+        edge_binds(&renamed, "anstyle"),
+        "the renamed edge should bind the requested name",
+    );
+    ensure!(
+        !edge_binds(&rebound, "anstyle"),
+        "an edge under another binding must not match the requested name",
+    );
+    Ok(())
 }
