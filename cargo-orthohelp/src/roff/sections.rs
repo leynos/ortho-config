@@ -10,7 +10,7 @@ use crate::ir::{
 use crate::schema::{FileMetadata, SourceKind};
 
 use super::entry;
-use super::escape::{bold, escape_macro_arg, escape_text};
+use super::escape::{bold, escape_quoted_arg, escape_text, escape_unquoted_arg};
 use super::types::ManSection;
 
 /// Metadata for the man page title header.
@@ -43,19 +43,24 @@ impl<'a> TitleMetadata<'a> {
 ///
 /// Format: `.TH NAME SECTION DATE SOURCE MANUAL`
 pub fn title_header(name: &str, section: ManSection, metadata: &TitleMetadata) -> String {
-    let name_upper = escape_macro_arg(&name.to_uppercase());
-    let date_str = metadata.date.map_or_else(String::new, escape_macro_arg);
-    let source_str = metadata.source.map_or_else(String::new, escape_macro_arg);
-    let manual_str = metadata.manual.map_or_else(String::new, escape_macro_arg);
+    let name_upper = escape_quoted_arg(&name.to_uppercase());
+    let date_str = metadata.date.map_or_else(String::new, escape_quoted_arg);
+    let source_str = metadata.source.map_or_else(String::new, escape_quoted_arg);
+    let manual_str = metadata.manual.map_or_else(String::new, escape_quoted_arg);
     format!(".TH \"{name_upper}\" \"{section}\" \"{date_str}\" \"{source_str}\" \"{manual_str}\"\n")
 }
 
 /// Generates the NAME section content.
+///
+/// The command name opens the NAME line, so it is encoded as a single
+/// unquoted token: a name that carries a line break must not start a request
+/// line, and one that carries a space must not split into stray arguments.
 pub fn name_section(headings: &LocalizedHeadings, name: &str, about: &str) -> String {
+    let escaped_name = escape_unquoted_arg(name);
     let escaped_about = escape_text(about);
     format!(
-        ".SH {}\n{name} \\- {escaped_about}\n",
-        escape_macro_arg(&headings.name)
+        ".SH {}\n{escaped_name} \\- {escaped_about}\n",
+        escape_quoted_arg(&headings.name)
     )
 }
 
@@ -66,9 +71,10 @@ pub fn synopsis_section(
     synopsis: Option<&str>,
     fields: &[LocalizedFieldMetadata],
 ) -> String {
+    let escaped_bin_name = escape_unquoted_arg(bin_name);
     let mut output = format!(
-        ".SH {}\n.B {bin_name}\n",
-        escape_macro_arg(&headings.synopsis)
+        ".SH {}\n.B {escaped_bin_name}\n",
+        escape_quoted_arg(&headings.synopsis)
     );
 
     if let Some(syn) = synopsis {
@@ -109,7 +115,7 @@ pub fn description_section(headings: &LocalizedHeadings, about: &str) -> String 
     let escaped = escape_text(about);
     format!(
         ".SH {}\n{escaped}\n",
-        escape_macro_arg(&headings.description)
+        escape_quoted_arg(&headings.description)
     )
 }
 
@@ -124,7 +130,7 @@ pub fn options_section(headings: &LocalizedHeadings, fields: &[LocalizedFieldMet
         return String::new();
     }
 
-    let mut output = format!(".SH {}\n", escape_macro_arg(&headings.options));
+    let mut output = format!(".SH {}\n", escape_quoted_arg(&headings.options));
     for (field, cli) in cli_fields {
         output.push_str(&entry::format_option_entry(field, cli));
     }
@@ -147,7 +153,7 @@ pub fn environment_section(
 
     env_fields.sort_by(|(_, a), (_, b)| a.var_name.cmp(&b.var_name));
 
-    let mut output = format!(".SH {}\n", escape_macro_arg(&headings.environment));
+    let mut output = format!(".SH {}\n", escape_quoted_arg(&headings.environment));
     for (field, env) in env_fields {
         output.push_str(&entry::format_env_entry(field, env));
     }
@@ -170,7 +176,7 @@ pub fn files_section(
         return String::new();
     }
 
-    let mut output = format!(".SH {}\n", escape_macro_arg(&headings.files));
+    let mut output = format!(".SH {}\n", escape_quoted_arg(&headings.files));
 
     // Discovery section
     if let Some(disc) = discovery.filter(|d| has_discovery_content(d)) {
@@ -210,7 +216,7 @@ pub fn precedence_section(
         _ => return String::new(),
     };
 
-    let mut output = format!(".SH {}\n", escape_macro_arg(&headings.precedence));
+    let mut output = format!(".SH {}\n", escape_quoted_arg(&headings.precedence));
     output.push_str(concat!(
         "Configuration values are resolved in the following order ",
         "(highest precedence last):\n"
@@ -255,7 +261,7 @@ pub fn examples_section(headings: &LocalizedHeadings, examples: &[LocalizedExamp
         return String::new();
     }
 
-    let mut output = format!(".SH {}\n", escape_macro_arg(&headings.examples));
+    let mut output = format!(".SH {}\n", escape_quoted_arg(&headings.examples));
 
     for example in examples {
         if let Some(title) = &example.title {
@@ -288,10 +294,12 @@ pub fn see_also_section(
         return String::new();
     }
 
-    let mut output = format!(".SH {}\n", escape_macro_arg(&headings.see_also));
+    let mut output = format!(".SH {}\n", escape_quoted_arg(&headings.see_also));
 
     for cmd in related_commands {
-        let escaped_cmd = escape_macro_arg(cmd);
+        // `.BR` takes a bare token, so a command name containing whitespace
+        // must be encoded rather than allowed to split into more arguments.
+        let escaped_cmd = escape_unquoted_arg(cmd);
         output.push_str(".BR ");
         output.push_str(&escaped_cmd);
         output.push_str(" (");
@@ -300,8 +308,9 @@ pub fn see_also_section(
     }
 
     for link in links {
+        // `.UR` takes its target as a single unquoted argument.
         output.push_str(".UR ");
-        output.push_str(&escape_macro_arg(&link.uri));
+        output.push_str(&escape_unquoted_arg(&link.uri));
         output.push('\n');
         if let Some(text) = &link.text {
             output.push_str(&escape_text(text));
@@ -319,7 +328,7 @@ pub fn exit_status_section(headings: &LocalizedHeadings) -> String {
         return String::new();
     }
 
-    let mut output = format!(".SH {}\n", escape_macro_arg(&headings.exit_status));
+    let mut output = format!(".SH {}\n", escape_quoted_arg(&headings.exit_status));
     output.push_str(".TP\n");
     output.push_str(&bold("0"));
     output.push_str("\nSuccessful execution.\n");

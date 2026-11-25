@@ -15,7 +15,7 @@ use cargo_orthohelp::schema::{
 use rstest::{fixture, rstest};
 
 #[fixture]
-fn default_headings() -> LocalizedHeadings {
+pub(super) fn default_headings() -> LocalizedHeadings {
     LocalizedHeadings {
         name: "NAME".to_owned(),
         synopsis: "SYNOPSIS".to_owned(),
@@ -37,7 +37,7 @@ fn minimal_metadata(default_headings: LocalizedHeadings) -> LocalizedDocMetadata
 }
 
 /// Creates test metadata with the given headings, name, and about text.
-fn make_test_metadata(
+pub(super) fn make_test_metadata(
     headings: LocalizedHeadings,
     name: &str,
     about: &str,
