@@ -38,9 +38,17 @@
             "name": "anstyle",
             "pkg": "registry+https://example.invalid#other@1.0.14",
             "dep_kinds": [{"kind": null, "target": null}]
+          },
+          {
+            "name": "renamed_anstyle",
+            "pkg": "registry+https://example.invalid#anstyle@9.9.9",
+            "dep_kinds": [{"kind": null, "target": null}]
           }
         ],
-        "dependencies": ["registry+https://example.invalid#other@1.0.14"]
+        "dependencies": [
+          "registry+https://example.invalid#other@1.0.14",
+          "registry+https://example.invalid#anstyle@9.9.9"
+        ]
       },
       {
         "id": "registry+https://example.invalid#other@1.0.14",

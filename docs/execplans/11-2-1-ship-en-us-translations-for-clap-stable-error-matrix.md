@@ -1829,6 +1829,14 @@ stopping and reporting.
       resolved graph has no normal anstyle dependency"; the file was restored
       byte-identically under SHA-256. The full target passes 110 tests and
       Clippy is clean.
+
+- [x] (2026-11-25) Round-47 second dependency edge. The fixture had one edge,
+      so the package named `anstyle` was present but never examined, and a
+      matcher accepting either the edge binding or the package name would still
+      have passed. A second normal edge now binds the `anstyle` package under
+      `renamed_anstyle`, so such a matcher finds two candidates and fails while
+      the correct one selects `other`. The focused control passes.
+
 - [x] (2026-11-21) Round-22 conflict dispositions. Five paths conflicted, and
       every one was resolved by preserving both sides' intent rather than by
       choosing a side wholesale:

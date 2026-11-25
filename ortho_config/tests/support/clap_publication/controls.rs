@@ -260,11 +260,11 @@ fn changed_glob_checksum_is_refused_by_the_lock_stage() -> Result<()> {
 /// A renamed graph edge is resolved by its binding, not its package name.
 ///
 /// This drives the gate's own resolution path rather than the predicate beside
-/// it. The synthetic graph binds the name `anstyle` to a package called `other`
-/// and also carries an unreferenced package actually called `anstyle`, so
-/// resolution must select `other` and the identity check must refuse it as
-/// unreviewed. Reverting the edge match to the package name selects the decoy
-/// and fails the first assertion.
+/// it. The synthetic graph has two normal edges: one binds the name `anstyle`
+/// to a package called `other`, the other binds the package actually called
+/// `anstyle` under a different name. Resolution must select `other`, and the
+/// identity check must refuse it as unreviewed. A matcher that accepted either
+/// the edge binding or the package name would find two candidates and fail.
 #[test]
 fn renamed_edge_resolves_through_its_binding() -> Result<()> {
     let metadata: Metadata = serde_json::from_str(&read_fixture("metadata/renamed_edge.json")?)?;
