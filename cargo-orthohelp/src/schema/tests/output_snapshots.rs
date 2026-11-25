@@ -1,9 +1,9 @@
-//! Golden snapshots for the tool's structured-output mirror (E4).
+//! Golden snapshots for the structured-output declaration (E4).
 //!
-//! The mirror repeats the library IR's shape rather than sharing its types, so
-//! these snapshots pin the two spellings together: a member added on one side
-//! only, a renamed token, or a `skip_serializing_if` removed on one side all
-//! show up as a diff instead of passing silently.
+//! The tool re-exports the library IR's types, so these snapshots pin the wire
+//! spelling the tool actually emits: a member added or renamed, or a
+//! `skip_serializing_if` removed, shows up as a diff instead of passing
+//! silently.
 //!
 //! Undeclared members are absent from these snapshots rather than `null`,
 //! because that omission is what lets a consumer tell an author's refusal from

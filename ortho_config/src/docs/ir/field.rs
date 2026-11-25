@@ -9,6 +9,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::content::{Example, Link, Note};
+use crate::docs::profile_redaction::ProfileFieldExposure;
 
 /// Metadata describing a single configuration field.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -39,6 +40,16 @@ pub struct FieldMetadata {
     pub links: Vec<Link>,
     /// Field-level notes.
     pub notes: Vec<Note>,
+    /// Non-disclosure classification declared by the author, if any.
+    ///
+    /// A protected field keeps its public descriptor but loses every modelled
+    /// value slot when [`DocMetadata::redacted_for_output`] projects the tree.
+    /// Defaults to `None` so IR written before this field existed still reads
+    /// as an ordinary field, per ADR-0003.
+    ///
+    /// [`DocMetadata::redacted_for_output`]: crate::docs::DocMetadata::redacted_for_output
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub profile_field: Option<ProfileFieldExposure>,
 }
 
 /// CLI documentation metadata for a field.

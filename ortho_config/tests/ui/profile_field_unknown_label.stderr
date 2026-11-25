@@ -1,0 +1,5 @@
+error: unknown profile_field label 'public'; expected "secret" or "reference_only"
+  --> tests/ui/profile_field_unknown_label.rs:12:36
+   |
+12 |     #[ortho_config(profile_field = "public")]
+   |                                    ^^^^^^^^

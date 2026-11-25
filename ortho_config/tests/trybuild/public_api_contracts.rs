@@ -28,6 +28,7 @@ fn main() {
         examples: Vec::new(),
         links: Vec::new(),
         notes: Vec::new(),
+        profile_field: None,
     };
 
     let leaf = empty_metadata("leaf");

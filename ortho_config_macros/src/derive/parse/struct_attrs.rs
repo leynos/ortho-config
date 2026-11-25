@@ -28,20 +28,147 @@ where
     Ok(())
 }
 
-/// Consumes an unrecognized key-value or list without recording it.
+/// Consumes an unrecognised key-value or list without recording it.
 ///
-/// The value is parsed as one expression rather than as a token stream: a
-/// token-stream parse runs to the end of the attribute, which would swallow
-/// every entry that follows. `#[serde(rename = "ref", alias = "reference")]`
-/// loses the alias that way, and the alias is what decides which merged keys
-/// the loader accepts.
+/// A name-value item must consume only its own value. Parsing a
+/// `TokenStream` from `meta.value()` would swallow the rest of the nested
+/// list, because that parser consumes everything it is given, so a later
+/// `flatten` in `#[serde(rename = "common", flatten)]` would never reach the
+/// enclosing callback. Reading one token tree at a time and stopping at a
+/// top-level comma leaves the enclosing `parse_nested_meta` loop positioned
+/// on the next item. A group token tree carries its own delimiters, so a comma
+/// inside parentheses or brackets cannot end the value early, and the scan
+/// tracks a turbofish's angle brackets so that a comma in `factory::<A, B>()`
+/// is not mistaken for one either.
 pub(crate) fn discard_unknown(meta: &syn::meta::ParseNestedMeta) -> syn::Result<()> {
     if meta.input.peek(Token![=]) {
-        meta.value()?.parse::<Expr>()?;
+        skip_to_item_end(meta.value()?)?;
     } else if meta.input.peek(syn::token::Paren) {
         let content;
         parenthesized!(content in meta.input);
         content.parse::<proc_macro2::TokenStream>()?;
+    }
+    Ok(())
+}
+
+/// Tracks the nesting a token scan must respect.
+///
+/// An item boundary is a comma that is not enclosed by anything. Two constructs
+/// carry top-level commas without being delimiter groups, so both are counted
+/// here:
+///
+/// - a turbofish: a `<` that follows `::` opens a level, a `<` already inside a
+///   level opens a nested one (`outer::<Inner<A, B>, C>()`), and a `>` closes
+///   one — except after `-`, so the arrow in `dyn Fn() -> T` cannot;
+/// - a closure's parameter list: `|a, b| a` puts its comma at top level.
+///
+/// A closure bar is recognised only while the value is still in its prefix, so
+/// a later `|` stays bitwise or (`a | b`). The prefix is not just the first
+/// token: `move |a, b| a` puts the `move` keyword before the bar, and
+/// `async move` may precede it too, so those keywords keep the prefix open.
+/// The previous `syn::Expr` parse accepted every one of these shapes.
+#[derive(Default)]
+struct ItemNesting {
+    /// How many turbofish argument lists are open.
+    angle_depth: usize,
+    /// Consecutive `:` tokens seen, to recognise the `::<` opener.
+    colons: u8,
+    /// Whether the previous token was `-`, to recognise an arrow's `>`.
+    after_dash: bool,
+    /// Whether a closure's parameter list is open.
+    inside_closure_params: bool,
+    /// Whether only closure-prefix keywords have been consumed so far.
+    at_value_prefix: bool,
+}
+
+/// Keywords that may precede a closure's parameter list.
+///
+/// `move` and `static` capture by move or by reference for `'static`; `async`
+/// marks an async block or closure. All three are ordinary identifiers to the
+/// token stream, so the scan compares their spelling.
+const CLOSURE_PREFIX_KEYWORDS: [&str; 3] = ["move", "async", "static"];
+
+impl ItemNesting {
+    /// Reports whether a comma here ends the value rather than nesting.
+    const fn at_top_level(&self) -> bool {
+        self.angle_depth == 0 && !self.inside_closure_params
+    }
+
+    /// Updates the nesting from one token.
+    fn observe(&mut self, tree: &proc_macro2::TokenTree) {
+        if self.at_value_prefix && is_closure_prefix_keyword(tree) {
+            return;
+        }
+        let ch = match tree {
+            proc_macro2::TokenTree::Punct(punct) => Some(punct.as_char()),
+            _ => None,
+        };
+        let opens_bar = ch == Some('|') && self.at_value_prefix;
+        if opens_bar {
+            // `||` arrives as two bars: the first opens the parameter list and
+            // the second closes it, which is exactly what every zero-parameter
+            // closure needs.
+            self.inside_closure_params = true;
+            self.colons = 0;
+        } else if ch == Some('|') && self.inside_closure_params {
+            self.inside_closure_params = false;
+            self.colons = 0;
+        } else {
+            self.observe_angle(ch);
+        }
+        self.after_dash = ch == Some('-');
+        self.at_value_prefix = false;
+    }
+
+    /// Applies the turbofish rules to a token that is not a closure bar.
+    const fn observe_angle(&mut self, ch: Option<char>) {
+        match ch {
+            Some(':') => self.colons = self.colons.saturating_add(1),
+            Some('<') if self.angle_depth > 0 || self.colons >= 2 => {
+                self.angle_depth += 1;
+                self.colons = 0;
+            }
+            Some('>') if self.after_dash => self.colons = 0,
+            Some('>') if self.angle_depth > 0 => {
+                self.angle_depth -= 1;
+                self.colons = 0;
+            }
+            _ => self.colons = 0,
+        }
+    }
+}
+
+/// Reports whether a token is a keyword that may precede a closure's bars.
+///
+/// The token stream carries `move` as an identifier, so its spelling is the
+/// only way to recognise it.
+fn is_closure_prefix_keyword(tree: &proc_macro2::TokenTree) -> bool {
+    match tree {
+        proc_macro2::TokenTree::Ident(ident) => {
+            CLOSURE_PREFIX_KEYWORDS.contains(&ident.to_string().as_str())
+        }
+        _ => false,
+    }
+}
+
+/// Consumes tokens up to the next item separator, leaving the comma unread.
+///
+/// Reading one token tree at a time and stopping at a top-level comma keeps
+/// the enclosing `parse_nested_meta` loop positioned on the next item, so a
+/// later `flatten` in `#[serde(rename = "common", flatten)]` still reaches its
+/// handler. The nesting rules that make "top-level" meaningful are in
+/// [`ItemNesting`].
+fn skip_to_item_end(input: syn::parse::ParseStream<'_>) -> syn::Result<()> {
+    let mut nesting = ItemNesting {
+        at_value_prefix: true,
+        ..ItemNesting::default()
+    };
+    while !input.is_empty() {
+        if nesting.at_top_level() && input.peek(Token![,]) {
+            break;
+        }
+        let tree: proc_macro2::TokenTree = input.parse()?;
+        nesting.observe(&tree);
     }
     Ok(())
 }

@@ -113,6 +113,10 @@
 - [ADR-0025: Enumerate missing required values for selected subcommands](adrs/adr-0025-enumerate-missing-values-for-selected-subcommands.md):
   review the loader-scoped supply routes and the widened subcommand merge
   bounds that extend ADR-0024 to selected subcommands.
+- [ADR-0026: Profile field redaction](adrs/adr-0026-profile-field-redaction.md):
+  review the shared disclosure projection, its boundaries and cache salt, the
+  protected-field records, the names-only catalogue, and the Verus model's
+  residual testing boundary.
 - [Archived v0.8.0 roadmap](archive/v0-8-0-roadmap.md): review completed
   phases, steps, and tasks from the roadmap that preceded the active
   agent-native plan.
@@ -259,6 +263,8 @@
     diagnostics, schema coverage, and the proof-adoption test in roadmap 7.3.1.
   - [Profile metadata](execplans/9-1-1-profile-metadata.md): plan for roadmap
     item 9.1.1, optional profile selection and layering.
+  - [Profile redaction metadata](execplans/9-1-2-profile-redaction-metadata.md):
+    approval-gated plan for sensitive fields and safe profile-name exposure.
   - [Adopt rstest-bdd v0.5.0](execplans/adopt-rstest-bdd-v0-5-0.md): plan for
     the behavioural testing migration.
   - [Prepare the v0.9.0 user documentation](execplans/prepare-v0-9-0-user-documentation.md):

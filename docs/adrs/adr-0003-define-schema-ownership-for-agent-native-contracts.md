@@ -125,3 +125,13 @@ Static Analysis Results Interchange Format (SARIF), JSON Schema, and Model
 Context Protocol tool definitions remain useful prior art for field naming and
 machine-readable structure. They are not compatibility targets for this
 decision.
+
+## Addendum (2026-11-23): `cargo-orthohelp` re-exports the owned schema
+
+This record assigns ownership of the documentation IR to `ortho_config::docs`
+and requires the standalone generator to consume it. The generator now does so
+by re-export: `cargo_orthohelp::schema` names the owning crate's types
+directly, so there is no second definition to keep aligned and no
+version-alignment test. The ownership decision is unchanged; only the mechanism
+of consumption is. [ADR-0026](adr-0026-profile-field-redaction.md) records the
+projection boundary that the single type identity enables.

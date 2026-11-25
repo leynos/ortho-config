@@ -1,0 +1,1600 @@
+# Add profile redaction metadata (9.1.2)
+
+Status: M1–M3 DELIVERED — one acceptance gate is open. Every ordinary gate
+except `make test` passes on this host, and `make test` times out in
+`cargo-orthohelp`'s trybuild child under shared compiler-admission pressure
+with no compiler diagnostic, so it is recorded as a timeout rather than a pass.
+Whether the hosted and `--no-fail-fast` evidence discharges that criterion is a
+maintainer decision, recorded under Progress (2026-11-24 and 2026-11-25); this
+plan does not claim the gate passed. PR publication and review tracking follow
+in the pull request.
+
+This execution plan is a living document. Keep Constraints, Tolerances, Risks,
+Progress, Surprises & discoveries, Decision log, Outcomes & retrospective,
+Conformance basis, and Verification plan current at every milestone. The
+behavioural contracts below record the approved design as delivered by M1–M3;
+where an earlier revision says *propose*, it describes the interface the
+implementation realized, not remaining work.
+
+## Purpose / big picture
+
+Applications should describe their profile fields and publish profile names
+without publishing sensitive values. Roadmap 9.1.2 adds explicit secret and
+reference-only declarations, removes their value-bearing metadata before
+context or documentation rendering, and provides a names-only context input. A
+consumer can still load a secret from a profile: redaction affects disclosure,
+not configuration resolution.
+
+Success is observable when two fixtures with identical public metadata but
+entirely different protected defaults, examples, and profile contents produce
+identical context JSON and generated documentation. Public field descriptors
+and deliberately supplied profile names remain visible. Ordinary fields retain
+their current defaults and examples, subject to the conservative
+command-example policy below. No profile store, secret resolver, or domain
+policy is introduced.
+
+## Conformance basis
+
+The inspected baseline after the 2026-11-13 rebase is `origin/main` commit
+`37452245bf2af9254011dd5eee103866cfff5edc`. It includes
+`ddba3578fae04227e426ea3a61aa2b24aa043232`, the merge of
+[PR #651](https://github.com/leynos/ortho-config/pull/651), which imports Kani
+and Verus tooling, and `eaf4c028440b96eb84469a3bcddf2d9c4be4b371`, the merge of
+[PR #664](https://github.com/leynos/ortho-config/pull/664),
+which supplies nested Cargo test-harness fixes. The original draft used
+`dc979878b5728bbb23866df9c05c2570bdb5629e`; neither its validation nor the
+intermediate temporary-parent runs establish acceptance of this candidate. The
+governing requirements are [roadmap](../roadmap.md) 9.1.2 and
+[agent-native CLI design](../agent-native-cli-design.md) §6.7. There is no
+separate terms-of-reference document for this task. Prerequisite 9.1.1 is
+checked complete and implemented;
+[ADR-0012](../adrs/adr-0012-profile-selection-and-layering.md) controls
+selection, precedence, and static-versus-runtime metadata.
+[ADR-0017](../adrs/adr-0017-consumer-side-prover-tooling.md), the
+[prover import plan](import-prover-tools.md), and the developers' guide's
+production proof inventory govern the existing verifier boundary. R2's M2 must
+add feature-owned proofs to that boundary, not recreate the tooling.
+
+### Merged prerequisites and implementation hand-off
+
+The PR targets `main`. The temporary parent `issue-644-nested-cargo-timeouts`
+has merged as #664, and the return to `main` is complete. The rebase replayed
+only the profile-plan commit after the preserved parent boundary
+`8309e3b41287f2fb9b70016194b8bfe2235db4fd`; none of the seven inherited parent
+commits was replayed after the squash merge.
+
+Preserve the merged nested Cargo serialization, bounded process-tree cleanup,
+retained timeout diagnostics, shared scenario allowances, and leased reusable
+identifier-fixture target. These are prerequisite test-harness fixes, not
+profile-redaction implementation. Follow the developers' guide's current
+Cargo-backed test conventions and load-sensitive deadline guidance. PR #681
+explicitly documents that host load and cold compilation can still exhaust
+those deadlines; do not interpret a timeout as proof of a semantic defect or as
+a passing gate. Earlier failed or interrupted runs remain historical.
+
+Future rebases must re-establish the exclusive child replay boundary using the
+`rebase` skill, preserve recovery refs, inspect conflicts and range diffs, and
+rerun the required gates. Publication of this plan, including the authorized
+publication of failed validation results, does not grant feature implementation
+approval.
+
+Use these trace identifiers throughout implementation:
+
+- R1: explicit secret/reference-only field classification → M1 → derive,
+  serialization, and compile-fail tests.
+- R2: sensitive values absent from context and generated examples → M1 and
+  M2 → noninterference properties, renderer snapshots, and executable tests.
+- R3: names exposed independently of contents → M1 and M2 → names-only API
+  tests and context end-to-end tests.
+- R4: reusable contracts, unchanged loading and precedence → every milestone
+  → existing profile suites and conformance review.
+
+Read [design](../design.md) for crate boundaries;
+[CLI localization design](../cli-localization-design.md) and
+[localizable Rust libraries with Fluent](../localizable-rust-libraries-with-fluent.md)
+for localization ownership;
+[cargo-orthohelp design](../cargo-orthohelp-design.md) for the bridge and
+renderers; [clap integration](../clap-dispatch-and-ortho-config-integration.md)
+for root selectors; and [error design](../improved-error-message-design.md) for
+typed diagnostics.
+
+Use [rstest fixtures](../rust-testing-with-rstest-fixtures.md) for reusable
+setup and [doctest guidance](../rust-doctest-dry-guide.md) for examples.
+
+Use the
+[dependency injection guide](../reliable-testing-in-rust-via-dependency-injection.md)
+for isolated configuration sources.
+
+Use
+[complexity guidance](../complexity-antipatterns-and-refactoring-strategies.md)
+for module decomposition and [rstest-bdd guide](../rstest-bdd-users-guide.md)
+for behavioural scenarios.
+
+The requested `docs/rtest-bdd-users-guide.md` is a misspelling of that existing
+BDD guide. The [scripting standards](../scripting-standards.md) now exist; use
+them alongside the
+[developers' guide](../developers-guide.md), [repository layout](../repository-layout.md),
+and `AGENTS.md` for scripts. Follow the current
+[BDD migration guide](../rstest-bdd-v0-6-0-migration-guide.md) and
+[documentation provenance](../rstest-bdd-doc-provenance.md) when adapting
+behavioural fixtures. Do not copy historical step signatures uncritically.
+
+Load the `codegraph-mcp`, `rust-router`, and `execplans` skills first. Route
+verification through `rust-verification` and `verus`, tests through
+`rust-unit-testing` and `proptest`, and publication through `commit-message` and
+`pr-creation`. Use `firecrawl-mcp` for external documentation. Use the
+`logisphere-experts` skill for design review. Resolve skill paths from the
+active skill catalogue rather than embedding workstation-specific paths here.
+
+## Context and orientation
+
+`ortho_config/src/profile/` owns profile names, selection, extraction, and load
+outcomes. `ProfileName` validates non-empty ASCII letters, digits, underscores,
+and hyphens, rejecting the reserved name `default`. `AvailableProfileNames`
+sorts, deduplicates, and caps diagnostic names at 16; it is not a complete
+profile catalogue and accepts raw strings.
+
+`ortho_config/src/docs/ir/mod.rs` defines the documentation intermediate
+representation (IR), including `DocProfilesMeta` and `DocMetadata`.
+`ortho_config/src/docs/ir/field.rs` owns `FieldMetadata`, `CliMetadata`, and
+`ValueType`; sibling `behaviour`, `content`, and `renderer` modules hold the
+remaining contracts. The macro builds these in
+`ortho_config_macros/src/derive/generate/docs/fields/mod.rs` and
+`ortho_config_macros/src/derive/generate/docs/mod.rs`.
+`ortho_config/src/docs/mod.rs` owns exports and IR version `2.0`.
+
+`cargo-orthohelp/src/schema/mod.rs` mirrored the library schema as separate
+Rust types when this plan was written; it did not re-export the library types,
+and its private `field`, `behaviour`, `content`, and `renderer` modules
+mirrored the runtime layout. M1 replaced that mirror with re-exports of
+`ortho_config::docs`, so one type identity and one projection now cover both
+crates. Preserve the upstream renderer declarations and optional-value CLI
+metadata when consolidating these types or projecting them. Renderer
+declarations are public descriptions with application-defined string
+identifiers; they are outside profile-value redaction and must remain unchanged.
+`cargo-orthohelp/src/agent_context/mod.rs::bridge_ir_to_agent_context` builds
+context; `build_input` in `cargo-orthohelp/src/agent_context/input.rs`
+currently copies defaults and enumerated values.
+`cargo-orthohelp/src/ir/mod.rs::localize_doc` and its private per-field
+conversion copy defaults and examples for human renderers. `roff/` and
+`powershell/maml/` under `cargo-orthohelp/src/` render those structures. Inspect
+`bridge.rs`, `generation.rs`, `cache.rs`, and `output.rs` there to cover
+intermediate and cached output, not only final files.
+
+`ortho_config/src/agent_context/profiles/mod.rs::ProfilesDeclaration` contains
+support, selector, optional listing-command metadata, the protected-field
+records, and the names-only catalogue. Static context contains no active
+selection or profile bodies. `list_command` population and discovery/store
+helpers remain roadmap 9.1.3 work.
+
+## Behavioural contracts (implemented)
+
+### Classification and disclosure boundary
+
+Propose field syntax `#[ortho_config(profile_field = "secret")]` and
+`#[ortho_config(profile_field = "reference_only")]`. Introduce the shared
+`ProfileFieldExposure` enum with `Secret` and `ReferenceOnly` variants in a
+focused `ortho_config/src/docs/profile_redaction/mod.rs` module. Add optional
+`profile_field: Option<ProfileFieldExposure>` to `FieldMetadata`; absence means
+ordinary existing disclosure. Reject unknown labels and duplicate annotations
+with span-local macro diagnostics. Labels are mutually exclusive.
+
+A secret field contains confidential material. A reference-only field names
+material the application resolves elsewhere; OrthoConfig neither resolves nor
+publishes the actual reference value. Both labels suppress literals, including
+credential-bearing locator strings. Only their semantic labels differ.
+Annotations apply to every generated representation of that field, regardless
+of whether profiles are enabled on its containing derive. This permits a nested
+command or reusable configuration type to declare sensitivity without changing
+loader opt-in rules.
+
+Protected fields retain their identifier, CLI spelling, environment-variable
+name, configuration key, requiredness, help, and structural type. Their entire
+`default` becomes `None`, examples become empty, CLI `possible_values` become
+empty, and all nested `ValueType::Enum` members become empty recursively.
+Protect list/map inner types too. Do not evaluate default expressions to obtain
+redaction text. Omission is preferable to inserting a fake value that consumers
+might execute. Help, notes, links, identifiers, and custom type names are
+explicitly public author-controlled descriptions; authors must not embed
+secrets there. This is a structural disclosure contract, not a scanner for
+arbitrary confidential strings or a guarantee about arbitrary application logs.
+
+Command examples are unstructured strings with no dependable field mapping. If
+any field anywhere in a document tree is protected, remove all command-level
+examples throughout that tree before localization. Also remove protected field
+examples in full, including their titles and descriptions. This broader removal
+is intentional: a parent or sibling example may exercise a protected child. Do
+not add substring replacement, heuristic parsing, or a raw bypass. Ordinary
+field examples are authored public data and remain outside that cross-command
+suppression; document that authors must not place another field's protected
+values in these public channels.
+
+### Shared projection and context representation
+
+Replace the generator schema mirror in `cargo-orthohelp/src/schema/mod.rs` with
+explicit public re-exports from `ortho_config::docs`, preserving existing
+module paths. ADR-0003 assigns ownership to that library. Consolidating the
+mirror types is a new decision proposed for 9.1.2, grounded in that ownership.
+Record this decision and the pre-1.0 type-identity change in the new ADR and
+developers' guide, and update schema tests to test actual wire defaulting and
+round trips rather than comparing a type with itself. This removes schema drift
+and permits one projection without JSON conversion, fallible schema-conversion
+APIs, or a generic visitor framework. This ownership consolidation is part of
+M1, not a temporary compatibility layer.
+
+Propose `DocMetadata::redacted_for_output(&self) -> DocMetadata`, backed by one
+library-owned recursive projection. It returns an owned sanitized copy and
+never mutates runtime configuration. Before extracting a helper, repeat the
+repository search for an equivalent; the planning sweep found none. Its only
+responsibility is the above disclosure policy. Macro-generated metadata,
+context conversion, and documentation generation use this policy; renderers
+must not grow their own competing classification rules. Compute whether any
+protected field exists once, then project the complete tree once per public
+conversion boundary. Private localization recursion consumes the sanitized tree
+without calling the public entry point again. The algorithm performs a constant
+number of linear traversals, not one projection per subtree. Verify this
+structure with a deep-chain traversal-count regression.
+
+Sanitize derive-emitted metadata before bridge serialization, and sanitize
+handwritten or deserialized metadata at public conversion entry points too.
+Ensure the bridge cache stores only the sanitized representation and rejects
+old cached output by changing the relevant cache identity. Audit policy reports
+and error/debug output on these routes for accidental formatting of the raw
+metadata. Preserve existing public entry points where feasible, without
+creating aliases or compatibility wrappers. This is a pre-1.0 source API:
+update struct literals and all in-tree consumers together.
+
+Extend `ProfilesDeclaration` with an omitted-when-empty `redaction` list of
+`ProfileFieldRedaction { command_path, field_name, key_path, exposure }`.
+`command_path` is the existing tokenized command path; `field_name` is the
+emitted metadata name; `key_path` is the optional existing file key spelling.
+Use the pair `(command_path, field_name)` as identity, retaining `key_path`
+without reparsing dotted strings. Include config-only and hidden fields in this
+list even though they do not become invocable `AgentInput` entries. Sort
+records deterministically by identity; reject duplicate identities in
+handwritten/deserialized redaction lists rather than selecting an arbitrary
+label. The current docs builder does not expand flattened containers into
+descendant metadata. Reject `profile_field` on clap or serde flattened
+containers with a compile-time diagnostic; do not invent a field graph. Support
+marked emitted leaf fields and nested subcommand metadata using the existing
+identities. Annotations on separately derived child types do not imply
+protection in a parent that does not expose those child fields: document that
+limitation and require explicitly emitted marked metadata for a protected
+flattened use case. A general flatten expansion feature is outside this plan.
+
+For supported profiles, expose that list at `profiles.redaction`. Store the new
+list privately with a read-only accessor and
+`with_redaction(self, records: Vec<ProfileFieldRedaction>) -> OrthoResult<Self>`
+that canonicalizes records and returns a typed error for duplicates or
+nonempty records on an unsupported declaration. New error payloads contain only
+public identities, never value-bearing metadata.
+
+The generator's `bridge_ir_to_agent_context` therefore returns
+`OrthoResult<AgentContext>` instead of `AgentContext`, propagating
+invalid-record errors through its callers to the existing application error
+boundary. Update every in-tree caller and document this pre-1.0 signature
+change; do not unwrap or discard builder failures. Localization remains
+infallible because omission itself requires no record-identity validation.
+
+For unsupported profiles, retain exactly `{ "supported": false }`; redaction
+still applies to marked field output but no profile declaration is invented.
+Keep agent-context schema `1` and documentation IR `2.0` as additive wire
+extensions with missing fields defaulting to empty/absent. Invalid recognized
+classification strings must fail deserialization, never become ordinary fields.
+Old producers without annotations retain their existing disclosure behaviour;
+old consumers cannot be assumed to enforce new labels. Hence new producers must
+remove sensitive values before serialization, rather than relying on consumer
+awareness of the added enum.
+
+### Names without contents
+
+Propose
+`ProfilesDeclaration::with_available_names(self,
+names: impl IntoIterator<Item = ProfileName>) -> Self`,
+adding `available_names` string-array wire data with default/empty omission.
+Store validated names privately with a read-only accessor; do not add a public
+raw-string vector. For an unsupported declaration return it unchanged; for a
+supported declaration, replace the list with sorted, deduplicated validated
+labels. This is an explicit consumer-supplied catalogue, not implicit
+discovery, active selection, or a capped diagnostic list. Do not reuse the
+diagnostic cap for it.
+
+The builder has no profile-body parameter and performs no file, environment,
+network, or resolver access. Validate incoming serialized names with the same
+`ProfileName` grammar, sort/deduplicate them, and reject nonempty names or
+redaction records on an unsupported declaration. Apply the same invariants on
+serialization, since the existing public `supported` flag remains mutable. If
+it was flipped after adding metadata, fail serialization with a value-free
+error rather than emitting an inconsistent declaration. Do not tighten legacy
+selection/list-command combinations as an incidental change. Update in-tree
+struct literals to constructors because the new fields are private. Consumers
+deliberately designate names as public labels: grammar validation cannot detect
+a password deliberately used as a syntactically valid name. Static
+`cargo-orthohelp` output supplies no names. A downstream runtime context
+adapter may explicitly attach names; it must not load resolved configuration
+merely to build context.
+
+## Verification plan
+
+Define the model before implementation. A document is a finite rooted tree of
+commands. Each field has a public descriptor, optional exposure label, and
+value-bearing slots: default, example sequence, CLI possible values, and
+recursively nested enum members. Command nodes have an example sequence. A
+profile catalogue is a finite map from validated public names to arbitrary
+bodies. Two documents are low-equivalent when their public descriptors,
+topology, and labels agree; ordinary field slots agree; protected slots may
+differ arbitrarily. Command examples must agree when no protected field exists;
+they may differ arbitrarily only when a protected field exists and global
+suppression applies. Low-equivalence expresses exactly what the output is
+allowed to reveal.
+
+Let P be the projection defined above, and N the sorted distinct name
+projection. Preconditions are finite well-formed metadata and correctly
+classified public descriptions, not an assumption that inputs are already
+redacted. The postcondition is absence of protected value slots, preservation
+of permitted descriptions, and independence from discarded slots.
+
+Sketch these semantic obligations before choosing executable helpers:
+
+- V1, noninterference: low-equivalent documents have equal P results, for
+  arbitrary tree sizes, depths, and protected value contents.
+- V2, projection integrity: P preserves identifiers, labels, ordinary field
+  slots, upstream renderer declarations, optional-value CLI metadata, and
+  command topology; clears exactly the specified protected slots; and P(P(d))
+  equals P(d).
+- V3, names independence: catalogues with identical public key sets produce
+  equal N results even when every body differs. Output is deterministic and
+  contains no body fragments. The implemented builder takes only validated
+  names, making body access unavailable by construction.
+- V4, executable correspondence: macro emission, runtime schema, bridge cache,
+  localization, and final serializers implement the same projection. Every
+  value-bearing slot in the actual types has an explicit model counterpart.
+- V5, loading preservation: marking a field changes no load result, selection,
+  precedence, CLI acceptance, or source provenance.
+
+Verus is warranted for V1 and V2 over an unbounded recursive metadata tree,
+including propagation of the global command-example suppression condition. A
+single Boolean classification truth table alone would not justify it. Prove
+V1/V2 in proposed `verus/profile_redaction.rs`; prove any supporting semantic
+statements there without `assume`, `admit`, external/trusted proof bodies, or
+an axiom equivalent to the goal. Potential proof structure is preservation
+under field projection and composition across command children; these are
+hypotheses, not mandatory lemma boundaries. Defer collection algebra, solver
+triggers, and induction helper selection until verification conditions exist.
+No speculative executable proof scaffold belongs in this planning PR.
+
+Prefer sharing the small executable projection kernel where Verus supports it.
+If a specification mirror is needed, document the abstraction mapping from every
+`DocMetadata`, `FieldMetadata`, and `ValueType` variant and review it
+alongside production edits. A proof of the mirror is not a proof of serde,
+macros, localization, or renderers. Discharge V4 with differential property
+tests comparing the production projection against an independently written
+model, plus output integration tests. Execute the proved model as the oracle
+where practical. If the Rust oracle is a separate implementation, record a
+slot-by-slot model-to-oracle correspondence review and shared witness corpus;
+that correspondence remains tested/reviewed, not formally proved. Record this
+residual testing boundary honestly in the design documentation; do not claim
+fully verified binaries.
+
+Use `rstest` tables for R1 syntax, both classifications, absent annotations,
+invalid JSON labels, missing optional fields, and unsupported names. Use
+`googletest::assert_that!` for structural assertions and
+`pretty_assertions::assert_eq!` for equality diagnostics. Existing workspace
+dependencies authorize both; avoid non-fatal assertions requiring extra test
+context unless the fixture return type supports them.
+
+Use `proptest` for V1–V4 integration: construct paired documents with different
+protected sentinels, nested list/map/enum types, duplicate leaf names under
+different commands, renames, and reordered input names. Test rejection of
+marked flattened containers separately with compile-fail fixtures. Bound
+runtime generators to depth 4, 0–8 children/fields per node, and strings up to
+128 characters, with a total budget of 32 command nodes and 64 fields per case;
+include empty, protected-only, ordinary-only, and mixed trees as explicit
+cases. These bounds are tests, not the Verus domain. Avoid heavy filtering,
+record class coverage, and persist reduced failures. Test equality of complete
+outputs rather than naive substring absence: public text may legitimately equal
+a secret value. In dedicated sentinel fixtures choose protected tokens absent
+from public data and assert their absence in all artefacts, stdout, stderr, and
+captured tracing.
+
+Non-vacuity evidence must include a mixed tree with a protected child and
+parent/sibling command examples; a public field whose default stays visible; a
+secret and a reference-only field; and two bodies behind the same valid profile
+name. Temporarily seed faults that retain one protected default, retain a
+nested enum member, and skip a child during projection. Each must fail the
+relevant tests; the model-side faults must fail the corresponding Verus
+obligation. Remove faults, rerun the affected checks, and record evidence. No
+proof may obtain correctness by assuming low-equivalence of its outputs.
+
+V3 uses type/API inspection plus parameterized and property tests; no separate
+proof of sorting or name grammar is warranted. V5 uses existing precedence
+properties and profile behavioural suites with newly marked fields. Diagnostics
+formatting, Fluent resolution, filesystem/cache plumbing, and JSON/roff/XML
+escaping use conventional integration tests and snapshots, not artificial proof
+obligations. Kani adds no distinct assurance here and is not planned.
+
+Trusted premises are the documented serde serialization behaviour, Fluent
+resolution, Rust memory safety, and the verifier/toolchain soundness. Public
+metadata is author-approved, and applications classify sensitive fields.
+Exercise actual serde and renderer boundaries; do not attempt to prove those
+third-party implementations. Timing, memory allocation, arbitrary application
+logging, and secrets embedded deliberately in public labels are out of scope.
+
+## Milestones and plan of work
+
+### M1 — Deliver the complete disclosure boundary
+
+After explicit approval, record the contract decisions in a new ADR, choosing
+its number from the live `docs/adrs/` inventory. Reference it from
+`docs/agent-native-cli-design.md` §6.7 and `docs/cargo-orthohelp-design.md`.
+Record ownership and reuse policy in the latter before introducing helpers.
+
+Use Red-Green-Refactor: first add focused tests that demonstrate the missing
+annotation/projection and a sentinel leaking through the current adapters. A
+compile failure for an unknown proposed attribute proves only the parser gap;
+retain a behavioural red test against hand-built metadata as well. Capture the
+expected failure before changing production code; never commit failing gates.
+
+Implement the schema ownership consolidation, IR enum and projection, macro
+parsing in `ortho_config_macros/src/derive/parse/field_attrs.rs` and its
+`FieldAttrs` representation, field emission, context records, and names
+builder. Update exports, all construction sites, and direct deserialization
+tests. Integrate both output paths and cache handling in the same milestone so
+a marker never ships while a supported renderer still leaks its values. Split
+growing modules by responsibility to keep source files below 400 lines.
+
+Acceptance is R1–R4 with V1/V2 provisionally established by tests, V3/V4/V5
+covered by their test suites, and all ordinary gates passing. It is an
+internally coherent but not feature-complete plateau: the formal discharge and
+full external workflow evidence remain M2. Commit the gated change; if a
+failure occurs, resume from this milestone's red/green logs, or revert its
+complete commit without changing profile files. No compatibility layer is
+needed for these pre-1.0 source additions.
+
+### M2 — Discharge proofs and external workflow contracts
+
+Implement the substantive Verus model and proofs described above, along with
+the documented production mapping. Reuse PR #651's existing checksum-pinned
+`tools/verus/VERSION` and `tools/verus/SHA256SUMS`, shared runner pin, and
+`make verus` recipe. The current Verus pin is `0.2026.01.30.44ebdee`; the
+shared package is pinned to `592558f7183b554fc749696246984c5d7300d029` and runs
+with Python 3.14 through `uv`. New scripts target Python 3.14, as
+`docs/scripting-standards.md` requires; an older interpreter is allowed only
+where an integration constraint applies and is documented inline. Do not
+introduce a second installer, runner, solver pin, or replacement Make target.
+
+Register `verus/profile_redaction.rs` in the existing `VERUS_PROOF_FILES`
+Makefile inventory. Before registration, an explicit focused invocation is:
+
+```sh
+make verus VERUS_FLAGS='--proof-file verus/profile_redaction.rs'
+```
+
+Once registered, `make verus` without overrides must verify the production
+inventory. A successful fixture-only run is not feature acceptance. Record the
+owning feature (9.1.2), crate (`ortho_config`), production source paths, proof
+file and exact symbols, symbolic domain, all preconditions and model
+abstractions, expected nonzero verification count, and negative controls in the
+feature PR and developers' guide. Refine these names as M1 settles the kernel.
+An empty inventory produces `FORMAL-EMPTY` and fails; neither that result nor a
+skipped integration test discharges V1 or V2.
+
+Use `make install-verus` as the explicit provisioning step when the pinned
+bundle or its embedded Rust toolchain is absent. It installs under `.verus/`
+and reads the required toolchain from the release's `version.json`; do not
+hardcode another toolchain pin. The existing Make boundary supplies the bundled
+Z3 through `VERUS_Z3_PATH`. Do not install the shared package's standalone Z3:
+its version is incompatible with this Verus release. Execution must retain both
+`--no-install-missing` and `--no-ensure-toolchain`; missing tools fail rather
+than being provisioned by a proof run. Pin upgrades require separate evidence
+and are not part of this feature.
+
+PR #651's `tests/fixtures/prover_tools/` and opt-in
+`make test-prover-tools-integration` established runner acceptance and
+rejection, not configuration correctness. [Superseded 2026-11-20: main deleted
+that lane and its opt-in target in `0af1e88e` (PR #678), so the fixtures and
+the target no longer exist and this paragraph's fixture obligation is
+withdrawn. See the decision log.] Do not register any fixture as a production
+proof, add a Kani harness solely because Kani is available, or add prover
+installation/execution to `make all`, `make test`, or `make lint`.
+
+Extend the existing `.github/workflows/prover-tools.yml` lane in M2 to run
+registered production Verus proofs after installation and retain their separate
+transcript with the uploaded evidence. Add `verus/**` and the actual production
+kernel/model-mapping paths to its pull-request path filters. Update
+`tests/workflow_contracts/prover_tools_workflow_test.py` to check those paths,
+the production invocation, and upload coverage. Preserve read-only permissions,
+pinned actions, 30-minute bound, and Linux x86_64 scope. Other platforms remain
+explicitly unvalidated. The existing hosted sccache opt-out for Kani is not
+permission to unset local compiler admission wrappers.
+
+Use the managed compiler admission path locally. If admission is unhealthy,
+report its full status and continue non-compiling work rather than bypassing
+wrappers. `make verus` must fail on failed or missing verification. Keep it a
+separate milestone gate, outside the ordinary Rust gate sequence. Run
+`make test-workflow-contracts` when adding the inventory and CI coverage;
+contract tests prove command wiring, while the real production proof run must
+independently discharge V1 and V2.
+
+Add `cargo-orthohelp/tests/features/profile_redaction.feature`, registering
+steps through its existing `tests/rstest_bdd.rs` support modules. The required
+behaviour specification is:
+
+```gherkin
+Feature: Profile metadata keeps sensitive values private
+  Scenario: Protected metadata is omitted from every output format
+    Given a profile-enabled command with secret and reference-only fields
+    And their defaults, enum members and examples contain distinct sentinels
+    When context JSON and human documentation are generated
+    Then public field descriptors remain visible
+    And context JSON declares both classifications
+    And no protected sentinel appears in any generated artefact
+
+  Scenario: Parent examples cannot disclose a protected child
+    Given a nested command tree with a secret child field
+    And parent and sibling command examples contain its sentinel
+    When documentation is generated
+    Then every command-level example collection is empty
+
+  Scenario: Public profile names do not expose profile contents
+    Given two catalogues with the same validated public names
+    And every profile body differs between the catalogues
+    When each consumer attaches only the names to its context
+    Then both serialized contexts are identical
+    And neither context contains profile bodies
+
+  Scenario: Ordinary metadata retains its behaviour
+    Given a command with no marked fields
+    When context and documentation are generated
+    Then its defaults and examples retain their existing representation
+```
+
+Add parameterized unhappy paths for invalid annotations/names, unsupported
+profiles, malformed labels from JSON, and hidden/config-only marked fields.
+Extend `cargo-orthohelp/tests/golden/agent_context_tests.rs`, its renderer
+snapshot suites, and `examples/hello_world/tests/agent_context_e2e.rs` or a
+minimal fixture in `tests/fixtures/` to exercise real subprocess output. Human
+documentation must omit protected values; it need not add new localized
+classification badges. Classifications remain in sanitized IR and context JSON.
+Cover JSON, roff, and PowerShell MAML across at least two available locales,
+with nested commands. Use `insta` for output shape and explicit semantic
+assertions for redaction; inspect snapshot diffs rather than accepting them
+blindly. Repeat generation with cache hits and a pre-change cache fixture to
+show that stale unredacted data is not reused. [Amended 2026-11-21: the real
+pre-change directory name cannot be constructed outside the binary crate,
+because the key folds in a package fingerprint that the binary derives
+privately and that varies with the checkout path. The claim is therefore
+carried by the in-crate pair named in the decision log, with the behavioural
+scenario renamed to the narrower property it can prove.]
+
+Acceptance is all V1–V5 evidence, successful `make verus` with zero failed
+obligations, the mutation controls, all BDD scenarios, and ordinary gates.
+Record verifier version, trusted premises, generator bounds, commands, and
+logs. Commit only the verified state. A proof failure leaves M2 incomplete;
+reduce the failing case or record an architectural deviation, never weaken
+premises to assert the desired result. M3 documentation closeout remains.
+
+### M3 — Document and close the feature
+
+Update `docs/users-guide.md` with annotation syntax, both label meanings,
+omission rules, safe profile labels, and examples showing that actual loading
+still returns original values. Update the component architecture in
+`docs/cargo-orthohelp-design.md` and `docs/agent-native-cli-design.md`,
+including the projection, model-to-production relationship, wire additions, and
+public text limitation. Update `docs/design.md` if its interface map needs the
+new shared module. Record test/proof commands, cache invalidation, and
+assertion conventions in `docs/developers-guide.md`. Add the ADR and new
+documents to `docs/contents.md`; update repository layout for the production
+proof files. Existing tooling pins and their ownership already have
+documentation from PR #651.
+
+At every milestone review assigned requirements, architecture, assumptions,
+public interfaces, dependencies, trust boundaries, wire formats, and trace
+links. If a discovery changes the approved contract, set this plan to BLOCKED,
+record options and impacts in Decision log, and obtain explicit acceptance. Do
+not silently redesign the disclosure boundary.
+
+After all requirements are demonstrated, mark roadmap 9.1.2 and its three
+subitems done using checked boxes and an explicit completion note. Do not mark
+9.1.3 done. Reconcile the ADR and design documents before setting this plan to
+COMPLETE. Run all ordinary gates and `make verus`, commit the documentation
+closeout, and publish validation evidence with the feature PR. Recovery is a
+normal revert of the focused commit; no persisted profile format changed.
+
+## Concrete validation commands
+
+Run from the repository root. Use the shared Cargo cache, keep build targets
+out of `/tmp`, and respect compiler-admission queue messages. Delegate full
+gates to `scrutineer`; never overlap formatting, linting, tests, or proof
+gates. All commands below require exit status zero for acceptance. Use
+`set -o pipefail` so a successful `tee` does not hide a failed command.
+
+```sh
+set -o pipefail
+make fmt 2>&1 | tee /tmp/fmt-ortho-config-9-1-2.out
+make check-fmt 2>&1 | tee /tmp/check-fmt-ortho-config-9-1-2.out
+make lint 2>&1 | tee /tmp/lint-ortho-config-9-1-2.out
+make test 2>&1 | tee /tmp/test-ortho-config-9-1-2.out
+make markdownlint 2>&1 | tee /tmp/markdownlint-ortho-config-9-1-2.out
+make nixie 2>&1 | tee /tmp/nixie-ortho-config-9-1-2.out
+make verus 2>&1 | tee /tmp/verus-ortho-config-9-1-2.out
+```
+
+Run `make check-fmt`, `make lint`, and `make test` after every major
+implementation milestone and before each code commit. The proof command is
+mandatory from M2 onward. Review broad formatter changes and preserve unrelated
+files. Generated spelling configuration must be updated only through its owning
+gate; unrelated dictionary churn belongs on a separate base branch.
+
+Focused commands supplement the Makefile gates during Red-Green-Refactor:
+
+```sh
+cargo test -p ortho_config --test docs_ir_profiles
+cargo test -p ortho_config --test rstest_bdd
+cargo test -p cargo-orthohelp --test rstest_bdd
+cargo test -p cargo-orthohelp --test golden_tests
+cargo test -p hello_world --test agent_context_e2e
+cargo test --workspace --doc
+```
+
+Register new directory-style test targets in the owning manifest. Ensure any
+new test filter reports a nonzero executed count; a successful zero-test run is
+not evidence. Add exact new unit/property target commands and red/green
+transcripts to this section as implementation names settle. Before code edits,
+run the affected existing suites; after edits, run focused tests and full gates.
+
+For this rebased plan-only delivery, run `make fmt`, `make check-fmt`,
+`make test`, `make typecheck`, `make lint`, `make markdownlint`, and
+`make nixie` sequentially. Record results for the exact candidate in the PR. No
+executable feature or proof is introduced; passing existing gates does not
+discharge the future profile-redaction proof obligations.
+
+## Constraints
+
+Explicit user approval is required before implementation. Preserve ADR-0012's
+five-tier precedence, stateless selection, source provenance, and opt-in
+loading. Keep dependency direction from macros to generated runtime APIs and
+from the generator to the library schema. No new runtime dependency, profile
+store, secret resolution, or ambient discovery is authorized. Existing and
+user-authorized test dependencies may be used with caret requirements.
+
+Never log or serialize protected values on newly introduced paths. Do not claim
+that grammar validation makes arbitrary names semantically non-secret. Do not
+silence lint failures or alter Whitaker, compiler admission, shared services,
+or other agents' processes. Do not add proof shortcuts. Keep docs within the
+project spelling/wrapping conventions and Rust source files below 400 lines.
+
+## Tolerances (exception triggers)
+
+Stop for approval if this work needs loader/merge semantic changes, store
+behaviour, raw-value output, new runtime dependencies, weakening of the stated
+redaction guarantee, wire-version replacement, or a different public annotation
+or names contract. Mechanical private helper names and test organization may
+change with recorded rationale. If three attempted fixes fail to resolve the
+same substantive design or proof issue, record the evidence and options before
+proceeding. There is no elapsed-time limit; compiler queues are not failures.
+Report disk exhaustion or admission refusal and preserve the current work.
+
+## Risks
+
+High severity, medium likelihood: a secondary serializer or cached bridge
+retains raw defaults. Mitigate with early projection, cache invalidation,
+direct-entrypoint tests, and full artefact sentinel inspection.
+
+High severity, medium likelihood: flattened containers or recursive enum types
+lose classification. Mitigate with explicit path identity, container
+diagnostics, recursive model coverage, and nested property/mutation cases.
+
+Medium severity, high likelihood: suppressing all command examples surprises
+consumers. Document it prominently and snapshot both protected and ordinary
+outputs; do not substitute an unreliable text scrubber.
+
+High severity, medium likelihood: a correct Verus mirror diverges from runtime
+projection. Maintain the mapping, differential tests, and explicit residual
+gap; re-review every slot added to either representation.
+
+Medium severity, medium likelihood: the pinned tooling or required toolchain is
+not installed in this checkout, or local admission is unhealthy. Use the
+existing explicit provisioning boundary and report admission failures. PR #651
+provides runner evidence, not installed-state or feature-proof evidence for a
+new worktree. Never report a missing-input failure or fixture pass as proof of
+redaction.
+
+Medium severity, realized on 2026-11-15: the rolling Whitaker dylint suite
+changed underneath the branch. Its shared object was replaced at 21:24 and
+`make lint-whitaker` went from two findings to 22
+`multiple_nested_conditional_logic` diagnostics, 21 of which sit in files
+byte-identical to `main` (verified with `git diff --quiet main -- <path>`, 12
+paths SAME-AS-MAIN; the one changed path carries a finding that predates this
+branch's arms). Mitigation: certify M1 with `lint-clippy` and record the
+byte-identity evidence, leave `lint-whitaker` excluded, and escalate to the
+operator. Never modify the installation or `dylint.toml` to buy a green gate.
+
+Resolved on 2026-11-16: the installed suite no longer reports the spurious
+diagnostics on main-identical files. `make lint-whitaker` now runs as part of
+the certificate and found two genuine `module-must-have-inner-docs` omissions
+in modules this branch adds, both repaired. The M1 evidence above records the
+exclusion as it stood at that milestone; it no longer applies.
+
+## Progress
+
+- [x] (2026-10-14) Inspect prerequisite, branch, and projection paths with two
+  Wyvern reconnaissance agents; exchange source evidence through context packs.
+- [x] (2026-10-14) Draft behavioural contracts, proof sketches, milestones, and
+  test strategy without implementing the feature.
+- [x] (2026-10-14) Complete six-lens community-of-experts review and revise
+  the proof relation, schema ownership, names invariants, and flattening scope.
+- [x] (2026-10-14) Validate the plan with formatting, Markdown/spelling, and
+  Mermaid gates. Publication receipts belong in the draft PR.
+- [x] (2026-11-08) Rebase the plan onto PR #651's merge without conflicts;
+  revise M2 to reuse the existing pinned tooling, production inventory, and CI.
+- [x] (2026-11-09) Rebase without conflicts onto #664 and record the temporary
+  PR target and the post-merge return to `main`.
+- [x] (2026-11-13) Return to `main` after #664 merged, replaying only the
+  plan commit and preserving the #651 tooling integration.
+- [x] (2026-11-15) Obtain explicit user approval before starting M1. The
+  implementation request named this plan and instructed implementation to
+  proceed, which supplies execution approval for M1–M3.
+- [x] M1: complete disclosure boundary.
+  - [x] (2026-11-15) Consolidate schema ownership: `cargo-orthohelp::schema`
+    re-exports `ortho_config::docs`; the four mirror modules are deleted.
+  - [x] (2026-11-15) Add `ProfileFieldExposure`, the `profile_field` IR field,
+    the single `redacted_for_output` projection, and its unit tests.
+  - [x] (2026-11-15) Parse and emit `profile_field = "secret"|"reference_only"`,
+    rejecting unknown and duplicate labels and marked flattened containers.
+  - [x] (2026-11-15) Extend `ProfilesDeclaration` with validated private
+    redaction records and a names-only catalogue; reject duplicates,
+    unsupported metadata, and inconsistent serialization.
+  - [x] (2026-11-15) Apply projection at the derive, pipeline, generated bridge,
+    and agent-context boundary; derive `ProfileFieldRedaction` records and add
+    the `profile-redaction-v1` cache salt.
+  - [x] (2026-11-15) Add bounded differential property tests for V1, V2, and V4
+    and a names-only property test for V3; all 19 redaction tests and all 14
+    declaration tests pass.
+  - [x] (2026-11-15) Record non-vacuity evidence by seeding three faults
+    (retained default, retained nested enum member, skipped child), observing
+    failures, restoring the module byte-for-byte, and rerunning green.
+  - [x] (2026-11-15) Record the contract in ADR-0026 and reference it from the
+    agent-native and cargo-orthohelp design documents.
+  - [x] (2026-11-16) Ordinary gates and gated M1 commit: formatting, Clippy,
+    docstring coverage, Markdown, Mermaid, spelling, and the workspace test
+    suite except the load-sensitive boundary target, whose saturation
+    attribution is recorded below. Whitaker remains escalated, not repaired.
+- [x] M2: proofs and external workflow evidence.
+  - [x] (2026-11-16) Model and prove V1/V2 in `verus/profile_redaction.rs` and
+    its three modules, split to stay under the 400-line cap:
+    `profile_redaction_model` (types, projection, value lemmas),
+    `profile_redaction_integrity` (V2), and
+    `profile_redaction_noninterference` (V1). `make verus` reports
+    `27 verified, 0 errors`.
+  - [x] (2026-11-16) Register the proof in `VERUS_PROOF_FILES`, so a bare
+    `make verus` verifies the production inventory.
+  - [x] (2026-11-16) Record negative controls: a retained protected default, a
+    retained nested enum member, and a skipped child each fail the corresponding
+    Verus obligation. The modules were then restored byte-for-byte (checked with
+    `sha256sum -c`) and rerun green.
+  - [x] (2026-11-16) Recreate the production-proof CI lane and its workflow
+    contract test. `8593b35e` restored `.github/workflows/prover-tools.yml`
+    with `pipefail` around `make verus`; `2742558b` added the fake-tool
+    contract fixtures. Running
+    `tests/workflow_contracts/prover_tools_workflow_test.py` reports 12
+    passed.
+  - [x] (2026-11-16) Add the `profile_redaction.feature` behavioural contract
+    and its unhappy paths. Eight scenarios: the four required contracts plus
+    unsupported profiles, hidden/file-only fields, a sanitized cache, and a
+    pre-change cache entry that must not be reused. A focused run reports
+    9 passed (`/tmp/restore-bdd-9-1-2.out`) using
+    `cargo test -p cargo-orthohelp --test rstest_bdd profile_redaction`.
+  - [x] (2026-11-16) Extend the golden, renderer, and end-to-end sentinel
+    suites, including cache-hit and pre-change-cache cases.
+    `agent_context__profile_redaction.json.snap` pins the context,
+    `redaction_roff_en_us.snap` and `redaction_maml_en_us.snap` pin the
+    rendered artefacts, the artefact scan covers agent context, both IR
+    documents, both man pages, and both MAML files, and
+    `redaction_keeps_protected_values_out_of_streams_and_artefact` checks the
+    debug-tracing streams. `cache_key_hash_matches_the_documented_vector`
+    pins the disclosure salt into the cache identity.
+  - [x] (2026-11-16) Gate the M2 commits on the exact candidate. Eight gates
+    passed: `check-fmt`, `markdownlint`, `nixie`, `lint-clippy`,
+    `docstring-coverage`, `verus`, `test` (2530 Cargo tests across 112
+    binaries, then 128 pytest tests), and `test-workflow-contracts`; logs are
+    `/tmp/gate2-*-9-1-2.out`. The first run of the same candidate was red for
+    two reasons, both since resolved: six Clippy diagnostics in the new test
+    files (emptiness assertions, a shadowed closure binding, a needless
+    pass-by-value buffer, and a needless borrow), and the documented
+    saturation timeout of the nested-Cargo serialization probe, which aborted
+    the run before the pytest phase. The green run reproduces neither.
+- [x] M3: documentation, final gates, and roadmap completion.
+  - [x] (2026-11-16) Document the feature. The users' guide gains "Keep profile
+    values out of generated documentation" with the annotation, both labels,
+    what is removed and what is retained, the prose limitation, the names-only
+    catalogue, and two executable examples: `guide-profile-redaction` (loading
+    still returns the value while the projected default is absent) and
+    `guide-profile-redaction-metadata` (the published `profiles.redaction`
+    records). Both are registered in the documentation-example registry and
+    verified by `cargo test -p ortho_config --test documentation_examples_tests`
+    (14 passed) and `--test documentation_examples_rust_tests` (58 passed,
+    117 s).
+  - [x] (2026-11-16) Update the architecture and decision records. Section
+    2.2.1 of the cargo-orthohelp design records the wire additions, the
+    structural boundary, and the model-to-production relationship; section 6.7
+    of the agent-native design carries the `profiles.redaction` shape and the
+    public-text limitation; ADR-0026 gains a Formal evidence subsection
+    covering the parent-before-child encoding and the residual boundary; the
+    design decision log records the decision; the developers' guide replaces
+    the empty production inventory with the registered Verus entry, its
+    obligations, negative controls, and residual boundary, and adds
+    cache-invalidation and redaction-assertion sections.
+  - [x] (2026-11-16) Update `docs/contents.md`, `docs/repository-layout.md`
+    (the `verus/` tree entry and row, and removal of the deleted
+    `tests/fixtures/prover_tools/` claim), and tick roadmap 9.1.2 with its
+    three subitems and a completion note. 9.1.3 remains unchecked.
+  - [x] (2026-11-16) Final gates on the documentation candidate. Eight targets
+    passed on the exact pre-commit content: `check-fmt`, `markdownlint`
+    (including the spelling gate), `nixie`, `lint-clippy`,
+    `docstring-coverage`, `verus` (27 verified), `test` (2530 Cargo tests plus
+    128 pytest tests, with the boundary flake not reproducing), and
+    `test-workflow-contracts`; logs are `/tmp/gate3-*-9-1-2.out`. The last
+    tracked edits were plan-status lines, so the Markdown gates were re-run
+    after them and the documentation commit follows immediately.
+- [x] (2026-11-16) Rebase onto `main` at `d11a0797` before publication. Two
+  files conflicted. In `docs/contents.md`, main had taken ADR-0018 through
+  ADR-0022 while this branch had used ADR-0018 for the redaction contract. In
+  `ortho_config_macros/src/derive/parse/field_attrs.rs`, main had extracted
+  each attribute case into a `set_*` helper. The resolution keeps main's ADR
+  list, routes `profile_field` through the same helper shape, and keeps main's
+  extracted `cache_tests.rs`, whose pinned cache-key vector was recomputed for
+  the disclosure salt (`v1-9a0f5582851e611582e4dd0ddf4ea78e`). The redaction
+  record is renumbered ADR-0026 and every reference follows it. No delivered
+  behaviour changed.
+- [x] (2026-11-16) Full gates on the rebased candidate `ee34e606`. All eight
+  targets passed: `check-fmt` (106 files unchanged), `markdownlint` (0 issues;
+  the spelling gate reported `typos.toml` current), `nixie` (107 Markdown
+  files), `lint-clippy`, `docstring-coverage` (1065 items, 100%), `verus` (27
+  verified, 0 errors), `test` (2741 Cargo tests across 114 binaries with 44
+  ignored, then 128 pytest tests), and `test-workflow-contracts` (748 passed, 2
+  skipped). Logs are `/tmp/pr593-*-9-1-2-gate2.out`. The first attempt on the
+  rebased candidate failed only `check-fmt`, on two blank-line hunks the
+  conflict resolution had left in `cache.rs`; `make fmt` repaired them and the
+  whole set was re-run from the top. On this base,
+  `documentation_examples_tests` reports 13 tests rather than the pre-rebase
+  14, because main reworked that harness and absorbed one case.
+- [x] (2026-11-16) Clear every CodeScene finding the candidate introduced.
+  `cs delta d11a0797 HEAD` first reported three: two Large Assertion Blocks
+  files and one String Heavy Function Arguments module. The assertion helpers in
+  `proptests_support.rs` and the four flagged tests in `tests.rs` now each
+  compare one tuple, so a slot can no longer be dropped by deleting a single
+  statement. `RedactionExpectation` names the command path, field, and exposure
+  of one record, which took the argument mix in
+  `profile_redaction_assertions.rs` below the 39% threshold and removed the
+  field/exposure transposition hazard. A final `cs delta d11a0797 HEAD` reports
+  "No issues found in checked changes".
+- [x] (2026-11-16) Split `proptests_support.rs` by role, because it had reached
+  703 lines against the 400-line module cap. `proptest_model.rs` owns the
+  independent model and the slot-by-slot correspondence review it documents, and
+  `proptest_assertions.rs` owns the integrity assertions; the generators and
+  their bounds stay in `proptests_support.rs`. The three files now hold 326,
+  148, and 254 lines.
+- [x] (2026-11-16) Run `make lint-whitaker` for the first time on this
+  candidate and repair what it found. The earlier cycles ran `lint-clippy`
+  alone, so two `module-must-have-inner-docs` failures had never been observed:
+  `module_must_have_inner_docs` on the sentinel catalogue's test module and on
+  `traversal_probe` in the redaction module. Both carried their rationale in
+  outer `///` attributes; both now open with `//!`, matching the
+  `powershell_decoding` fixture.
+- [x] (2026-11-16) Nine-gate certificate on `07a72b4d`. All passed:
+  `check-fmt`, `markdownlint` (including the spelling gate), `nixie`,
+  `lint-clippy`, `lint-whitaker`, `docstring-coverage` (1065 items, 100%),
+  `verus` (27 verified, 0 errors), `test` (114 Cargo test targets then 128
+  pytest tests), and `test-workflow-contracts` (748 passed, 2 skipped). Logs are
+  `/tmp/pr593-*-9-1-2-gate7.out`.
+
+- [x] (2026-11-20) Rebase onto `main` at `0dbd7bd7`. Main had landed the
+  structured-output declarations (its ADR-0023), a nextest setup script, and
+  dependency bumps while this branch waited. Five files conflicted:
+  `cargo-orthohelp/src/schema/mod.rs`, because main still mirrored the IR types
+  this branch re-exports; `docs/contents.md`, because both sides appended ADR
+  entries; the agent-context bridge, because main added `output` to the doctest
+  while this branch split the profile and sort steps out of it; the derive's
+  parse re-exports, against main's `output_attrs` additions; and the simple-run
+  and scenario registries, because both sides added entries. The resolution
+  keeps this branch's re-export design and adds main's `ExitClass`,
+  `OutputMetadata`, and `StdoutPurpose` names, restores the branch's
+  `serde_field_is_flattened` re-export, gives the property fixtures
+  `output: None`, and makes main's output tests handle the fallible bridge.
+  Main had taken ADR-0023 for its own record, so the redaction record moved
+  again, to ADR-0026, and every reference follows it. No delivered behaviour
+  changed.
+
+- [x] (2026-11-20) Reconcile the review's pre-merge documentation and
+  compile-time rows against the delivered source.
+  `docs/v0-11-0-migration-guide.md` gained section 15 for the opt-in, its
+  `FieldMetadata`, agent-context, error, and cache consequences, and two
+  Impact-at-a-glance rows; `CHANGELOG.md` gained the matching
+  `### Added (profile redaction)` entry; the developers' guide gained an *Agent
+  context* subsection naming the private metadata fields and their validating
+  builders; and this plan's stale future-work sentence and "proposed
+  interfaces" heading were corrected. The guide's duplicated `## 11` heading
+  was renumbered so the new section follows a unique sequence. Three trybuild
+  compile-fail cases now pin the derive's rejections of an unknown label, a
+  duplicate annotation, and a flattened container, each asserting the
+  diagnostic's field span through a committed `.stderr` fixture. No delivered
+  behaviour changed.
+
+- [x] (2026-11-20) Close the disclosure and stale-cache boundary gaps the
+  completeness assessment raised. `cargo-orthohelp`'s public `localize_doc`
+  projected only at its recursion's leaves, so a direct library caller could
+  receive sibling command examples from a tree whose protected field lived in a
+  child; it now projects the whole document once at the entry and recurses
+  privately over the projected tree, with three direct-entry regressions
+  (`cargo-orthohelp/src/ir/tests.rs`) that fail if the entry projects a subtree
+  only. `DocMetadata::into_redacted_for_output` lets a caller that already owns
+  the document project it without cloning, and the derive and both binary call
+  sites use it. The pre-change cache scenario seeded an entry under a directory
+  name the generator would ignore regardless of the salt;
+  `CacheKey::hash_without_disclosure_policy` now reproduces the pre-9.1.2
+  digest, a bridge regression seeds an unredacted body under that real name and
+  requires a lookup miss, and the BDD fixture's documented claim is narrowed to
+  what it proves. The M2 fixture-lane obligation is withdrawn under main's
+  `0af1e88e`. The Verus module prose was corrected where it reversed the
+  command-example rule, called the encoding preorder, and left the differential
+  oracle's bounds implicit; `ValueType::Scalar` gained an opaque tag so two
+  scalar kinds cannot collapse to one constant. 27 obligations still verify.
+
+- [x] (2026-11-21) Close the subcommand-selector boundary and settle the
+  remaining assessment findings. The derived `OrthoConfigSubcommandDocs`
+  methods composed each variant through the child's public `OrthoConfigDocs`
+  method and returned the result untouched, so a handwritten child could hand a
+  direct caller a protected default; both methods now pass the group through
+  `DocMetadata::redacted_group_for_output`, which decides the command-example
+  rule over the group and then projects every member. Three integration
+  regressions in `ortho_config/tests/subcommand_docs.rs` cover both public
+  methods and a protected sibling's effect on an ordinary sibling's examples;
+  removing the group projection fails all three. The traversal-count regression
+  now pins 18 visits (12 for the three struct boundaries, 6 for the two
+  selector-group passes). The direct-entry localization fixture gained a
+  non-empty protected field example, so its assertion can detect a retained
+  one, with an explicit precondition that the raw fixture carries it. The
+  "preorder" wording in ADR-0026, the design documents, and the developers'
+  guide now describes the parent-before-child encoding the invariant actually
+  admits or names it as production's one permitted order. The M2 pre-change
+  cache evidence is settled by the 2026-11-21 decision entry, and the
+  behavioural scenario is renamed to the property it proves.
+
+- [x] (2026-11-21) Close the second assessment round's proof and plan
+  findings. The property corpus now carries populated `windows`, `behaviour`,
+  `renderer`, and `output` records on every generated node instead of absent
+  ones, and the slot assertions compare all five document-level record slots
+  including `output`; clearing `output` in the traversal fails both the model
+  comparison and the integrity assertion with "document records must survive
+  projection". The Verus entry point and the `cargo-orthohelp` design now say
+  the differential tests are bounded evidence for the model-to-production
+  correspondence rather than a discharge of it, and the developers' guide
+  records the corpus bounds and the populated records alongside the residual
+  boundary. The remaining plan and design prose that described the model
+  encoding as preorder now names it as parent-before-child, with production's
+  preorder linearization given as one permitted order.
+
+- [x] (2026-11-21) Close the third assessment round's two findings. The new
+  `redacted_for_output` doctest omitted `DocMetadata::output`, a required
+  struct field, so `cargo test --workspace --doc` failed with E0063 at
+  `51877497`; the example now sets `output: None`. The red run
+  (`cargo test -p ortho_config --doc`: 82 passed, 1 failed, "missing field
+  `output` in initializer of `DocMetadata`") and the green run
+  (`cargo test --workspace --doc --all-features`: 155 passed, 0 failed, 52
+  ignored) are recorded. The Verus entry point's first mapping claim said every
+  production slot has a model counterpart while the same section says preserved
+  slots are collapsed; it now claims a counterpart only for slots the
+  projection can change, matching the table and ADR-0026.
+
+- [x] (2026-11-21) Clear the CodeScene duplication advisory. The hosted
+  `CodeScene Code Health Review` failed on `Code Duplication` between
+  `assert_node_identity` and `assert_node_records` in `proptest_assertions.rs`
+  (code health 9.38); `cs delta` reproduced the same pair locally. The six
+  group comparisons now share one `assert_slots_survive!` expansion that takes
+  each group's slot paths once, so the check has a single implementation while
+  every group still compares one tuple under its own expectation. `cs delta` on
+  the repair reports `Code Health (9.38 -> 10.00)` and the duplication fixed.
+
+- [x] (2026-11-21) Correct the group-pass description. The
+  `redacted_group_for_output` doc comment and the developers' guide said the
+  selector's group pass "only takes the group decision" and "never re-projects
+  a child's values". That is wrong: the group form calls `redact_node` for
+  every member, which re-walks each subtree and re-applies the field
+  projection; the result is unchanged only because the projection is
+  idempotent. Both passages now say so, and the traversal-count test's
+  arithmetic comment now reads `2 * 2` for a selector whose single member owns
+  two nodes.
+
+- [x] (2026-11-21) Finish the group-pass description. The round-6 completeness
+  and proofs replies both found the corrected wording still overreaching: a
+  clean member does **not** keep its whole result, because the group decision
+  can remove command examples a single-document projection kept, and the
+  decision scan short-circuits on `any` rather than visiting every member. The
+  doc comment now separates the two passes, names the sibling rule and its
+  regression, and states the re-walk's cost. The developers' guide, the design
+  document's group paragraph, the traversal-count comment and this plan's M1
+  amendment now say the same. The Verus module prose records that the model
+  specifies one document, so the group boundary has sibling regressions as
+  evidence rather than a separate theorem.
+
+- [x] (2026-11-21) Close the formal review's defect findings. One is a real
+  parser bug: `discard_unknown` parsed an unrelated Serde value as a whole
+  `TokenStream`, which consumes the rest of the nested list, so
+  `#[serde(rename = "common", flatten)]` never reached the `flatten` callback
+  and a `profile_field` on a flattened container escaped the rejection the
+  boundary promises. It now reads one token tree at a time and stops at a
+  top-level comma, leaving the enclosing loop positioned on the next item; four
+  regression cases put `flatten` after a name-value item, after a parenthesized
+  group and after a literal containing a comma. The sentinel fixture's
+  self-check no longer manufactures uses of constants a target does not read:
+  it asserts the invariants the suites depend on — distinct root types,
+  distinct locales, disjoint classification lists, and command-example and
+  unsupported literals attributing correctly against the protected set. The new
+  golden test runs `cargo-orthohelp` through
+  `ortho_config_test_helpers::process::run_with_deadline`, as the process
+  ownership contract requires, and the paired-catalogue scenario now feeds the
+  second declaration reversed names, so canonicalization is observable rather
+  than tautological. The bridge's `# Errors` section no longer promises
+  `ProfileMetadataOnUnsupported` for a document that declares protected fields
+  without `profiles`: that case deliberately succeeds with an unsupported
+  declaration, because the values are projected out before the boundary and the
+  records belong to the profile surface. The tested users' guide example prints
+  the region instead of the secret, so a copied example cannot write a
+  credential to the terminal. Remaining assertion diagnostics and three
+  documentation overclaims (roadmap guarantee, migration-guide limits and
+  renderer premise, design-document schema mirror) are corrected in the same
+  repair.
+- [x] (2026-11-21) Close the testing review's residual gaps. The four
+  non-blocking gaps in the pre-merge testing row are covered rather than
+  accepted. The projection gained the group rule's own unit test: a clean
+  member projected alone keeps its command example, and that same member loses
+  it when a later sibling is protected, so the result cannot be explained by
+  per-document projection. That test compares classifications and ordinary
+  defaults on both sides of the call, so it cannot pass on an implementation
+  that removes labels rather than examples. The `redacted_group_for_output` doc
+  example previously closed with a disjunction over classification labels that
+  also holds when every label vanishes; the disjunction is removed, and the
+  example now says that the example-side claim belongs to that executed test,
+  which builds the documents itself. Two behavioural scenarios feed a
+  hand-edited cache entry through `--no-build`: one retains a protected default
+  on the last ordinary root field, and the man renderer must still publish the
+  earlier ordinary default while omitting the hand-edited literal. The claim
+  that scenario proves is that the pipeline projects a loaded cache body
+  somewhere before rendering, not that `main`'s entry projection is the pass
+  that did it: `ir::localize_doc` projects again at its own boundary, and the
+  scenario cannot distinguish the two. Isolating the entry projection would
+  need a seam the binary does not have; it remains defence in depth, and the
+  cached-IR scenario keeps its own separately meaningful claim that no released
+  generator writes such a body. The other scenario repeats a protected record,
+  and the agent-context run must fail naming the duplicate, which is the first
+  coverage of the bridge's error reaching the exit path. The fourth gap was the
+  `# Errors` correction already recorded above. The added assertion diagnostics
+  pushed `ortho_config/src/docs/profile_redaction/tests.rs` past the 400-line
+  file cap, so its fixture builders moved to `test_fixtures.rs`.
+- [x] (2026-11-21) Qualify the proof assessment's two remaining statements.
+  The seeded model faults show the integrity obligations can fail; they are not
+  an inhabitance argument for V1, because `low_equiv_ordinary_equality` proves
+  an implication and cannot evidence its own premises. Satisfiability is
+  witnessed separately, by two identical ordinary one-root documents and by a
+  protected pair with equal public descriptors and differing protected
+  defaults. The developers' guide now records that distinction, and bounds the
+  tests' reach: `projection_matches_independent_model` compares production with
+  the oracle's output, while the integrity assertions compare each original
+  node with its projected counterpart and take the command-example expectation
+  from the oracle's `model_has_protected` decision, so a defect shared by both
+  is not caught and the evidence reduces that risk rather than removing it.
+- [x] (2026-11-21) Close the proof assessment's second round. It accepted the
+  two qualifications and found three prose conflations to correct. The witness
+  sentence had run the two branches of `low_equiv` together: the protected pair
+  cannot satisfy `low_equiv_ordinary_equality`'s premise at all, so the plan
+  and the developers' guide now name it as a witness for the suppressed branch,
+  with the ordinary pair as the premise witness. The remaining two corrections
+  came from treating the integrity assertions and
+  `projection_matches_independent_model` as one test: the assertions compare
+  each original node with its projected counterpart and only borrow the oracle's
+  `model_has_protected` decision for command examples, while the separate
+  property is what compares production with the oracle's output. The plan entry
+  and the assertions module documentation now say which test does what, and
+  drop the claim that a shared production-and-model mistake would still fail
+  the assertions.
+
+## Surprises & discoveries
+
+The current context contains selector metadata, not profile bodies or names.
+The concrete exposure paths are defaults, enum members, and examples. Therefore
+this work should sanitize metadata and accept explicit names, not introduce a
+profile reader. The original draft found a misspelled reference and an absent
+scripting guide; the guide now exists. PR #651 has since supplied the pinned
+Kani/Verus setup, command contracts, fixtures, and a dedicated CI lane.
+Production proof inventories remain empty at the rebased baseline. Assertion
+libraries are already authorized and present in workspace testing dependencies.
+
+M1 discoveries, 2026-11-15:
+
+- The production-proof CI lane named by this plan no longer exists: `#678`
+  deleted `prover-tools.yml`. M2 must create a production-proof lane rather
+  than extend one. The pinned Verus tooling from ADR-0017 remains available.
+- `cargo-orthohelp/src/schema/` was a hand-maintained mirror of the IR types,
+  as ADR-0016 recorded. Consolidating it into re-exports was required to give
+  the projection one type identity; the mirror's drift risk disappears.
+
+M2 discoveries, 2026-11-16:
+
+- An explicit `#[ortho_config(default = ...)]` literal reaches the
+  macro-modelled `FieldMetadata::default` slot. A plain
+  `#[arg(long, default_value = ...)]` literal stays clap-only and never appears
+  in any generated artefact, even before the projection. The exception is a
+  field that also carries `#[ortho_config(cli_default_as_absent)]` and no
+  explicit `ortho_config(default)`: the derive then models the clap literal as
+  the field's `DefaultValue`, so the projection is the only thing removing it
+  from a published artefact. The sentinel catalogue previously over-stated what
+  the default clearing removes, because every protected default in the fixture
+  was clap-only except `credential_file`, the one literal the seeded fault
+  exercised. The fixture now also declares `inferred_secret`, a protected field
+  with `cli_default_as_absent`, so the catalogue's `INFERRED-DEFAULT-SENTINEL`
+  is published before projection and must be cleared by it; a unit test in the
+  docs emitter pins that the inferred default becomes the documentation default
+  in the first place. Enum members and examples are modelled for both
+  classifications, so those slots do exercise every field.
+- `cargo test --test <target>` does not rebuild the package's binary target, so
+  a golden test that spawns `target/debug/cargo-orthohelp` can execute a stale
+  binary. The fault experiment only became observable in the subprocess suites
+  after an explicit `cargo build -p cargo-orthohelp --bin cargo-orthohelp`. CI
+  runs a bare `cargo test`, which builds every target, but a local focused run
+  must remember the binary.
+
+- Verus 0.2026.01.30.44ebdee cannot verify structural recursion through a
+  sequence of child nodes. A recursive call inside a `Seq::new` closure never
+  discharges its termination check, a mutual pair of spec functions is rejected
+  with an ill-typed AIR panic, and an explicit `decreases` measure computed
+  from a child sequence crashes the verifier the same way. The model therefore
+  encodes the command tree as a parent-before-child sequence whose `parent`
+  index carries the edge, and `is_tree_like` asserts a single root plus every
+  parent strictly earlier than its child. Depth stays unbounded and the parent
+  index is what the topology obligation quantifies over; the recursive
+  traversal this replaces remains covered by the differential property tests.
+- The first focused run of the new property suite exposed three existing unit
+  tests: two encoded wrong expectations (changing `ValueType::String` to
+  `ValueType::Enum` is a public shape change, not a protected-slot change; an
+  absent `default` serializes as an explicit `null` because the field has no
+  `skip_serializing_if`), and the traversal probe used a process-global counter
+  that concurrent property tests also incremented. The fixtures were corrected
+  and the probe made thread-local.
+- Non-vacuity evidence for the artefact suites (2026-11-16): seeding a
+  retained protected default in `FieldMetadata::redact_protected_values` made
+  `profile_redaction_protected_metadata_is_omitted_from_every_output_format` and
+  `profile_redaction_the_cache_stores_only_sanitized_ir` fail with
+  `FILE-ONLY-DEFAULT-SENTINEL` (`/tmp/fault-bdd-9-1-2.out`). The golden suite
+  initially still passed, because it scanned only roff and MAML and the
+  `skip_cli` field's default survives into the IR alone; the scan was widened
+  to every emitted family and then failed with `leaked into en-US IR`
+  (`/tmp/fault-golden3-9-1-2.out`). The source was restored byte-for-byte
+  (`sha256sum` 440a2800…) and all three suites reran green.
+- Non-vacuity evidence from the M1 property suite (logs under
+  `/tmp/fault{1,2,3}-*-9-1-2.out`):
+  - retained protected default: 9 tests failed, including
+    `projection_matches_independent_model`,
+    `projection_preserves_and_clears_exactly`, and
+    `projected_wire_carries_no_protected_literal`;
+  - retained nested enum member: 7 tests failed, including all four proptests;
+  - skipped child projection: 7 tests failed, including the traversal-count and
+    command-example tests.
+  The module was restored from a byte-identical copy (`sha256 33cc3bf3…`) and
+  all 19 redaction tests passed again.
+
+M3 discoveries, 2026-11-21:
+
+- Doctests are invisible to both `make test` and CI. The `test` target runs
+  `cargo test --all-targets --all-features`, which builds every target except
+  doctests, and the `build-test` jobs run `make test`; no workflow invokes
+  `--doc`. A new doc example can therefore rot while all ten Makefile gates are
+  green. This delivery adds a doctest, so the plan's
+  `cargo test --workspace --doc` command is separate mandatory evidence, not a
+  duplicate of `make test`; the third assessment round caught the example that
+  this gap had let through.
+
+M1 gate evidence, 2026-11-15 (candidate `7a4586f7`, worktree clean of edits
+during each run):
+
+- `make check-fmt`: pass, 100 files unchanged.
+- `make lint-clippy`: pass; `cargo doc --workspace --no-deps` clean, then
+  `cargo clippy --workspace --all-targets --all-features -D warnings` clean.
+- `make docstring-coverage`: pass, 746 of 746 statements (100.0%).
+- `make markdownlint`: pass once the index reflected the four deleted mirror
+  modules and one hyphenated spelling was corrected to its closed form.
+- `make nixie`: pass, all diagrams validated.
+- `make spelling`: pass.
+- `make lint-whitaker`: excluded, see the Whitaker risk above. This is
+  infrastructure, not a verdict on the diff.
+- `make test`, `cargo test --all-targets --all-features` half: 111 test
+  binaries ran and 110 passed, including every binary that exercises this branch
+  (`ortho_config` lib 332 passed / 4 ignored, `ortho_config_macros` 325 passed,
+  `documentation_examples_rust_tests` 58 passed / 13 ignored, `compile_fail` 2
+  passed, `docs_profile_redaction` 5 passed). The single red binary is
+  `-p ortho_l10n --test boundary`: 35 passed, 9 failed, 10 ignored, 900.32 s.
+  No file this branch touches belongs to that target (`git status --porcelain`
+  matches no `ortho_l10n` path, and no manifest changed).
+- `make test`, pytest half: `128 passed, 5 skipped` when run directly with the
+  pinned `uv` environment. `make` never reached this step because the red
+  binary above aborted the recipe.
+- `-p ortho_l10n --test boundary`: attributed to host saturation, not to the
+  diff. All nine failures carry one of the two documented shapes ("exceeded the
+  N second deadline" and "900 second allowance was exhausted while … waited for
+  a sibling nested Cargo invocation"), and the log shows
+  `Blocking waiting for file lock on package cache` plus a cold
+  `target/localization-boundary/packaging-target` compile. At the time of the
+  run the host was at load average 17-23 with 4 of 4 compile slots held and
+  more than 30 requests queued.
+  [The boundary allowance finding](../BOUNDARY-ALLOWANCE-FINDING.md) records
+  the same failing set, with the same failure shapes, on an unmodified
+  `origin/main` control at `9be62487`, and states that validating a pass
+  requires an idle host. The suite was not re-run under the same saturation,
+  because that would add load without changing the outcome; the dedicated CI
+  runner is the arbiter. Log retained at
+  `/tmp/gate-evidence-9-1-2/test.attempt5-boundary-deadlines.out`.
+
+Two real defects were found by these gates and repaired in the same change:
+
+- `ortho_config/tests/trybuild/public_api_contracts.rs` is the "should pass"
+  compile fixture that proves downstream crates can build a `FieldMetadata`
+  literal. Adding the `profile_field` field without updating it made
+  `public_api_contracts_compile_for_downstream_crates` fail with
+  `E0063: missing field`. This is the fixture doing its job.
+- The documented Rust probe in
+  `ortho_config/tests/documentation_examples/guide_flows.rs` serialized the
+  bridge result directly. Once `bridge_ir_to_agent_context` became fallible,
+  that fence failed to compile with `E0277: Arc<OrthoError>: Serialize`. The
+  published example now unwraps with an `.expect(...)` naming the step.
+
+Two gate incidents were diagnosed rather than worked around:
+
+- The spelling gate reported `tracked file could not be scanned` for a deleted
+  mirror module. The deletions were unstaged, so `git ls-files` still listed
+  them. Staging the intended changes fixed the gate's index view; no
+  configuration was altered.
+- A killed `make test` attempt left `target/orthohelp-bridge-build.in-progress`
+  naming a dead pid. Three `agent_context_contract` cases then failed with
+  "requires owner recovery after an interrupted build". After confirming no
+  Cargo or rustc process used this worktree's `target/`, the marker was removed
+  and the suite re-run; the same binary had passed 21 of 21 in the killed
+  attempt. The failure log is preserved at
+  `/tmp/gate-evidence-9-1-2/test.attempt2-stale-marker.out`.
+
+## Decision log
+
+2026-10-14, proposed for approval: classify both secret and reference-only
+values as non-public; retain only public descriptors and distinct labels. This
+avoids assuming locators are safe or resolving downstream secrets.
+
+2026-10-14, proposed for approval: omit protected slots and conservatively
+remove command examples across the document tree. Arbitrary strings cannot
+safely be mapped back to fields by substring replacement.
+
+2026-10-14, proposed for approval: keep profile discovery out of context
+building; accept validated public labels explicitly. Names cannot be inferred
+from secret bodies, and no store implementation is needed.
+
+2026-10-14, proposed for approval: use Verus for recursive noninterference and
+projection integrity, conventional tests for adapters, names, and diagnostics.
+The reconnaissance recommendation against proving a simple selector is
+retained: the proof is justified only by the whole recursive projection, not by
+the enum.
+
+2026-11-15, implemented: keep one projection in `ortho_config::docs` and make
+`cargo-orthohelp::schema` re-export it. This supersedes the hand-maintained
+mirror noted as a residual risk in ADR-0016 and gives the bridge and renderers
+one type identity. Recorded in ADR-0026 (renumbered from 0018 when this branch
+rebased onto a base whose main already had an ADR-0018).
+
+2026-11-15, implemented: decide command-example suppression once per document
+before projecting, then run a single projection pass. This keeps the global
+rule honest and bounds the projection to two linear traversals.
+
+2026-11-15, implemented: reject `profile_field` on clap- or serde-flattened
+containers. The emitted leaf fields have their own names, so a container label
+cannot be mapped to them; authors mark the leaves instead.
+
+2026-11-15, decided for M2: recreate a production-proof CI lane because `#678`
+deleted `prover-tools.yml`. Reuse the pinned Verus invocation and command
+contracts from ADR-0017 rather than inventing new tooling.
+
+2026-11-16, decided for M2: encode the command tree as a parent-before-child
+sequence with a parent index instead of nested children. Verus rejects
+structural recursion through a sequence of nodes, so the nested encoding cannot
+be proved there at all, and the plan allowed the lemma boundaries to be revised
+while verification conditions were discovered. The invariant admits any
+topological order rather than production's preorder one; the encoding is total
+for topology and for slot reachability, so V1 and V2 keep their full strength.
+Only the traversal shape is modelled differently, and the correspondence to the
+production recursion stays with the differential tests recorded in ADR-0026.
+
+2026-11-20, withdrawn for M2: the obligation to "preserve the fixture checks"
+in the recreated production-proof lane. Main's `0af1e88e` (PR #678) deleted
+`.github/workflows/prover-tools.yml`, `make test-prover-tools-integration`,
+`tests/fixtures/prover_tools/`, and the workflow-contract test for the old
+lane, on the grounds that the real-tool fixtures duplicated the proof run
+itself. Recreating them would restore machinery main deliberately removed and
+that this plan's own principle ("do not register these fixtures as production
+proofs") already treated as optional. M2 therefore recreates a
+production-proofs-only lane; no fixture acceptance/rejection lane exists in
+this repository, and the plan does not ask for one.
+
+2026-11-21, amended for M1: every derived `OrthoConfigSubcommandDocs` method
+projects the group of child documents it returns, through
+`DocMetadata::redacted_group_for_output`. The variants are composed through the
+child's public `OrthoConfigDocs` method, and both traits document handwritten
+implementations as supported, so a handwritten child can answer with marked but
+unprojected metadata; the selector boundary was the last place that could still
+hand a direct caller a protected value. The group form exists rather than a
+per-document call because the command-example rule is decided over the whole
+group: a protected variant suppresses the examples of every sibling.
+
+2026-11-21, amended for M2: the pre-change cache evidence is the in-crate pair
+`pre_change_cache_key_reproduces_the_unsalted_digest` and
+`pre_change_cache_entry_is_never_selected`, and the behavioural scenario is
+renamed to the narrower property it actually proves. The real pre-change
+directory name combines the same inputs as the current key minus the
+`disclosure:` segment, including a package fingerprint that the binary derives
+privately and that varies with the checkout path, so an integration test cannot
+construct it; seeding a name it invents would prove only that unrelated names
+are ignored. The in-crate tests reproduce the real pre-9.1.2 name through the
+same rendering path, pin the result to an independently recomputed digest
+vector, and require the live lookup to miss an entry seeded under that name
+while leaving it untouched. The behavioural scenario keeps its own, separately
+useful claim — an entry the current key does not name is neither read nor
+rewritten — under a title that states it.
+
+2026-11-21, amended for M1: `with_available_names` keeps silently ignoring a
+catalogue on an unsupported declaration, and says why rather than being made to
+match `with_redaction`. The asymmetry was raised as a pre-merge observation on
+the grounds that one builder fails where the other stays silent. The difference
+is what silence costs. Dropping a redaction record loses classification
+information — which fields are protected, and at what exposure — and does so
+irreversibly, leaving a caller believing the record took effect. It is not by
+itself a value disclosure: the metadata is projected before it reaches the
+bridge whether or not profiles are supported, so values do not depend on this
+list. A dropped name catalogue has no surface on which to be observed at all,
+because an unsupported declaration carries no selection contract. Aligning them
+would either leave the classification builder silently lossy or force every
+caller that cannot yet know whether profiles are supported to branch. The
+behaviour is unchanged and both halves are already pinned by
+`available_names_do_not_opt_an_unsupported_declaration_in` and
+`redaction_on_an_unsupported_declaration_is_rejected`; the method's rustdoc now
+states the reason.
+
+2026-11-22, rebased for delivery: replay `0dbd7bd7..79e91e5c` onto `main` at
+`9a2012ad`, which added the 7.3.1 required-values feature (#589) and a
+developers' guide section (#720). Four files conflicted semantically. The
+derive's field-attribute parser took main's extracted `set_*` helper shape, with
+`profile_field` routed through it, and main's `skip_cli` now sets
+`CliFieldMode::Skipped` rather than a removed `skip_cli` flag.
+`discard_unknown` keeps this branch's one-token-at-a-time scan instead of main's
+`Expr` parse, because the branch's version also survives a following bare
+`flatten`. Both sides had added `serde_field_is_flattened`; main's helper-based
+body is kept with this branch's rationale. The migration guide gained main's
+sections 12–13, so the branch's two sections moved to 14 and 15 and the
+CHANGELOG and users-guide anchors follow. The redaction ADR was numbered 0018
+when main already had an ADR-0018, and main has since taken through 0025, so it
+is now ADR-0026 everywhere; two design-document links that a replayed
+intermediate commit had left pointing at a nonexistent
+`adr-0024-profile-field-redaction.md` were repaired at the tip. Three
+replay-only commits (the setter routing and the two earlier renumber attempts)
+are superseded by the resolutions and by later commits: what remains of them in
+the series is partly redundant churn, and the tip's tree, not their individual
+diffs, is the reviewed artefact. They are retained rather than rewritten a
+third time, so the series stays a complete record of how the branch reached
+this state.
+
+The rebased candidate passed ten of the eleven gates on `98e236de`. `make test`
+failed only in `cargo-orthohelp`'s `must_use_compile_tests`: its trybuild child
+was killed at the 900 s deadline twice, from a cold and then a fully warm main
+build, with zero rustc or clippy diagnostics and the admission queue 426 deep.
+The branch does not touch `cargo-orthohelp/tests/compile_time.rs`, the same
+target passed locally before the rebase on a warm scratch tree, and the hosted
+`build-test` legs for Linux and Windows are green on this head, so the failure
+is attributed to host compile-admission saturation rather than to the change.
+The hosted legs are the authoritative environment for that suite; the local
+residual is recorded here rather than treated as a passing gate.
+
+That attribution was then strengthened on `eee2ecfe`. A
+`cargo test --all-targets --all-features --no-fail-fast` run reached the
+targets the abort had masked: 121 test binaries passed with zero failures,
+including `must_use_compile_tests`, which now finishes inside its 900 s budget
+against a warmed trybuild scratch tree. The only red target was
+`ortho_l10n --test boundary`, whose nested consumer builds each get a 440 s
+deadline and were killed while queued behind compile admission; a second run of
+that target alone was likewise killed at 900 s with no test result, and no
+rustc or clippy diagnostic appeared in either log. Every one of those targets,
+including the boundary suite and `must_use_compile_tests`, passes in the hosted
+`build-test` legs for both Linux and Windows at this head. The local
+`make test` target therefore remains unproven on this host under admission
+saturation, whilst its constituent suites are proven green wherever the
+environment can give them slots.
+
+2026-11-24, acceptance status at `47cbcbe3`: this gate is a maintainer
+decision, not an engineering one. Four further local `make test` attempts on
+the delivery candidate reproduced the same signature — `must_use_compile_tests`
+killed at its 900 s child budget with the admission queue between 90 and 500
+deep, zero rustc or clippy diagnostics, and, in the last attempt, a trybuild
+scratch tree warmed by a prior run of that target alone. `build-limits-status`
+reported `healthy` with all four slots held throughout. Every constituent suite
+has passed on this host in some run (`--no-fail-fast`: 121 binaries, zero
+failures, including `must_use_compile_tests`), and the hosted `build-test` legs
+for Linux and Windows pass at every head, including this one, with all hosted
+checks green and `mergeStateStatus: CLEAN`. The remaining question — whether
+that substitution discharges the plan's `make test` acceptance criterion — is
+recorded here as open rather than answered by this agent, because accepting
+substitute evidence for a defined gate is the maintainer's call.
+
+2026-11-25, third replay and final certificate: `main` advanced to `e0835640`
+(#742, #743, #744 — the shared PR-comment workflow, the spelling gate's Python
+3.14, and the lading pin), and the replay completed with no conflicts. At
+`ba695a33`, every gate other than `make test` passes on this host in one
+sequential run: `check-fmt`, `markdownlint` (with the spelling gate), `nixie`,
+`lint-clippy`, `lint-whitaker`, `docstring-coverage` (1065 items, 100%),
+`verus` (27 verified, 0 errors), `cargo test --workspace --doc --all-features`
+(10 doctest suites, 0 failures), `test-workflow-contracts`, `msrv-build` and
+the Makefile's pytest recipe (128 passed, 5 skipped). Hosted CI is green at the
+same head.
+
+`make test` alone remains a timeout: `cargo-orthohelp`'s
+`must_use_compile_tests` exhausts its 900 s trybuild child budget under this
+host's shared four-slot compiler admission, with zero rustc or clippy
+diagnostics, across six attempts including one whose scratch tree a prior run
+of that target had warmed. The same target and the `ortho_l10n` boundary suite
+pass in both hosted `build-test` legs at this head, and a local
+`--no-fail-fast` workspace run passed 121 binaries with no failures. The
+acceptance question above therefore stands unchanged and explicitly open.
+
+2026-11-22, replayed again: `main` advanced to `c4377e48` (#433 bounded IR
+cache reads, #724 phrase-checker bump) while the assessments were running, and
+the second replay completed with no conflicts. Two review findings were then
+fixed. The completeness assessment found a CHANGELOG anchor still pointing at
+the pre-rebase section 13; it now points at section 14, matching the heading
+the first replay produced. The proof assessment found that the Verus entry
+point's prose still implied the slot assertions catch any mistake the oracle
+shares; it now says they catch a shared mistake about a preserved or cleared
+slot, but not a shared `model_has_protected` decision, which drives the
+command-example expectation on both sides.
+
+2026-11-22, formal review round: the two findings against this head were both
+documentation-accuracy issues with a coverage consequence, and both are
+actioned. The first corrected the plan's Python baseline: new scripts target
+3.14, as `docs/scripting-standards.md` requires, and an older interpreter is
+allowed only for a documented integration constraint. The second corrected the
+claim that a clap `default_value` never reaches generated documentation. That
+holds for a plain `#[arg]`, but a field with `cli_default_as_absent` and no
+explicit `ortho_config(default)` models the clap literal as its `DefaultValue`,
+so the projection is the only thing that removes it. The fixture now declares
+`inferred_secret`, protected and hidden from help, whose
+`INFERRED-DEFAULT-SENTINEL` is in the shared catalogue; the derive's docs
+emitter has three unit tests pinning that the inferred default reaches the
+documentation default and that an explicit default wins; the behavioural
+expectation table and the hidden-field lists include the new record; and the
+two golden snapshots show the field's public descriptor present with no
+default, which is the projection doing its job.
+
+## Outcomes & retrospective
+
+M1 implemented on 2026-11-15 under the user's execution approval. No formal
+proof, external workflow evidence, or roadmap completion is claimed. The expert
+review corrected a counterexample in the draft proof relation and removed an
+unsupported flattened-descendant assumption. The plan-only formatting,
+format-check, Markdown/spelling, and Mermaid gates passed on 2026-10-14.
+
+M2 completed on 2026-11-16 in two commits, `b7612c40` (fixture and sentinel
+catalogue) and `0a275bd2` (proof suites and plan evidence), gated by eight
+green targets on the exact candidate. V1 and V2 are discharged: the proof is
+split into a crate root plus three modules under the 400-line cap and verifies
+27 obligations with no `assume`, `admit`, or trusted proof body. Three seeded
+model faults each break a named obligation, so the obligations can fail rather
+than holding vacuously. That control is not an inhabitance argument for V1:
+`low_equiv_ordinary_equality` proves an implication, and the satisfiability of
+its premises is a separate fact: two identical ordinary one-root documents
+witness it, because no field is protected and every slot agrees. A protected
+pair with equal public descriptors and differing protected defaults witnesses
+the other branch of `low_equiv` instead, which the lemma says nothing about.
+The external workflow lane, the behavioural contract, and the sentinel suites
+are delivered; the first gate run had exposed six Clippy diagnostics in the new
+test files and a saturation timeout of the nested-Cargo probe, both repaired
+before the green run.
+
+M1 retrospectively: the largest surprises were the deleted proof lane and the
+hand-maintained schema mirror, both addressed above. The differential model and
+the bounded generator found the three fixture/probe defects before any gate
+ran, so the milestone's property suite was useful immediately rather than only
+as regression cover. The remaining M1 work is the ordinary gate run and the
+gated commit; M2 and M3 are recorded below.
+
+M3 completed on 2026-11-16. The users' guide section is executable rather than
+descriptive: `guide-profile-redaction` runs and pins the "loading is
+unaffected, the projected default is absent" claim, and
+`guide-profile-redaction-metadata` pins the published `profiles.redaction`
+shape against a live bridge call, so neither can drift silently. The
+architecture documents now state the wire additions, the structural limit
+(prose is published verbatim), and what the Verus model does and does not
+certify. The developers' guide's production-proof inventory is no longer empty:
+it names the registered entry point, the three modules, the parent-before-child
+encoding, the negative controls, and the residual boundary. Roadmap 9.1.2 and
+its three subitems are ticked with evidence; 9.1.3 remains untouched. The eight
+ordinary gates passed on the pre-commit documentation candidate, and the
+Markdown gates were re-run after the final plan-status lines.
+
+After M3, publication required a rebase onto `main` at `d11a0797`, seventeen
+commits ahead of the branch base. The rebase exposed two collisions that no
+gate could have caught before it: main had claimed ADR-0018 for the development
+build standard, and main had restructured the field-attribute parser and
+extracted the cache unit tests. The ADR moved to 0023, the `profile_field` case
+adopts main's extracted-setter shape, and the cache-key vector was recomputed
+with the disclosure salt still folded in. These are integration repairs, not
+scope changes: the disclosure boundary, its proofs, and its documented
+behaviour are untouched, and the full gate set was re-run on the rebased
+candidate.
+
+## Research and review evidence
+
+Firecrawl research on 2026-10-14 confirmed
+[GoogleTest Rust interoperability](https://github.com/google/googletest-rust)
+with rstest and the [Verus project](https://github.com/verus-lang/verus)
+restriction to a subset of Rust, supporting an explicit model/runtime boundary.
+[Kubernetes config view](https://kubernetes.io/docs/reference/kubectl/generated/kubectl_config/kubectl_config_view/)
+documents a sensitive-data raw mode; this proposal deliberately offers no such
+bypass in metadata output. These are prior art and tooling references, not
+additional OrthoConfig requirements.
+
+Wyvern source evidence packs: `pk_fthbde2u` (contracts and profile names) and
+`pk_5gxybilp` (documentation paths and tests). They are transient review aids;
+the durable context, decisions, and commands are included in this plan.
+
+Revision note (2026-10-14): initial draft records the current source baseline,
+proposed contracts, proof sketches, and approval-gated implementation sequence.
+
+Review revision (2026-10-14): Pandalump and Wafflecat identified the schema
+mirror and unsupported flatten expansion; consolidate the schema owner and
+reject marked flattened containers. Telefono corrected low-equivalence and
+required private new metadata plus serialization validation. Doggylump required
+unsupported-payload checks. Buzzy Bee required linear traversal and bounded
+generator size. Dinolump clarified that classification labels are required in
+context and sanitized IR, not human-renderer badges. All findings are addressed
+in the proposed design; implementation remains subject to approval.
+
+Validation revision (2026-10-14): record passing documentation gates and
+separate publication receipts from implementation approval. No executable
+feature or proof has been added.
+
+Rebase revision (2026-11-08): incorporate merged PR #651 and ADR-0017. Reuse
+the installed-tool command contract, bundled solver, production inventory, and
+existing CI lane; keep fixture acceptance distinct from V1/V2 proof evidence.
+Refresh moved ADR and IR paths and the scripting/BDD references. All feature
+implementation milestones remain unapproved; this maintenance changes the plan
+only. The requested post-rebase formatting, test, typecheck, and lint results
+belong to the new candidate and are recorded in the PR delivery receipt, not
+inferred from the original draft's checks.
+
+Parent revision (2026-11-09): use #664 as the temporary base to incorporate
+nested Cargo timeout fixes. Preserve the #651 tooling decisions, record the
+exclusive parent boundary, and require fresh validation before publication.
+After #664 merges, the implementing agent may restack onto `main` and update
+the PR target; profile implementation still requires explicit approval.
+
+Validation interruption (2026-11-10): on the temporary parent, `make fmt` and
+`make check-fmt` passed, but `make test` failed in
+`a_second_process_cannot_clean_a_leased_artefact`. The cold identifier fixture
+build exhausted its remaining 878607 ms allowance while compiler admission was
+busy. The following warm-build artefact test passed; this does not replace the
+failed full-suite gate. Subsequent lint and typecheck runs passed with explicit
+zero exit receipts. A full-suite follow-up against the populated fixture target
+passed all eight identifier-artefact tests (one ignored), including the lease
+case. It then failed nine localization-boundary tests: six reported a shared
+package-build timeout and three reported consumer-test timeouts, each at the
+440-second nested Cargo deadline. That boundary suite finished with 29 passed,
+nine failed, and seven ignored; Make exited with status 2. Its output records
+compiler-admission waits and uncached compilation. These results do not
+establish a passing full-suite gate.
+
+Publication revision (2026-11-13): the user explicitly authorized committing
+and publishing the plan even if validation remains red. Rebase onto the PR's
+current `main` target and record fresh gate results in the PR without claiming
+that historical timeout failures passed. This exception applies to delivering
+the plan, not to implementing the feature or marking roadmap 9.1.2 done.

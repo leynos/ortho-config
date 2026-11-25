@@ -219,3 +219,56 @@ fn parses_crate_path_with_prefix() -> Result<()> {
         "crate path should parse alongside prefix",
     )
 }
+
+/// Unknown values that carry a top-level comma must still parse, and the
+/// separator after them must be left unread.
+///
+/// `skip_to_item_end` stops at an item separator, but three constructs present
+/// a comma that is not a separator: a turbofish's argument list, a closure's
+/// parameter list, and that list behind `move`/`async`/`static`. The previous
+/// `syn::Expr` parse accepted every one, so splitting them here would break
+/// derives that compiled before. Each case also names a trailing key, which
+/// fails if the scan consumes the separator instead of leaving it.
+#[rstest]
+#[case::turbofish_value(
+    parse_quote! { #[ortho_config(prefix = "CFG_", future = factory::<Alpha, Beta>(), crate = "my_config")] },
+)]
+#[case::nested_turbofish_value(
+    parse_quote! { #[ortho_config(prefix = "CFG_", future = outer::<Inner<Alpha, Beta>, Gamma>(), crate = "my_config")] },
+)]
+#[case::closure_two_parameters(
+    parse_quote! { #[ortho_config(prefix = "CFG_", future = |a, b| a, crate = "my_config")] },
+)]
+#[case::closure_zero_parameters(
+    parse_quote! { #[ortho_config(prefix = "CFG_", future = || 1, crate = "my_config")] },
+)]
+#[case::move_closure(
+    parse_quote! { #[ortho_config(prefix = "CFG_", future = move |a, b| a, crate = "my_config")] },
+)]
+#[case::async_move_closure(
+    parse_quote! { #[ortho_config(prefix = "CFG_", future = async move |a, b| a, crate = "my_config")] },
+)]
+#[case::bitwise_or_is_not_a_closure(
+    parse_quote! { #[ortho_config(prefix = "CFG_", future = a | b, crate = "my_config")] },
+)]
+fn unknown_value_with_top_level_comma_leaves_the_next_key_readable(
+    #[case] attribute: syn::Attribute,
+) -> Result<()> {
+    let input: DeriveInput = parse_quote! {
+        #attribute
+        struct Demo { field: String }
+    };
+    let (_, _, struct_attrs, _) = parse_input(&input).map_err(|err| anyhow!(err))?;
+    ensure!(
+        struct_attrs.prefix.as_deref() == Some("CFG_"),
+        "the known key before the unknown value must still be read"
+    );
+    ensure!(
+        struct_attrs
+            .crate_path
+            .as_ref()
+            .is_some_and(|path| path.is_ident("my_config")),
+        "the key after the unknown value must still be read"
+    );
+    Ok(())
+}

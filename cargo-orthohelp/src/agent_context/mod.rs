@@ -5,7 +5,7 @@
 
 use ortho_config::{
     AgentCommand, AgentContext, AgentInput, InteractionMode, Localizer, MutationEffect,
-    ProfileSelectionContract, ProfilesDeclaration,
+    OrthoResult, ProfileFieldRedaction, ProfileSelectionContract, ProfilesDeclaration,
 };
 
 use crate::policy::vocabulary::CANONICAL_VERBS;
@@ -35,7 +35,19 @@ struct SelectorFlag<'a>(&'a str);
 /// Builds an agent-context document from bridge documentation metadata.
 ///
 /// The transform is deterministic: command paths and command inputs are sorted
-/// before returning so callers get stable JSON after serialization.
+/// before returning so callers get stable JSON after serialization. The
+/// metadata is projected through [`ortho_config::docs::DocMetadata::redacted_for_output`]
+/// first, so callers that hand in deserialized or handwritten metadata get the
+/// same disclosure boundary as derive-generated metadata.
+///
+/// # Errors
+///
+/// Returns [`ortho_config::OrthoError::DuplicateProfileRedaction`] when the
+/// document declares two protected fields with the same command path and field
+/// name.
+///
+/// Protected fields without a profile declaration are not an error: their
+/// values are still projected out, and the records have no surface to qualify.
 ///
 /// # Examples
 ///
@@ -80,36 +92,87 @@ struct SelectorFlag<'a>(&'a str);
 ///     output: None,
 /// };
 ///
-/// let context = bridge_ir_to_agent_context(&metadata, "example", None);
+/// let context = bridge_ir_to_agent_context(&metadata, "example", None)
+///     .expect("metadata without protected fields bridges");
 /// assert_eq!(context.kind, "example.agent_context");
 /// assert_eq!(context.commands[0].path, ["example"]);
 /// ```
-#[must_use]
 pub fn bridge_ir_to_agent_context(
     meta: &DocMetadata,
     package: &str,
     localizer: Option<&dyn Localizer>,
-) -> AgentContext {
+) -> OrthoResult<AgentContext> {
     log_bridge_start(package, &meta.app_name);
+    // Project once at this public boundary so both the emitted commands and
+    // the redaction records derive from the same disclosure view.
+    let projected = meta.redacted_for_output();
     let mut context = AgentContext::new(package);
-    if let Some(profiles) = &meta.profiles {
-        context.profiles = ProfilesDeclaration::supported(ProfileSelectionContract {
-            flag: profiles.flag.clone(),
-            env_var: profiles.env_var.clone(),
-        });
-    }
-    walk(meta, &[], &mut context.commands, localizer);
+    context.profiles = profiles_declaration(&projected)?;
+    walk(&projected, &[], &mut context.commands, localizer);
     expose_profile_selector(&context.profiles, &mut context.commands);
-    context
-        .commands
-        .sort_by(|left, right| left.path.cmp(&right.path));
-    for command in &mut context.commands {
+    sort_commands(&mut context.commands);
+    log_bridge_complete(package, context.commands.len());
+    Ok(context)
+}
+
+/// Returns the profile declaration a projected document publishes.
+///
+/// A document that declares no profiles keeps the unsupported default. One
+/// that does publishes its selection contract together with the redaction
+/// records derived from the same projected view, so the two cannot disagree.
+fn profiles_declaration(projected: &DocMetadata) -> OrthoResult<ProfilesDeclaration> {
+    let Some(profiles) = &projected.profiles else {
+        return Ok(ProfilesDeclaration::unsupported());
+    };
+    let records = collect_redaction_records(projected);
+    ProfilesDeclaration::supported(ProfileSelectionContract {
+        flag: profiles.flag.clone(),
+        env_var: profiles.env_var.clone(),
+    })
+    .with_redaction(records)
+}
+
+/// Orders commands by path and each command's inputs by name.
+fn sort_commands(commands: &mut [AgentCommand]) {
+    commands.sort_by(|left, right| left.path.cmp(&right.path));
+    for command in commands {
         command
             .inputs
             .sort_by(|left, right| left.name.cmp(&right.name));
     }
-    log_bridge_complete(package, context.commands.len());
-    context
+}
+
+/// Collects the public identity of every protected field in the tree.
+///
+/// Records include config-only and hidden fields even though those never
+/// become invocable [`AgentInput`] entries: the redaction list describes what
+/// the document declares, not what a caller can pass on the command line.
+fn collect_redaction_records(meta: &DocMetadata) -> Vec<ProfileFieldRedaction> {
+    let mut records = Vec::new();
+    collect_redaction_records_into(meta, &[], &mut records);
+    records
+}
+
+/// Recursive half of [`collect_redaction_records`].
+fn collect_redaction_records_into(
+    meta: &DocMetadata,
+    parent_path: &[String],
+    out: &mut Vec<ProfileFieldRedaction>,
+) {
+    let path = command_path(meta, parent_path);
+    out.extend(meta.fields.iter().filter_map(|field| {
+        field.profile_field.map(|exposure| {
+            ProfileFieldRedaction::new(
+                path.clone(),
+                field.name.clone(),
+                field.file.as_ref().map(|file| file.key_path.clone()),
+                exposure,
+            )
+        })
+    }));
+    for subcommand in &meta.subcommands {
+        collect_redaction_records_into(subcommand, &path, out);
+    }
 }
 
 /// Announce the start of the IR-to-agent-context bridge.

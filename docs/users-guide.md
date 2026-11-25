@@ -1296,7 +1296,7 @@ loader, and no discovery policy, so a child never needs `OrthoConfig` merely to
 expose a schema. Do not combine it with `#[derive(OrthoConfig)]` on the same
 type, because the configuration root's derive already emits the implementation
 and adding both produces a duplicate-implementation error. See
-[nested requirement schemas](v0-11-0-migration-guide.md#13-adopt-nested-requirement-schemas-or-widen-your-own-helpers)
+[nested requirement schemas](v0-11-0-migration-guide.md#14-adopt-nested-requirement-schemas-or-widen-your-own-helpers)
 for the migration steps that adopt either half. See the
 [requirement-schema contract](developers-guide.md#the-manual-requirement-schema-contract)
 when implementing the trait by hand.
@@ -2222,6 +2222,120 @@ application that offers `context --json` can report it from
 `{"name": "staging", "source": "flag"}` or
 `{"name": "staging", "source": "environment"}`; the application owns that
 rendering.
+
+### Keep profile values out of generated documentation
+
+A field whose value must never appear in published documentation is marked with
+`profile_field` beside its other `#[ortho_config(...)]` settings:
+
+<!-- tested-example: guide-profile-redaction -->
+```rust
+use ortho_config::{OrthoConfig, OrthoConfigDocs, OrthoResult};
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Deserialize, Serialize, OrthoConfig)]
+#[ortho_config(prefix = "APP_", profiles)]
+struct Settings {
+    /// Region the service reports to.
+    #[ortho_config(default = String::from("eu-west"))]
+    region: String,
+
+    /// Confidential token issued by the service.
+    #[ortho_config(
+        default = String::from("documented-token"),
+        profile_field = "secret"
+    )]
+    token: String,
+}
+
+fn main() -> OrthoResult<()> {
+    // Loading is unaffected: redaction shapes published metadata, not how
+    // configuration is read.
+    let settings = Settings::load()?;
+    println!("loaded region={}", settings.region);
+
+    let metadata = Settings::get_doc_metadata().redacted_for_output();
+    let token = metadata
+        .fields
+        .iter()
+        .find(|field| field.name == "token")
+        .expect("the token field is documented");
+    println!("published token default={:?}", token.default);
+    Ok(())
+}
+```
+
+Run with `--token live-token`, this prints `loaded region=eu-west` and
+`published token default=None`: the command line still supplies the value,
+while the metadata that would have published the default is empty. The example
+prints the region rather than the token so that copying it cannot write a real
+credential to the terminal, where it may reach a scrollback buffer or a shell
+log.
+
+Two labels are accepted:
+
+- `"secret"` marks a value that must not be published at all.
+- `"reference_only"` marks a value that names an external object, such as a
+  credential file, so generated documentation should point at it rather than
+  print it.
+
+Both labels remove the same slots: the field's default, its own examples, any
+`possible_values` on its command-line flag, and the members of an enum value
+type, including members nested in lists and maps. They keep every descriptor
+that does not carry a value: the field name, its help text, its flag,
+environment-variable and file spellings, its requiredness, and the label
+itself. When any field in a command tree is protected, the documentation also
+drops every command-level example in that tree, because an unstructured example
+cannot be shown to avoid the protected field.
+
+The annotation is purely about publication. Marking a field does not require
+profile support: a command that never opts into `profiles` still redacts marked
+fields and simply publishes no selection metadata. `cargo-orthohelp` applies
+the projection to every artefact it generates, including the cached IR, so call
+`redacted_for_output` yourself only when you consume the metadata directly. If
+you already own the `DocMetadata` value, `into_redacted_for_output` projects it
+in place and avoids the copy; both forms return the same result. A handwritten
+`OrthoConfigSubcommandDocs` implementation, or any other boundary that returns
+several documents at once, uses `redacted_group_for_output`, which applies the
+command-example rule across the whole group rather than document by document.
+
+The policy is structural, so it cannot recognize a secret written into prose.
+Do not put sensitive material in help text, custom type names, links, or notes:
+those descriptors are deliberately preserved. Profile names are safe to publish
+because the catalogues carry names, never profile bodies, but choose names that
+do not themselves encode a secret.
+
+Automation sees the same boundary. Each protected field appears in agent
+context as a record with its command path, field name, optional file key, and
+label:
+
+<!-- tested-example: guide-profile-redaction-metadata -->
+```json
+{
+  "profiles": {
+    "supported": true,
+    "selection": { "flag": "profile", "env_var": "APP_PROFILE" },
+    "redaction": [
+      {
+        "command_path": ["app"],
+        "field_name": "credential_file",
+        "key_path": "credential_file",
+        "exposure": "reference_only"
+      },
+      {
+        "command_path": ["app"],
+        "field_name": "token",
+        "key_path": "token",
+        "exposure": "secret"
+      }
+    ]
+  }
+}
+```
+
+Records are sorted by identity, and a duplicate `(command_path, field_name)`
+pair is rejected rather than resolved. A command without profile support keeps
+`{ "supported": false }` and carries no records.
 
 ## Declare behaviour metadata for agents
 

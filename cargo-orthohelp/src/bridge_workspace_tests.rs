@@ -4,6 +4,9 @@ use super::*;
 use crate::cache::CacheKey;
 use crate::metadata::{OrthoConfigDependency, PackageSelection};
 use anyhow::{Context, Result, ensure};
+use cap_std::ambient_authority;
+use cap_std::fs_utf8::{Dir, OpenOptions};
+use std::io::Write;
 
 fn selection(root: &camino::Utf8Path) -> PackageSelection {
     PackageSelection {
@@ -30,6 +33,61 @@ fn cache_key(fingerprint: &str) -> CacheKey {
         ir_version: "1".to_owned(),
         lockfile_hash: None,
     }
+}
+
+/// Unredacted body shaped like a pre-change cache entry.
+///
+/// Its content is never parsed: the subject of the regression is that the
+/// lookup does not reach the file at all, and the sentinel default records what
+/// reuse would have disclosed.
+const PRE_CHANGE_IR_BODY: &str = r#"{"ir_version":"1.0.0","fields":[{"name":"token","default":{"display":"PRE-CHANGE-CACHE-SENTINEL"}}]}"#;
+
+/// Proves a pre-change cache entry cannot satisfy a cache lookup.
+///
+/// The entry is written under the name a release without the disclosure policy
+/// computed, and its body still carries a protected default in a slot the
+/// projection clears. Reuse is only possible if the lookup reads that file, so
+/// requiring a miss proves the entry is never selected; requiring the body to
+/// survive proves it is not overwritten either.
+#[test]
+fn pre_change_cache_entry_is_never_selected() -> Result<()> {
+    let state = tempfile::tempdir()?;
+    let root = camino::Utf8Path::from_path(state.path()).context("UTF-8 test directory")?;
+    let package = selection(root);
+    let key = cache_key("pre-change source body");
+    let paths = super::super::prepare_cache(&package, &key);
+
+    let pre_change_dir = package
+        .target_directory
+        .join("orthohelp")
+        .join(key.hash_without_disclosure_policy());
+    ensure!(
+        pre_change_dir != paths.cache_dir,
+        "the pre-change key must not name the directory the current key selects"
+    );
+    let pre_change = seed_cache_entry(&pre_change_dir)?;
+
+    ensure!(
+        super::super::ir_cache::read_cached_ir(&paths)?.is_none(),
+        "a cache entry written before the disclosure salt must not be read"
+    );
+    ensure!(
+        pre_change.read_to_string("ir.json")? == PRE_CHANGE_IR_BODY,
+        "the pre-change entry must be left untouched"
+    );
+    Ok(())
+}
+
+/// Writes [`PRE_CHANGE_IR_BODY`] into `cache_dir` as its `ir.json`.
+fn seed_cache_entry(cache_dir: &camino::Utf8Path) -> Result<Dir> {
+    Dir::create_ambient_dir_all(cache_dir, ambient_authority())?;
+    let dir = Dir::open_ambient_dir(cache_dir, ambient_authority())?;
+    let mut file = dir.open_with(
+        "ir.json",
+        OpenOptions::new().write(true).create(true).truncate(true),
+    )?;
+    file.write_all(PRE_CHANGE_IR_BODY.as_bytes())?;
+    Ok(dir)
 }
 
 #[test]

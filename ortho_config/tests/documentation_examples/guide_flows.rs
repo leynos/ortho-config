@@ -16,7 +16,8 @@ use crate::{Invocation, assert_run, assert_run_with_environment};
 
 /// Binaries the guide flows add beyond the published examples.
 pub(super) fn add_probes(workspace: &mut ExampleWorkspace) -> Result<()> {
-    workspace.add_binary(&profile_metadata_probe())
+    workspace.add_binary(&profile_metadata_probe())?;
+    workspace.add_binary(&profile_redaction_probe())
 }
 
 /// Write a documented file into an example's working directory.
@@ -266,6 +267,73 @@ pub(super) fn assert_profile_metadata_flow(workspace: &mut ExampleWorkspace) -> 
     Ok(())
 }
 
+/// The published redaction records are what the bridge emits for protected fields.
+pub(super) fn assert_profile_redaction_flow(workspace: &mut ExampleWorkspace) -> Result<()> {
+    let output = workspace.run(
+        ExampleId("profile-redaction-probe"),
+        std::iter::empty::<&str>(),
+    )?;
+    ensure!(
+        output.status.success(),
+        "profile redaction probe failed:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let printed = String::from_utf8_lossy(&output.stdout).into_owned();
+    ensure!(
+        !printed.contains("documented-token") && !printed.contains("documented-credentials"),
+        "agent context should publish no protected default: {printed}"
+    );
+    let context: Value = serde_json::from_slice(&output.stdout)?;
+    let published = documented_example("guide-profile-redaction-metadata")?;
+    let expected: Value = serde_json::from_str(&published.body)?;
+    ensure!(
+        context.get("profiles") == expected.get("profiles"),
+        "published profile redaction records drifted: {context:#}"
+    );
+    Ok(())
+}
+
+/// Builds a probe that bridges a struct with protected fields to agent context.
+fn profile_redaction_probe() -> DocumentedExample {
+    DocumentedExample {
+        id: "profile-redaction-probe".to_owned(),
+        language: "rust".to_owned(),
+        body: concat!(
+            "use ortho_config::{OrthoConfig, OrthoConfigDocs};\n",
+            "use serde::{Deserialize, Serialize};\n\n",
+            "#[derive(Deserialize, Serialize, OrthoConfig)]\n",
+            "#[ortho_config(prefix = \"APP_\", profiles)]\n",
+            "struct Config {\n",
+            "    /// Confidential token issued by the service.\n",
+            "    #[ortho_config(\n",
+            "        default = String::from(\"documented-token\"),\n",
+            "        profile_field = \"secret\"\n",
+            "    )]\n",
+            "    token: String,\n\n",
+            "    /// Credential file the service reads.\n",
+            "    #[ortho_config(\n",
+            "        default = String::from(\"documented-credentials\"),\n",
+            "        profile_field = \"reference_only\"\n",
+            "    )]\n",
+            "    credential_file: String,\n",
+            "}\n\n",
+            "fn main() {\n",
+            "    let ir = serde_json::to_string(&Config::get_doc_metadata()).expect(\"serialize IR\");\n",
+            "    let metadata: cargo_orthohelp::schema::DocMetadata =\n",
+            "        serde_json::from_str(&ir).expect(\"read IR\");\n",
+            "    let context = cargo_orthohelp::agent_context::bridge_ir_to_agent_context(\n",
+            "        &metadata, \"app\", None,\n",
+            "    )\n",
+            "    .expect(\"bridge IR to agent context\");\n",
+            "    println!(\"{}\", serde_json::to_string(&context).expect(\"serialize context\"));\n",
+            "}\n",
+        )
+        .to_owned(),
+        source: "profile redaction probe",
+        line: 1,
+    }
+}
+
 /// Builds a probe that bridges a profile-enabled `APP_` struct to agent context.
 fn profile_metadata_probe() -> DocumentedExample {
     DocumentedExample {
@@ -287,7 +355,8 @@ fn profile_metadata_probe() -> DocumentedExample {
             "        serde_json::from_str(&ir).expect(\"read IR\");\n",
             "    let context = cargo_orthohelp::agent_context::bridge_ir_to_agent_context(\n",
             "        &metadata, \"app\", None,\n",
-            "    );\n",
+            "    )\n",
+            "    .expect(\"bridge IR to agent context\");\n",
             "    println!(\"{}\", serde_json::to_string(&context).expect(\"serialize context\"));\n",
             "}\n",
         )

@@ -13,49 +13,67 @@ use crate::{OrthoError, OrthoResult};
 
 /// The merge provider delegates enumeration to the live process.
 const SOURCE_PROCESS: &str = "process";
+
 /// The merge provider scans a caller-supplied source.
 const SOURCE_INJECTED: &str = "injected";
 
 /// A direct `CsvEnv` provider operation.
 const OPERATION_CSV_ENV: &str = "csv_env";
+
 /// A derive-generated complete configuration load.
 const OPERATION_DERIVED_LOAD: &str = "derived_load";
+
 /// A derive-generated load that also resolves a profile selection.
 const OPERATION_PROFILE_LOAD: &str = "profile_load";
+
 /// A source-aware subcommand defaults-and-CLI load.
 const OPERATION_SUBCOMMAND_LOAD: &str = "subcommand_load";
 
 /// The operation has selected its environment source and begun work.
 const OUTCOME_ATTEMPT: &str = "attempt";
+
 /// The operation produced a configuration layer or configuration value.
 const OUTCOME_SUCCESS: &str = "success";
+
 /// The operation returned an error after selecting its environment source.
 const OUTCOME_FAILURE: &str = "failure";
 
 /// No error applies to an attempt or successful operation.
 const CATEGORY_NONE: &str = "none";
+
 /// A `map` or `filter_map` closure could not be replayed under injection.
 const CATEGORY_OPAQUE_KEY_TRANSFORM: &str = "opaque_key_transform";
+
 /// A transformed environment key could not form an object layer.
 const CATEGORY_INVALID_NESTING: &str = "invalid_nesting";
+
 /// Command-line parsing prevented a complete source-aware load.
 const CATEGORY_CLI: &str = "cli";
+
 /// An inferred clap string default could not be parsed by its value parser.
 const CATEGORY_DEFAULT_VALUE_CONVERSION: &str = "default_value_conversion";
+
 /// Configuration-file gathering prevented a complete source-aware load.
 const CATEGORY_FILE: &str = "file";
+
 /// A configuration `extends` cycle prevented loading.
 const CATEGORY_CYCLIC_EXTENDS: &str = "cyclic_extends";
+
 /// A Figment provider could not gather a configuration layer.
 const CATEGORY_GATHERING: &str = "gathering";
+
 /// Layer extraction or CLI merging failed.
 const CATEGORY_MERGE: &str = "merge";
+
 /// A loaded value did not meet the configuration's validation rules.
 const CATEGORY_VALIDATION: &str = "validation";
+
 /// Profile selection or profile-table validation prevented loading.
 const CATEGORY_PROFILE: &str = "profile";
+
 /// Several loading errors were retained for reporting together.
 const CATEGORY_AGGREGATE: &str = "aggregate";
+
 /// Required configuration values were still absent after every layer merged.
 ///
 /// The report's paths and routes are user-derived data, so they never become
@@ -203,7 +221,9 @@ const fn error_category(error: &OrthoError) -> &'static str {
         OrthoError::UnknownProfile { .. }
         | OrthoError::InvalidProfileName { .. }
         | OrthoError::ReservedProfileName { .. }
-        | OrthoError::ProfileForbiddenKey { .. } => CATEGORY_PROFILE,
+        | OrthoError::ProfileForbiddenKey { .. }
+        | OrthoError::DuplicateProfileRedaction { .. }
+        | OrthoError::ProfileMetadataOnUnsupported { .. } => CATEGORY_PROFILE,
         OrthoError::Aggregate(_) => CATEGORY_AGGREGATE,
         OrthoError::MissingRequiredValues(_) => CATEGORY_MISSING_REQUIRED_VALUES,
     }
@@ -263,7 +283,7 @@ const fn count_outcome(
 #[cfg(test)]
 mod tests {
     //! Telemetry vocabulary checks for terminal loading decisions.
-    use super::{CATEGORY_MISSING_REQUIRED_VALUES, error_category};
+    use super::{CATEGORY_MISSING_REQUIRED_VALUES, CATEGORY_PROFILE, error_category};
     use crate::{ConfigPath, MissingRequiredValue, MissingRequiredValues, OrthoError};
 
     /// A missing-values report gets its own category so a dashboard can count
@@ -289,6 +309,28 @@ mod tests {
         assert_eq!(
             CATEGORY_MISSING_REQUIRED_VALUES, "missing_required_values",
             "the category label is a dashboard contract"
+        );
+    }
+    /// Both profile-metadata failures are profile errors, not merge failures:
+    /// a dashboard counting profile misconfiguration must see them together.
+    #[test]
+    fn profile_metadata_errors_have_the_profile_category() {
+        let duplicate = OrthoError::DuplicateProfileRedaction {
+            command_path: String::from("tool login"),
+            field_name: String::from("token"),
+        };
+        let unsupported = OrthoError::ProfileMetadataOnUnsupported {
+            kind: "redaction records",
+        };
+        let categories = (error_category(&duplicate), error_category(&unsupported));
+        assert_eq!(
+            categories,
+            (CATEGORY_PROFILE, CATEGORY_PROFILE),
+            "both profile-metadata errors must count as profile failures"
+        );
+        assert_eq!(
+            CATEGORY_PROFILE, "profile",
+            "the profile category label is a dashboard contract"
         );
     }
 }

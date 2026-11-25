@@ -32,13 +32,15 @@ pub fn agent_context_kind(package: &str) -> String {
 }
 
 mod profiles;
+
 mod skill_manifests;
 
-pub use profiles::{ProfileSelectionContract, ProfilesDeclaration};
+pub use profiles::{ProfileFieldRedaction, ProfileSelectionContract, ProfilesDeclaration};
 pub use skill_manifests::{SkillCommandRef, SkillManifest};
 
 mod output;
 mod renderer;
+
 mod renderer_wire;
 
 pub use output::{ExitClass, OutputContract, StdoutPurpose};

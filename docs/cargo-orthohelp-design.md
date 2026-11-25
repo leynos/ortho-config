@@ -333,6 +333,65 @@ Adding `positional` is an additive optional field: it bumps the IR minor
 version and leaves existing `ir`, `man`, and `ps` output unchanged for command
 surfaces that use only flags.
 
+#### 2.2.1 Profile field disclosure
+
+A field may carry `profile_field: Option<ProfileFieldExposure>`, with the
+`snake_case` labels `secret` and `reference_only`. The disclosure policy has a
+single owner in `ortho_config::docs`: `DocMetadata::redacted_for_output`
+removes protected defaults, field examples, CLI possible values, and nested
+enum members, and removes every command-level example when any field in the
+tree is protected. A boundary that returns several documents at once — the
+derived `OrthoConfigSubcommandDocs` selector returns one node per enum variant
+— uses `DocMetadata::redacted_group_for_output`, which applies the
+command-example rule across the group so a protected field in one member
+suppresses every member's command examples. The group form scans members only
+until it finds a protected field, but then projects every member, so a member a
+child boundary already projected is traversed again; only the group-wide
+command-example decision makes that pass necessary, and it is why a clean
+member's examples can still disappear. `cargo-orthohelp` does not implement or
+vary that policy. Its schema module re-exports the `ortho_config::docs` types,
+its pipeline projects deserialized IR before rendering, its bridge projects
+before writing IR JSON, and its agent-context adapter projects at its public
+boundary and derives protected-field records from the projected tree.
+
+`ir::localize_doc` is a public boundary in its own right, because a library
+caller may hand it unprojected metadata. It projects its argument once, before
+localizing, and recurses through a private function so that no nested call
+re-projects a subtree: the command-example rule is decided from the whole
+document, and a subtree-local decision would differ from it. The pipeline's own
+earlier projection is idempotent, so the two applications agree. The cache
+identity adds the `profile-redaction-v1` salt so artefacts produced under a
+different policy are never reused. The contract and its rationale are recorded
+in [ADR-0026](adrs/adr-0026-profile-field-redaction.md).
+
+The wire additions are additive. `FieldMetadata::profile_field` is an optional
+label, omitted when absent, and an unknown label fails deserialization rather
+than degrading to an ordinary field, so legacy IR reads as ordinary metadata.
+When the documentation declares profiles support, agent context carries one
+record per protected field in `profiles.redaction[]`: `command_path`,
+`field_name`, the optional file `key_path`, and `exposure`. Records are sorted
+by identity and a duplicate `(command_path, field_name)` is rejected rather
+than resolved. A document without that declaration yields an unsupported
+declaration with no records, because the bridge returns before collecting them;
+values are still projected either way, since projection happens before the
+declaration is built.
+
+The boundary is structural, not textual. Help identifiers, descriptions, custom
+type names, links, and notes are published verbatim, so an author who writes a
+secret into prose defeats the policy, and no renderer offers a badge or an
+override. What survives is the public descriptor: an agent can still name the
+setting it must not echo.
+
+Formal evidence covers the projection's semantics, not the binary. A Verus
+model in `verus/profile_redaction.rs` mirrors the production slots and proves
+noninterference and projection integrity over an unbounded parent-before-child
+encoding of the command tree. Verus cannot reason about `String`, `Vec`, or
+serde attributes, so the model is a specification rather than generated code,
+and the correspondence is supported by bounded evidence: the differential
+property tests in `ortho_config/src/docs/profile_redaction/` together with the
+golden and contract suites in `cargo-orthohelp/tests/`. It is not verified, and
+the developers' guide records that residual boundary.
+
 ### 2.3 Value typing and defaults
 
 ```rust
@@ -508,7 +567,12 @@ variant vocabulary:
 
 - **Single-field tuple variants** (`Run(RunArgs)`) delegate to the inner
   argument struct's `OrthoConfigDocs` implementation, override `app_name` with
-  the clap command label, and regenerate `about_id`.
+  the clap command label, and regenerate `about_id`. That child implementation
+  may be handwritten, so the derived selector is a disclosure boundary in its
+  own right: it projects the whole group of nodes it returns with
+  `DocMetadata::redacted_group_for_output`, deciding the command-example rule
+  once over the group rather than trusting each member. See
+  [ADR-0026](adrs/adr-0026-profile-field-redaction.md).
 - **Unit variants** (`Start`, `Stop`, `Status`) emit a minimal `DocMetadata`
   node: command label, generated `about_id`, default heading identifiers, and
   empty `fields` and `subcommands`. A service or daemon CLI is built from
@@ -693,9 +757,9 @@ resources through language-only matching.
 The catalogue is not yet in `ortho_l10n/locales/en-US/messages.ftl`. That
 resource holds the compatibility copy for the legacy CLI, Clap error, and
 profile-error paths; the heading strings are still the hardcoded table in
-`cargo-orthohelp/src/ir.rs` described below. The ownership statement above is
-the intended end state of the move, which this design's §4.2 layout is the
-first step towards.
+`cargo-orthohelp/src/ir/resolvers.rs` described below. The ownership statement
+above is the intended end state of the move, which this design's §4.2 layout is
+the first step towards.
 
 The catalogue is the fallback of record. `cargo-orthohelp` currently carries a
 hardcoded English table for the standard heading identifiers, which keeps raw
@@ -877,9 +941,9 @@ re-parsing or re-qualifying the caller's text.
    - `main.rs` invokes
      `<root_type as OrthoConfigDocs>::get_doc_metadata()` and serializes the
      IR JSON to stdout.
-   - `cargo-orthohelp` keeps a local copy of the IR schema (mirroring
-     `ortho_config::docs`) so publish checks can build against the latest
-     crates.io release while the workspace evolves.
+   - `cargo-orthohelp`'s schema module re-exports `ortho_config::docs`
+     rather than mirroring it, so the tool and the derive cannot drift, and
+     one redaction projection covers both.
    - The generated manifest, source, copied workspace `Cargo.lock` when
      present, and executable snapshot live in an invocation-owned temporary
      directory beneath the stable IR cache entry.
@@ -903,7 +967,8 @@ valid; `--no-build` trusts the existing IR.
 
 Crate fingerprints hash `Cargo.toml`, `build.rs` (when present), `src/`, and
 `locales/` so changes to configuration schemas or translations invalidate the
-cache.
+cache. The identity also hashes the disclosure-policy salt
+`profile-redaction-v1`; see §2.2.1.
 
 Publishing a newly generated IR compares it with the existing entry before
 replacing the file, so identical content keeps its modification time. The
@@ -1140,10 +1205,11 @@ shared cache services are outside the bridge's ownership.
 ## 6.4 Localized IR JSON output
 
 `cargo-orthohelp` emits a localized IR JSON file per locale into
-`<out>/ir/<locale>.json`. The schema mirrors `DocMetadata` but resolves every
-Fluent identifier into a concrete string. The output includes the locale for
-traceability and preserves non-localized fields such as value types or Windows
-metadata.
+`<out>/ir/<locale>.json`. The schema decodes the shared `DocMetadata` that
+`cargo_orthohelp::schema` re-exports from `ortho_config::docs` — one type
+identity, not a mirror — and resolves every Fluent identifier into a concrete
+string. The output includes the locale for traceability and preserves
+non-localized fields such as value types or Windows metadata.
 
 When a Fluent ID cannot be resolved, the output uses `[missing: <id>]` as a
 sentinel so generators can surface gaps during development.

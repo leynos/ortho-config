@@ -740,10 +740,56 @@ selected profile even when the flag value equals the built-in default. The
 migration impact, including the Rust-level `AgentContext.profiles` retype and
 the rollback story, is recorded in ADR-0012's migration plan.
 
-Agent context should expose whether profiles are supported, how to list them,
-which flag selects one, and which profile fields are redacted or
-reference-only. Profile metadata should support secret redaction, profile names
-in context output, and generated profile documentation.
+Agent context exposes whether profiles are supported, how to list them, which
+flag selects one, and which profile fields are secret or reference-only.
+Profile metadata supports secret and reference-only classification, profile
+names in context output, and generated profile documentation.
+
+An author classifies a field with `#[ortho_config(profile_field = "secret")]` or
+`#[ortho_config(profile_field = "reference_only")]`. Both labels withhold the
+field's value-bearing metadata from generated artefacts while retaining its
+public descriptor: the default, field-level examples, CLI possible values, and
+nested enum members are removed, while the name, help identifiers, CLI
+spelling, environment variable, file key, requiredness, value-type shape, and
+label survive. When any field in the tree is protected, every command-level
+example in the tree is removed as well, because an unstructured example cannot
+be mapped back to the fields it exercises. The projection is applied by the
+derive, by the `cargo-orthohelp` pipeline, by the generated bridge, and again
+at the agent-context boundary; a subcommand selector that returns several
+documents applies it to the returned group, so the command-example rule is
+decided once for every sibling. The agent-context cache identity includes the
+disclosure-policy salt. The full contract, including the flattened-container
+rejection, is recorded in [ADR-0026](adrs/adr-0026-profile-field-redaction.md).
+
+Agent context also carries a names-only catalogue: validated `ProfileName`
+values, sorted and deduplicated, with no profile body. Supplying names
+therefore cannot leak profile contents, and a declaration that is not supported
+cannot carry names or protected-field records. Protected-field records name the
+`(command_path, field_name)` identity, the optional file key path, and the
+label; duplicate identities are rejected.
+
+On the wire those records are an additive `profiles.redaction` array:
+
+```json
+"redaction": [
+  {
+    "command_path": ["app"],
+    "field_name": "token",
+    "key_path": "token",
+    "exposure": "secret"
+  }
+]
+```
+
+`key_path` is omitted when the field has no file key, and records are sorted by
+identity. The record carries no value-bearing slot, and the field keeps its
+public descriptor elsewhere in the context, so an agent can still name the
+setting it must not echo while remaining unable to read it. Suppression is
+structural: help text, custom type names, links, and notes are published
+verbatim, so the author remains responsible for what those strings say. The
+projection's semantics are proved over a model in `verus/profile_redaction.rs`;
+[ADR-0026](adrs/adr-0026-profile-field-redaction.md)
+records the contract and the residual testing boundary.
 
 ### 6.8 Delivery and feedback
 

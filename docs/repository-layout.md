@@ -38,10 +38,11 @@ layout and the critical subdirectories new contributors usually need first.
 ├── tests/
 │   ├── fixtures/
 │   └── workflow_contracts/
-└── tools/
-    ├── kani/
-    ├── mold/
-    └── verus/
+├── tools/
+│   ├── kani/
+│   ├── mold/
+│   └── verus/
+└── verus/
 ```
 
 Diagram 1: compact repository tree.
@@ -73,6 +74,7 @@ Table 1 describes the repository paths that define the workspace shape.
 | `tests/workflow_contracts/` | Workflow and Make-routing contract tests, run by `make test-workflow-contracts`. They hold the CI workflows and the build standard's Make routing to their contracts, with narrow readers for Make output and workflow shell goals.                                                        |
 | `tools/`                    | Repository-owned tool pins. `tools/kani/VERSION` and `tools/verus/VERSION` name the verifier releases, and `tools/verus/SHA256SUMS` pins the Verus archive. Change them only with the matching integration evidence.                                                                       |
 | `tools/mold/`               | The pinned `mold` linker release: `VERSION` names it and `SHA256SUMS` carries the digests that `make install-build-tools` verifies.                                                                                                                                                        |
+| `verus/`                    | Production Verus proofs. `VERUS_PROOF_FILES` in the `Makefile` registers the entry points a bare `make verus` verifies; a module that is not included from a registered file is not checked. Add an entry only with the inventory record the developers' guide requires.                   |
 
 ## Integration test inventory
 

@@ -134,7 +134,14 @@ pub(crate) fn derive_subcommand_docs(input: DeriveInput) -> syn::Result<TokenStr
             fn get_subcommand_doc_metadata_for_path(
                 parent_path: &[String],
             ) -> Vec<#krate::docs::DocMetadata> {
-                vec![#(#metadata_exprs),*]
+                // A child may be a handwritten `OrthoConfigDocs`
+                // implementation that returns unprojected metadata, and the
+                // command-example rule is decided over this whole group, so
+                // the boundary projects the set rather than trusting each
+                // member.
+                #krate::docs::DocMetadata::redacted_group_for_output(
+                    vec![#(#metadata_exprs),*],
+                )
             }
         }
     })

@@ -155,7 +155,11 @@ KANI_INSTALL_FLAGS ?=
 KANI_SMOKE_HARNESSES ?=
 KANI_ALL_HARNESSES ?=
 VERUS_FLAGS ?=
-VERUS_PROOF_FILES ?=
+# Registered production proofs. `verus/profile_redaction.rs` proves
+# noninterference and projection integrity for the profile-field disclosure
+# boundary (roadmap 9.1.2); the model, its mapping to production, and its
+# residual testing boundary are documented in the file itself.
+VERUS_PROOF_FILES ?= verus/profile_redaction.rs
 VERUS_INSTALL_FLAGS ?=
 # A Verus release only accepts the Z3 build it shipped with: 0.2026.01.30
 # expects 4.12.5 and refuses to run against a newer solver. The shared package's

@@ -1,0 +1,240 @@
+---
+source: cargo-orthohelp/tests/golden/agent_context_tests.rs
+expression: snapshot
+---
+{
+  "schema_version": "1",
+  "kind": "orthohelp_fixture.agent_context",
+  "package": "orthohelp_fixture",
+  "commands": [
+    {
+      "path": [
+        "redaction_fixture"
+      ],
+      "summary": "Redaction fixture command tree.",
+      "canonical_verb": null,
+      "inputs": [
+        {
+          "name": "locator",
+          "long": "locator",
+          "value_type": "enum",
+          "required": true,
+          "default": null,
+          "enum_values": []
+        },
+        {
+          "name": "mode",
+          "long": "mode",
+          "value_type": "enum",
+          "required": false,
+          "default": "String::from(\"fast\")",
+          "enum_values": [
+            "fast",
+            "safe"
+          ]
+        },
+        {
+          "name": "profile",
+          "long": "profile",
+          "value_type": "string",
+          "required": false,
+          "default": null,
+          "enum_values": []
+        },
+        {
+          "name": "region",
+          "long": "region",
+          "value_type": "string",
+          "required": false,
+          "default": "String::from(\"eu-west\")",
+          "enum_values": []
+        },
+        {
+          "name": "token",
+          "long": "token",
+          "value_type": "enum",
+          "required": true,
+          "default": null,
+          "enum_values": []
+        }
+      ],
+      "output_modes": [],
+      "interaction_mode": "unknown",
+      "mutation_effect": "unknown",
+      "bypass_flag": null,
+      "dry_run_flag": null,
+      "async_submission": null,
+      "delivery_route": null,
+      "pagination": null,
+      "examples": [],
+      "renderer": {
+        "human": {
+          "supported": true
+        },
+        "machine": {
+          "supported": false
+        }
+      }
+    },
+    {
+      "path": [
+        "redaction_fixture",
+        "rotate"
+      ],
+      "summary": "Rotates the confidential token.",
+      "canonical_verb": null,
+      "inputs": [
+        {
+          "name": "is_dry_run",
+          "long": "is-dry-run",
+          "value_type": "bool",
+          "required": false,
+          "default": "false",
+          "enum_values": []
+        },
+        {
+          "name": "profile",
+          "long": "profile",
+          "value_type": "string",
+          "required": false,
+          "default": null,
+          "enum_values": []
+        },
+        {
+          "name": "replacement",
+          "long": "replacement",
+          "value_type": "enum",
+          "required": true,
+          "default": null,
+          "enum_values": []
+        }
+      ],
+      "output_modes": [],
+      "interaction_mode": "unknown",
+      "mutation_effect": "unknown",
+      "bypass_flag": null,
+      "dry_run_flag": null,
+      "async_submission": null,
+      "delivery_route": null,
+      "pagination": null,
+      "examples": [],
+      "renderer": {
+        "human": {
+          "supported": true
+        },
+        "machine": {
+          "supported": false
+        }
+      }
+    },
+    {
+      "path": [
+        "redaction_fixture",
+        "status"
+      ],
+      "summary": "Reports fixture status.",
+      "canonical_verb": null,
+      "inputs": [
+        {
+          "name": "detail_level",
+          "long": "detail-level",
+          "value_type": "string",
+          "required": false,
+          "default": "String::from(\"summary\")",
+          "enum_values": []
+        },
+        {
+          "name": "profile",
+          "long": "profile",
+          "value_type": "string",
+          "required": false,
+          "default": null,
+          "enum_values": []
+        }
+      ],
+      "output_modes": [],
+      "interaction_mode": "unknown",
+      "mutation_effect": "unknown",
+      "bypass_flag": null,
+      "dry_run_flag": null,
+      "async_submission": null,
+      "delivery_route": null,
+      "pagination": null,
+      "examples": [],
+      "renderer": {
+        "human": {
+          "supported": true
+        },
+        "machine": {
+          "supported": false
+        }
+      }
+    }
+  ],
+  "profiles": {
+    "supported": true,
+    "selection": {
+      "flag": "profile",
+      "env_var": "REDACTION_FIXTURE_PROFILE"
+    },
+    "redaction": [
+      {
+        "command_path": [
+          "redaction_fixture"
+        ],
+        "field_name": "api_key",
+        "key_path": "api_key",
+        "exposure": "secret"
+      },
+      {
+        "command_path": [
+          "redaction_fixture"
+        ],
+        "field_name": "credential_file",
+        "key_path": "credential_file",
+        "exposure": "reference_only"
+      },
+      {
+        "command_path": [
+          "redaction_fixture"
+        ],
+        "field_name": "inferred_secret",
+        "key_path": "inferred_secret",
+        "exposure": "secret"
+      },
+      {
+        "command_path": [
+          "redaction_fixture"
+        ],
+        "field_name": "locator",
+        "key_path": "locator",
+        "exposure": "reference_only"
+      },
+      {
+        "command_path": [
+          "redaction_fixture"
+        ],
+        "field_name": "token",
+        "key_path": "token",
+        "exposure": "secret"
+      },
+      {
+        "command_path": [
+          "redaction_fixture",
+          "rotate"
+        ],
+        "field_name": "replacement",
+        "key_path": "replacement",
+        "exposure": "secret"
+      }
+    ]
+  },
+  "feedback": {
+    "supported": false
+  },
+  "policy": {
+    "agent_native": "warn",
+    "exceptions": []
+  },
+  "skill_manifests": []
+}

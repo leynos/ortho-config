@@ -79,12 +79,14 @@ fn render_meta_block(meta: MetaParts) -> TokenStream {
     let examples = render_vec_field("examples", &meta.examples);
     let links = render_vec_field("links", &meta.links);
     let notes = render_vec_field("notes", &meta.notes);
+    let profile_field = meta.profile_field_tokens;
     quote! {
         default: #default,
         deprecated: #deprecated,
         #examples
         #links
         #notes
+        profile_field: #profile_field,
     }
 }
 

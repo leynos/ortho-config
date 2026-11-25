@@ -266,3 +266,13 @@ drop an author's declaration.
 - [ADR-0010: Behavioural metadata attribute surface](adr-0010-behavioural-metadata-attribute-surface.md).
 - [ADR-0012: Profile selection and layering](adr-0012-profile-selection-and-layering.md).
 - [Execplan: Add dual-renderer metadata](../execplans/7-2-2-dual-renderer-metadata.md).
+
+## Addendum (2026-11-23): the `cargo-orthohelp` schema re-exports rather than mirrors
+
+The decision text above assumes `cargo-orthohelp` carries its own copy of the
+documentation IR. That copy no longer exists: `cargo_orthohelp::schema`
+re-exports the `ortho_config::docs` types, so the renderer metadata declared
+here has one type identity across the derive macro, the generator, and the
+bridge. The original decision is unchanged; the schema boundary it relies on is
+now a re-export, and [ADR-0026](adr-0026-profile-field-redaction.md) records
+why (the single disclosure projection needs one type to act on).

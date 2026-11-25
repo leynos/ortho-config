@@ -105,6 +105,30 @@ downloading one. The two options are independent: passing only the first still
 lets the runner invoke `rustup`, so keep both. `make install-verus` remains the
 single installing step.
 
+### The production-proofs workflow
+
+`.github/workflows/prover-tools.yml` runs the registered proofs in CI. Its
+`production-proofs` job (`production-proofs (linux-x86_64)`) checks out the
+repository, sets up Rust with `mold`, sets up `uv`, installs the pinned Verus
+release with `make install-verus`, and then runs the registered production
+proofs, teeing the verifier's transcript so the job log and the uploaded
+`prover-tools-evidence` artefact both carry it. The transcript is the only
+record of what the verifier reported, so it is retained rather than summarized.
+
+The workflow triggers on pull requests that touch its own file, the `Makefile`,
+`tools/verus/VERSION`, `tools/verus/SHA256SUMS`, `verus/**`,
+`ortho_config/src/docs/profile_redaction/**`, `ortho_config/src/docs/ir/**`,
+the workflow-contract fixtures and helpers, and
+`scripts/requirements-test.txt`; on a weekly schedule, which catches an
+upstream release or runner-image change no pull request would exercise; and on
+manual dispatch. A pull-request run is cancelled when a newer push supersedes
+it, whereas a dispatch or scheduled run always completes.
+
+`tests/workflow_contracts/prover_tools_workflow_test.py` holds that structure
+in place, and `tests/workflow_contracts/prover_tools_fakes.py` supplies the
+fake tool the contract tests drive. Change the workflow and its contract test
+together.
+
 ### Production proof inventory
 
 Production harnesses and proofs are registered by extending
@@ -118,7 +142,52 @@ Makefile. Each entry must name, in the pull request that adds it:
 - every assumption, precondition, or modelled abstraction;
 - the expected check count and the negative control that must be rejected.
 
-No production entries exist yet.
+One production entry is registered:
+
+- `VERUS_PROOF_FILES` names `verus/profile_redaction.rs`, which carries the
+  profile-field disclosure obligations owned by
+  `ortho_config::docs::profile_redaction`. The entry point includes
+  `profile_redaction_model` (types, projection, value lemmas),
+  `profile_redaction_integrity` (V2: the projection empties exactly the
+  protected slots, preserves public descriptors and command topology, and is
+  idempotent), and `profile_redaction_noninterference` (V1: two documents that
+  agree on public metadata project to equal results however their protected
+  slots differ). Inputs are symbolic over a flat parent-before-child encoding
+  of the command tree, with unbounded length and depth and an `is_tree_like`
+  invariant requiring one root and strictly earlier parents; any topological
+  order satisfies it, and production's preorder linearization is one instance.
+  `make verus` reports the check count; the M2 gate recorded
+  `27 verified, 0 errors`.
+- Adding a module means attaching its proof to the registered entry point,
+  because the verifier only reaches the files that entry point includes.
+- Negative controls: retaining a protected default, retaining a nested enum
+  member, or skipping a child each fails a corresponding obligation.
+- What those controls do and do not establish: they show the integrity
+  obligations reject a faulty projection, not that V1's premises are inhabited.
+  `low_equiv_ordinary_equality` proves an implication and so cannot evidence
+  its own satisfiability; two identical ordinary one-root documents witness
+  that, since no field is protected and every slot agrees. A protected pair
+  whose public descriptors agree while their protected defaults differ witnesses
+  `low_equiv`'s other, suppressed branch instead — the case the lemma says
+  nothing about.
+- Modelled abstraction, and the residual boundary: the model carries no
+  `String`, `Vec`, or serde attribute, and slots the policy preserves verbatim
+  are collapsed into one model slot. Verus rejects structural recursion through
+  a `Seq` of nodes, so the recursive production traversal is covered only by
+  the differential property tests in `ortho_config/src/docs/profile_redaction/`
+  and by the golden and contract suites in `cargo-orthohelp/tests/`, not by the
+  proof. That evidence is bounded: the corpus reaches depth four, 32 command
+  nodes and 64 fields, and it carries populated `windows`, `behaviour`,
+  `renderer`, and `output` records rather than absent ones, so a traversal that
+  dropped a record is visible both to the model comparison and to the slot
+  assertions. The integrity assertions compare each original node with its
+  projected counterpart; the separate `projection_matches_independent_model`
+  property is the one that compares the projection with the oracle's output,
+  and the integrity assertions take their command-example expectation from the
+  oracle's `model_has_protected` decision. Evidence of that kind reduces, but
+  cannot eliminate, the risk of a defect shared by production and the oracle.
+  The proof covers the projection's semantics over the model; it does not
+  certify the running binary.
 
 ## Clap default inference
 
@@ -736,12 +805,15 @@ or other human-facing reference material. Those fields are versioned by
 `OrthoConfigSubcommandDocs` is part of the same human-documentation IR contract
 and uses the same versioning boundary for recursive subcommand metadata.
 
-Adding, removing, or changing a field in `ortho_config::docs` requires a
-matching change in `cargo-orthohelp::schema`, which mirrors the IR for the
-standalone generator. The two definitions must stay byte-for-byte aligned;
-`ORTHO_DOCS_IR_VERSION` is bumped in both, and the version-alignment test fails
-if the pair drifts. Add fields with `#[serde(default)]` so documents written
-before the field existed still read correctly, as ADR-0003 requires.
+`cargo-orthohelp::schema` re-exports the `ortho_config::docs` types rather than
+mirroring them, so the standalone generator and the derive macro share one type
+identity: a field added, removed, or changed in `ortho_config::docs` is already
+in scope for `cargo-orthohelp` as `cargo_orthohelp::schema::DocMetadata` and
+its siblings, with nothing to keep aligned and no second copy to compare.
+`ORTHO_DOCS_IR_VERSION` is bumped once, in the owning crate. Add fields with
+`#[serde(default)]` so documents written before the field existed still read
+correctly, as ADR-0003 requires; ADR-0026 records the re-export boundary and
+the redaction projection it enables.
 
 Add compact agent invocation fields to `ortho_config::agent_context` when
 downstream applications need a reusable machine-readable command contract. Use
@@ -772,9 +844,10 @@ literal's `profiles` value or construct it with one of those two constructors.
 The constructors keep future *field* additions non-breaking, not this field's
 retype. The derive emits the matching IR `DocMetadata.profiles` only for
 opted-in structs; the `cargo-orthohelp` bridge maps it into the declaration.
-Adding `DocMetadata.profiles` is a second break of the same kind, and it
-reaches two copies of the type — `ortho_config::docs::DocMetadata` and the
-`cargo_orthohelp::schema::DocMetadata` mirror. The field is
+Adding `DocMetadata.profiles` is a second break of the same kind, and every
+external literal it reaches is a literal of the one shared type:
+`cargo_orthohelp::schema::DocMetadata` is a re-export of
+`ortho_config::docs::DocMetadata`, not a second copy. The field is
 `#[serde(default)]`, so the wire contract stays additive and older JSON still
 deserializes, but a defaulted field is still required in a struct literal:
 every external literal, including the linked Weaver and Netsuke consumers, must
@@ -782,16 +855,21 @@ name `profiles: None`. The runtime "which profile is active" concern is
 `SelectedProfile` and `ProfileLoadOutcome`, deliberately separate from the
 static agent-context contract.
 
+Roadmap 9.1.2 extends the same declaration with redaction records and a
+names-only profile catalogue. Those fields are private and set through
+validating builders, described under [Agent context](#agent-context) in
+*Profile field disclosure* below.
+
 ### Renderer metadata ownership
 
 Renderer metadata (ADR-0016) is declared through the sibling `renderer(...)`
 attribute and is owned in three places that must move together:
 
-- `ortho_config::docs::ir::renderer` holds the human-documentation IR types;
-- `cargo_orthohelp::schema::renderer` holds the mirror the standalone generator
-  decodes, per
-  [ADR-0003](adrs/adr-0003-define-schema-ownership-for-agent-native-contracts.md);
-  and
+- `ortho_config::docs::ir::renderer` holds the human-documentation IR types,
+  and the standalone generator decodes the same types through
+  `cargo_orthohelp::schema`, which re-exports them as
+  [ADR-0003](adrs/adr-0003-define-schema-ownership-for-agent-native-contracts.md)
+  requires; and
 - `ortho_config::agent_context::renderer` and
   `cargo_orthohelp::agent_context::renderer` hold the wire contract, linked by
   `agent_context::walk`, which maps one IR into the other.
@@ -851,9 +929,9 @@ Structured-output metadata
 declared through the sibling `output(...)` attribute and is owned in the same
 three places as the renderer block, which it sits beside in every document:
 
-- `ortho_config::docs::ir::output` holds the human-documentation IR types;
-- `cargo_orthohelp::schema` re-exports the mirror the standalone generator
-  decodes; and
+- `ortho_config::docs::ir::output` holds the human-documentation IR types, and
+  `cargo_orthohelp::schema` re-exports those types to the standalone generator;
+  and
 - `ortho_config::agent_context::output` holds the wire contract, with
   `cargo_orthohelp::agent_context::output::map_output` as the only place the
   strict IR enum meets the tolerant wire enum.
@@ -1842,6 +1920,123 @@ full closed vocabulary. Because the delegation supplies its own argument vector
 from `std::env::args_os()` while taking the environment sources from the caller,
 `load_with_profile_with_sources` is injected-labelled on the strength of its
 *environment* sources alone — the argument vector is never injected.
+
+## Profile field disclosure (roadmap 9.1.2)
+
+An author classifies a field with `profile_field = "secret"` or
+`profile_field = "reference_only"`. The contract is
+[ADR-0026](adrs/adr-0026-profile-field-redaction.md) and the user-facing view is
+[the users' guide](users-guide.md#keep-profile-values-out-of-generated-documentation).
+
+`ortho_config::docs::profile_redaction` owns the single projection,
+`DocMetadata::redacted_for_output`, and every consumer applies it at a public
+boundary instead of repeating the rule: the derive projects emitted metadata,
+the `cargo-orthohelp` pipeline projects deserialized IR, the generated bridge
+projects before writing IR JSON, and the IR-to-agent-context bridge projects
+before deriving records. A new renderer therefore needs no redaction code, and
+adding a value-bearing slot to `FieldMetadata` means extending the projection,
+the model, and the sentinel catalogue together.
+
+Apply the projection once per public boundary, over the whole document that
+boundary returns. `ir::localize_doc` is the pattern to follow: it projects its
+argument at entry and recurses through a private function, because the
+command-example rule is decided from the entire tree and a nested call would
+clone and re-scan every subtree. A caller that already owns the document uses
+`into_redacted_for_output`, which projects in place without the copy; the
+derive and the binary's pipeline entry do this. A boundary that returns several
+documents at once uses `redacted_group_for_output`, which decides the
+command-example rule over the group; the generated `OrthoConfigSubcommandDocs`
+methods do this, because a variant is composed through the child's public
+`OrthoConfigDocs` method and a handwritten child may answer with unprojected
+metadata. The projection is idempotent, so a boundary may still apply it to
+input it did not project itself. Derived metadata composes boundaries: each
+generated `OrthoConfigDocs` and `OrthoConfigSubcommandDocs` method projects its
+own subtree or group, and a parent embeds the projected children. That costs
+one decision-and-projection pass per boundary rather than per node, which
+`derived_deep_chain_projects_once_per_boundary` in
+`ortho_config/src/docs/profile_redaction/derive_tests.rs` pins. The selector's
+group pass then re-walks every member of the group it returns: the scan that
+decides the command-example rule stops at the first protected member, but the
+projection pass visits all of them, clearing protected value slots and applying
+the group decision. A member a child boundary already projected keeps its own
+projected slots, because the projection is idempotent, but it is **not** exempt
+from the group decision: a clean member keeps its command examples under its
+own single-document projection and loses them here when any sibling is
+protected. `protected_sibling_suppresses_the_plain_command_examples` in
+`ortho_config/tests/subcommand_docs.rs` pins exactly that case. The re-walk is
+therefore deliberate rather than redundant: a selector member produced by a
+child boundary is traversed twice in the composed tree, and the traversal-count
+regression counts both passes.
+
+### Agent context
+
+The declaration carries the protected-field view in two private metadata
+fields, set only through validating builders:
+
+- `with_redaction(records)` attaches one `ProfileFieldRedaction` per protected
+  field and canonicalizes their order by `(command_path, field_name)`. The
+  record carries the tokenized command path, the emitted field name, the
+  optional existing file key spelling, and the exposure label; it carries no
+  value. A repeated identity is rejected with
+  `OrthoError::DuplicateProfileRedaction` rather than resolved arbitrarily, and
+  records attached to an unsupported declaration are rejected with
+  `OrthoError::ProfileMetadataOnUnsupported`.
+- `with_available_names(names)` attaches the consumer's catalogue of validated
+  `ProfileName` values, sorted and deduplicated. The catalogue holds names
+  only: a profile body must never be added to it. Supplying a catalogue does
+  not opt an application into profiles, so an unsupported declaration ignores
+  the call instead of failing it.
+
+`redaction()` and `available_names()` are the read-only accessors. Both lists
+are omitted from the wire when empty, so the unsupported
+`{ "supported": false }` shape stays byte-identical, and serialization refuses
+a declaration whose public `supported` flag was cleared after metadata was
+attached. Deserialization runs the same validation, so a hand-edited document
+cannot smuggle records onto an unsupported declaration or repeat an identity.
+
+The `cargo-orthohelp` bridge derives the records from the *projected* metadata,
+never from the raw tree, so the redaction list and the redacted command
+metadata describe the same disclosure boundary. Keep that ordering when the
+bridge is restructured.
+
+### Cache invalidation
+
+`cargo-orthohelp/src/cache.rs` folds the literal salt `profile-redaction-v1`
+into every cache key. Change the set of slots the projection removes in the
+same commit as bumping `DISCLOSURE_POLICY_VERSION`; an entry produced under the
+old policy then misses instead of being reused with a raw value still in it.
+`cache_key_hash_matches_the_documented_vector` pins the digest of a fixture
+key, so deleting the salt or its separator fails the test; a change-detection
+test alone would keep passing because it only compares two computed hashes.
+
+### Redaction assertions
+
+The disclosure suites assert in both directions: a protected literal is absent
+*and* a public sibling is present, so an artefact that failed to render cannot
+pass by being empty.
+`cargo-orthohelp/tests/fixtures/profile_redaction_sentinels.rs` is the shared
+catalogue of value-bearing literals, and the behavioural, golden, and contract
+suites all scan it; add a fixture literal there first, then the suite that
+consumes it. The fixture crate's own `redaction` module must keep each sentinel
+out of public descriptions, because a literal that also appears in help text
+makes an absence assertion ambiguous.
+
+Run the focused suites with:
+
+```bash
+cargo test -p ortho_config --lib profile_redaction
+cargo test -p cargo-orthohelp --lib cache_key
+cargo test -p cargo-orthohelp --test rstest_bdd profile_redaction
+cargo test -p cargo-orthohelp --test golden_tests redaction
+cargo test -p cargo-orthohelp --test agent_context_contract redaction
+```
+
+A redaction assertion is evidence only if it fails when the projection is
+disabled. Seed a fault by retaining a protected default, confirm that the
+behavioural, golden, and contract suites fail, then restore the source byte for
+byte and rerun. `cargo test --test <target>` does not rebuild the
+`cargo-orthohelp` binary, so rebuild it explicitly before trusting a seeded
+fault that a spawned process is supposed to observe.
 
 ## Behavioural test layout
 
