@@ -156,7 +156,8 @@ fn crate_scope_of<'a>(files: impl IntoIterator<Item = &'a syn::File>) -> CrateSc
     for file in &parsed {
         collect_crate_facts(&file.items, &mut names, &mut modules, &mut imports);
     }
-    let mut scope = CrateScope::new(names, modules, imports);
+    let declared: BTreeSet<String> = modules.iter().cloned().collect();
+    let mut scope = CrateScope::new(names, modules, declared, imports);
     for file in parsed {
         scope.observe(&file.items);
     }

@@ -243,8 +243,13 @@ fn classify_glob(root: Option<&str>, is_local: bool, scope: &CrateScope) -> Bind
     let Some(glob_root) = root.filter(|_| !is_local) else {
         return Binding::Unrelated;
     };
-    let is_reviewed = REVIEWED_EXTERNAL_GLOBS.contains(&glob_root);
-    if is_reviewed && !scope.is_imported_somewhere(glob_root) {
+    // A reviewed root is trusted only when nothing in the crate reuses its
+    // name: a `use` or `extern crate` alias binds it to another crate, and a
+    // local `mod anstyle` can re-export another crate's items under it.
+    let is_reviewed = REVIEWED_EXTERNAL_GLOBS.contains(&glob_root)
+        && !scope.is_imported_somewhere(glob_root)
+        && !scope.declares_module_anywhere(glob_root);
+    if is_reviewed {
         Binding::Unrelated
     } else {
         Binding::Foreign

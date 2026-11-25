@@ -1659,6 +1659,16 @@ stopping and reporting.
       - The full target passes 103 tests, Clippy is clean, and CodeScene
         reports 10.0 for both modules.
 
+- [x] (2026-11-25) Round-33 voiding a reviewed glob root that names a local
+      module. A `mod anstyle` inside the error module, re-exporting `std::io`
+      under another name, reached a different inventory while the reviewed
+      spelling still matched; no `use` or `extern crate` bound the name, so the
+      imported-name check alone trusted it. A reviewed glob root is now also
+      voided when any item list in the crate declares a module of that name.
+      The `module_tree/local_module_glob` decoy is refused and the real
+      `pub use anstyle::*;` still counts. The full target passes 104 tests and
+      Clippy is clean.
+
 - [x] (2026-11-21) Round-22 conflict dispositions. Five paths conflicted, and
       every one was resolved by preserving both sides' intent rather than by
       choosing a side wholesale:

@@ -223,6 +223,9 @@ fn unconditional_module_chain_is_counted() -> Result<()> {
     "aliased_module_segment",
     "cannot trace to the declaration it counts"
 )]
+// A local module reusing a reviewed glob root's name can re-export another
+// crate under it, so the root is voided by a module declaration too.
+#[case::local_module_glob("local_module_glob", "cannot trace to the declaration it counts")]
 // A condition the gate cannot evaluate does not exempt the alias shape.
 #[case::conditional_alias("conditional_alias", "as something other than the counted enum")]
 // A tree without a reported crate root is refused rather than guessed at.

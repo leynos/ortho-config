@@ -163,6 +163,12 @@ pub(super) struct CrateScope {
     /// another module is out of scope, and a `use` alias bound at the crate
     /// root can redirect the name to a dependency; both must not count.
     root_modules: BTreeSet<String>,
+    /// Every module any item list in the crate declares.
+    ///
+    /// A reviewed glob root is trusted by spelling, so a local `mod anstyle`
+    /// anywhere in the crate has to void it: that module can re-export another
+    /// crate's items under the reviewed name.
+    declared_modules: BTreeSet<String>,
     /// Every name any `use` item in the crate binds.
     ///
     /// A reviewed external glob is trusted by its root spelling, so an alias
@@ -181,15 +187,22 @@ impl CrateScope {
     pub(super) const fn new(
         names: BTreeSet<String>,
         root_modules: BTreeSet<String>,
+        declared_modules: BTreeSet<String>,
         imported_names: BTreeSet<String>,
     ) -> Self {
         Self {
             names,
             root_modules,
+            declared_modules,
             imported_names,
             has_macro_use: false,
             has_external_macro_use: false,
         }
+    }
+
+    /// Whether any item list in the crate declares a module with this name.
+    pub(super) fn declares_module_anywhere(&self, name: &str) -> bool {
+        self.declared_modules.contains(name)
     }
 
     /// Whether the crate root declares a module with this bare name.
