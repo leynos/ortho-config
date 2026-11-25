@@ -62,9 +62,11 @@ pub(crate) fn discard_unknown(meta: &syn::meta::ParseNestedMeta) -> syn::Result<
 ///   one — except after `-`, so the arrow in `dyn Fn() -> T` cannot;
 /// - a closure's parameter list: `|a, b| a` puts its comma at top level.
 ///
-/// The closure bar is recognised only as the value's first token. A later `|`
-/// is bitwise or (`a | b`), which must not open a level, and the previous
-/// `syn::Expr` parse accepted both shapes.
+/// A closure bar is recognised only while the value is still in its prefix, so
+/// a later `|` stays bitwise or (`a | b`). The prefix is not just the first
+/// token: `move |a, b| a` puts the `move` keyword before the bar, and
+/// `async move` may precede it too, so those keywords keep the prefix open.
+/// The previous `syn::Expr` parse accepted every one of these shapes.
 #[derive(Default)]
 struct ItemNesting {
     /// How many turbofish argument lists are open.
@@ -75,9 +77,16 @@ struct ItemNesting {
     after_dash: bool,
     /// Whether a closure's parameter list is open.
     inside_closure_params: bool,
-    /// Whether any token has been consumed yet.
-    seen_any: bool,
+    /// Whether only closure-prefix keywords have been consumed so far.
+    at_value_prefix: bool,
 }
+
+/// Keywords that may precede a closure's parameter list.
+///
+/// `move` and `static` capture by move or by reference for `'static`; `async`
+/// marks an async block or closure. All three are ordinary identifiers to the
+/// token stream, so the scan compares their spelling.
+const CLOSURE_PREFIX_KEYWORDS: [&str; 3] = ["move", "async", "static"];
 
 impl ItemNesting {
     /// Reports whether a comma here ends the value rather than nesting.
@@ -87,25 +96,28 @@ impl ItemNesting {
 
     /// Updates the nesting from one token.
     fn observe(&mut self, tree: &proc_macro2::TokenTree) {
+        if self.at_value_prefix && is_closure_prefix_keyword(tree) {
+            return;
+        }
         let ch = match tree {
             proc_macro2::TokenTree::Punct(punct) => Some(punct.as_char()),
             _ => None,
         };
-        if ch == Some('|') {
-            // The value's first token can only be a closure's opening bar; a
-            // `||` zero-parameter closure arrives as two bars and closes on the
-            // second. Any later bar is bitwise or and leaves nesting alone.
-            if !self.seen_any {
-                self.inside_closure_params = true;
-            } else if self.inside_closure_params && self.angle_depth == 0 {
-                self.inside_closure_params = false;
-            }
+        let opens_bar = ch == Some('|') && self.at_value_prefix;
+        if opens_bar {
+            // `||` arrives as two bars: the first opens the parameter list and
+            // the second closes it, which is exactly what every zero-parameter
+            // closure needs.
+            self.inside_closure_params = true;
+            self.colons = 0;
+        } else if ch == Some('|') && self.inside_closure_params {
+            self.inside_closure_params = false;
             self.colons = 0;
         } else {
             self.observe_angle(ch);
         }
         self.after_dash = ch == Some('-');
-        self.seen_any = true;
+        self.at_value_prefix = false;
     }
 
     /// Applies the turbofish rules to a token that is not a closure bar.
@@ -126,6 +138,19 @@ impl ItemNesting {
     }
 }
 
+/// Reports whether a token is a keyword that may precede a closure's bars.
+///
+/// The token stream carries `move` as an identifier, so its spelling is the
+/// only way to recognise it.
+fn is_closure_prefix_keyword(tree: &proc_macro2::TokenTree) -> bool {
+    match tree {
+        proc_macro2::TokenTree::Ident(ident) => {
+            CLOSURE_PREFIX_KEYWORDS.contains(&ident.to_string().as_str())
+        }
+        _ => false,
+    }
+}
+
 /// Consumes tokens up to the next item separator, leaving the comma unread.
 ///
 /// Reading one token tree at a time and stopping at a top-level comma keeps
@@ -134,7 +159,10 @@ impl ItemNesting {
 /// handler. The nesting rules that make "top-level" meaningful are in
 /// [`ItemNesting`].
 fn skip_to_item_end(input: syn::parse::ParseStream<'_>) -> syn::Result<()> {
-    let mut nesting = ItemNesting::default();
+    let mut nesting = ItemNesting {
+        at_value_prefix: true,
+        ..ItemNesting::default()
+    };
     while !input.is_empty() {
         if nesting.at_top_level() && input.peek(Token![,]) {
             break;

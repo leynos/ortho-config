@@ -220,25 +220,40 @@ fn parses_crate_path_with_prefix() -> Result<()> {
     )
 }
 
-/// An unknown value containing a top-level comma must still parse.
+/// Unknown values that carry a top-level comma must still parse, and the
+/// separator after them must be left unread.
 ///
-/// `skip_to_item_end` stops at an item separator, and a turbofish is not a
-/// delimiter group, so `factory::<A, B>()` presents a top-level comma. The
-/// previous `Expr` parse accepted that value, so splitting it here would break
-/// derives that compiled before. The trailing cases also prove the item
-/// boundary survives: the value's own comma cannot be consumed as the
-/// separator, and the separator after the value is left for the next item.
+/// `skip_to_item_end` stops at an item separator, but three constructs present
+/// a comma that is not a separator: a turbofish's argument list, a closure's
+/// parameter list, and that list behind `move`/`async`/`static`. The previous
+/// `syn::Expr` parse accepted every one, so splitting them here would break
+/// derives that compiled before. Each case also names a trailing key, which
+/// fails if the scan consumes the separator instead of leaving it.
 #[rstest]
-#[case::turbofish_value(parse_quote! {
-    #[ortho_config(prefix = "CFG_", future = factory::<Alpha, Beta>())]
-})]
-#[case::turbofish_value_before_known_key(parse_quote! {
-    #[ortho_config(prefix = "CFG_", future = factory::<Alpha, Beta>(), crate = "my_config")]
-})]
-#[case::nested_turbofish_value(parse_quote! {
-    #[ortho_config(prefix = "CFG_", future = outer::<Inner<Alpha, Beta>, Gamma>())]
-})]
-fn unknown_value_with_top_level_comma_parses(#[case] attribute: syn::Attribute) -> Result<()> {
+#[case::turbofish_value(
+    parse_quote! { #[ortho_config(prefix = "CFG_", future = factory::<Alpha, Beta>(), crate = "my_config")] },
+)]
+#[case::nested_turbofish_value(
+    parse_quote! { #[ortho_config(prefix = "CFG_", future = outer::<Inner<Alpha, Beta>, Gamma>(), crate = "my_config")] },
+)]
+#[case::closure_two_parameters(
+    parse_quote! { #[ortho_config(prefix = "CFG_", future = |a, b| a, crate = "my_config")] },
+)]
+#[case::closure_zero_parameters(
+    parse_quote! { #[ortho_config(prefix = "CFG_", future = || 1, crate = "my_config")] },
+)]
+#[case::move_closure(
+    parse_quote! { #[ortho_config(prefix = "CFG_", future = move |a, b| a, crate = "my_config")] },
+)]
+#[case::async_move_closure(
+    parse_quote! { #[ortho_config(prefix = "CFG_", future = async move |a, b| a, crate = "my_config")] },
+)]
+#[case::bitwise_or_is_not_a_closure(
+    parse_quote! { #[ortho_config(prefix = "CFG_", future = a | b, crate = "my_config")] },
+)]
+fn unknown_value_with_top_level_comma_leaves_the_next_key_readable(
+    #[case] attribute: syn::Attribute,
+) -> Result<()> {
     let input: DeriveInput = parse_quote! {
         #attribute
         struct Demo { field: String }
@@ -248,76 +263,12 @@ fn unknown_value_with_top_level_comma_parses(#[case] attribute: syn::Attribute) 
         struct_attrs.prefix.as_deref() == Some("CFG_"),
         "the known key before the unknown value must still be read"
     );
-    Ok(())
-}
-
-/// The separator after an unknown expression value is left unread.
-///
-/// If the scan consumed the value's separator, the following known key would
-/// be parsed as part of the value and lost.
-#[test]
-fn unknown_turbofish_value_leaves_the_following_key_readable() -> Result<()> {
-    let input: DeriveInput = parse_quote! {
-        #[ortho_config(future = factory::<Alpha, Beta>(), crate = "my_config")]
-        struct Demo { field: String }
-    };
-    let (_, _, struct_attrs, _) = parse_input(&input).map_err(|err| anyhow!(err))?;
     ensure!(
         struct_attrs
             .crate_path
             .as_ref()
             .is_some_and(|path| path.is_ident("my_config")),
         "the key after the unknown value must still be read"
-    );
-    Ok(())
-}
-
-/// An unknown closure value must still parse.
-///
-/// A closure's parameter list carries a top-level comma — `|a, b| a` — so a
-/// scan that only tracks turbofish angles splits it. The previous `Expr` parse
-/// accepted closures, so splitting them here would break derives that compiled
-/// before. The zero-parameter form arrives as two bars and must close too.
-#[rstest]
-#[case::two_parameters(parse_quote! {
-    #[ortho_config(prefix = "CFG_", future = |a, b| a)]
-})]
-#[case::zero_parameters(parse_quote! {
-    #[ortho_config(prefix = "CFG_", future = || 1)]
-})]
-#[case::no_parameters_before_known_key(parse_quote! {
-    #[ortho_config(prefix = "CFG_", future = |a, b| a, crate = "my_config")]
-})]
-#[case::bitwise_or_stays_ordinary(parse_quote! {
-    #[ortho_config(prefix = "CFG_", future = a | b)]
-})]
-fn unknown_closure_value_parses(#[case] attribute: syn::Attribute) -> Result<()> {
-    let input: DeriveInput = parse_quote! {
-        #attribute
-        struct Demo { field: String }
-    };
-    let (_, _, struct_attrs, _) = parse_input(&input).map_err(|err| anyhow!(err))?;
-    ensure!(
-        struct_attrs.prefix.as_deref() == Some("CFG_"),
-        "the known key before the unknown closure must still be read"
-    );
-    Ok(())
-}
-
-/// The separator after an unknown closure value is left unread.
-#[test]
-fn unknown_closure_value_leaves_the_following_key_readable() -> Result<()> {
-    let input: DeriveInput = parse_quote! {
-        #[ortho_config(future = |a, b| a, crate = "my_config")]
-        struct Demo { field: String }
-    };
-    let (_, _, struct_attrs, _) = parse_input(&input).map_err(|err| anyhow!(err))?;
-    ensure!(
-        struct_attrs
-            .crate_path
-            .as_ref()
-            .is_some_and(|path| path.is_ident("my_config")),
-        "the key after the unknown closure must still be read"
     );
     Ok(())
 }
