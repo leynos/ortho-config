@@ -4763,10 +4763,13 @@ step's command as tokens, and the Make target's recipe handing lading the
 `publish` subcommand. Either half alone is defeatable.
 
 lading itself is pinned. `LADING_REF` in the Makefile holds the full commit SHA
-of the v0.3.1 release commit, which is the first release carrying the skip. It
-names a SHA rather than the tag because a tag can be repointed. Without any pin
-at all, `uvx --from git+...` tracks lading's default branch and would change
-what the release gate runs with no edit to this repository.
+of the v0.4.0-beta1 release commit. v0.3.1 was the first release carrying the
+skip. The pin names a SHA rather than the tag because a tag can be repointed.
+Without any pin at all, `uvx --from git+...` tracks lading's default branch and
+would change what the release gate runs with no edit to this repository. lading
+0.4 needs CPython 3.14 or later, so the `uvx` call names
+`--python cpython@3.14` rather than relying on whichever interpreter `uv` finds
+first.
 
 ## Releasing `cargo-orthohelp` binaries
 
