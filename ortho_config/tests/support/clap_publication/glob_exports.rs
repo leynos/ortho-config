@@ -54,6 +54,11 @@ pub(crate) fn reviewed_glob_supplies_no_inventory(package: &Package) -> Result<(
 /// through a glob, so the walk descends inline modules and treats an unproven
 /// glob or item-producing macro as a hazard rather than assuming it harmless.
 fn mentions_error_kind(items: &[Item], prefix: &str) -> Option<String> {
+    // A `#[path]` redirect can load a file outside the scanned tree, so the
+    // module it declares is unproven whatever that file holds.
+    if let Some(place) = path_redirect(items) {
+        return Some(format!("{place} a `#[path]` redirect"));
+    }
     items
         .iter()
         .find_map(|item| unproven_item(item, items).map(|why| format!("{}{why}", in_place(prefix))))
@@ -166,20 +171,52 @@ fn in_place(prefix: &str) -> String {
 /// reads that module's own source next. Anything else — a deeper path, an
 /// external crate, or a glob inside a group — is unproven.
 fn unproven_glob(tree: &syn::UseTree, items: &[Item]) -> bool {
+    if !contains_glob(tree) {
+        return false;
+    }
     match tree {
         syn::UseTree::Glob(_) | syn::UseTree::Group(_) => true,
         syn::UseTree::Rename(_) | syn::UseTree::Name(_) => false,
         syn::UseTree::Path(path) => {
             let root = identifier_name(&path.ident);
-            // `super`, `self` and `crate` reach only modules this walk reads.
-            if matches!(root.as_str(), "crate" | "self" | "super") {
+            // `self` and `super` reach only the enclosing modules this walk
+            // reads. A `crate::`-rooted glob may traverse an alias bound
+            // anywhere in the crate, so a multi-segment one is unproven.
+            if matches!(root.as_str(), "self" | "super") {
                 return false;
+            }
+            if root == "crate" {
+                return !matches!(&*path.tree, syn::UseTree::Glob(_));
             }
             // A sibling-module glob carries only names read from that module's
             // own source, which is the reviewed `anstyle` shape.
             let is_sibling = matches!(&*path.tree, syn::UseTree::Glob(_));
             !(is_sibling && declares_module(items, &root))
         }
+    }
+}
+
+/// Where one item list redirects a module through `#[path]`, if it does.
+fn path_redirect(items: &[Item]) -> Option<String> {
+    items.iter().find_map(|item| {
+        let Item::Mod(module) = item else {
+            return None;
+        };
+        let redirected = module
+            .attrs
+            .iter()
+            .any(|attribute| attribute.path().is_ident("path"));
+        redirected.then(|| format!("at `mod {}`", module.ident))
+    })
+}
+
+/// Whether one `use` tree contains a glob anywhere.
+fn contains_glob(tree: &syn::UseTree) -> bool {
+    match tree {
+        syn::UseTree::Glob(_) => true,
+        syn::UseTree::Path(path) => contains_glob(&path.tree),
+        syn::UseTree::Group(group) => group.items.iter().any(contains_glob),
+        syn::UseTree::Name(_) | syn::UseTree::Rename(_) => false,
     }
 }
 

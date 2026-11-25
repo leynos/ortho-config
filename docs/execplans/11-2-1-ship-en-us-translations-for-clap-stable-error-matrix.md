@@ -1747,6 +1747,19 @@ stopping and reporting.
       unreadable. A `macro_rules!` definition itself declares nothing, so it is
       skipped. The real `anstyle` 1.0.14 passes both stricter rules, the full
       target passes 108 tests, Clippy is clean and CodeScene reports 10.0.
+
+- [x] (2026-11-25) Round-41 resolving crate-rooted dependency globs and
+      auditing redirected module files. Two more shapes: a `crate::`-rooted glob
+      could traverse an alias (`pub use std as alias;` beside
+      `pub use crate::alias::io::*;`), and a `#[path]` redirect could load a
+      file outside the scanned tree. A `crate::`-rooted glob of more than one
+      segment is now unproven, and any `#[path]` redirect in the audited crate
+      is reported rather than followed. The glob rule also only applies to trees
+      that actually contain a glob — the first cut treated a `crate::`-rooted
+      name import as a glob and refused the real `anstyle` `use
+      crate::reset::RESET;`. The real `anstyle` 1.0.14 passes, the full target
+      passes 108 tests, Clippy is clean and CodeScene reports 10.0.
+
 - [x] (2026-11-21) Round-22 conflict dispositions. Five paths conflicted, and
       every one was resolved by preserving both sides' intent rather than by
       choosing a side wholesale:
