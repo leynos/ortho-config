@@ -30,6 +30,7 @@ mod macros;
 mod reachability;
 mod source;
 mod tokens;
+mod use_tree;
 
 #[cfg(test)]
 mod classes;
