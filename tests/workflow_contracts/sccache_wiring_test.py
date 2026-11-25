@@ -68,6 +68,10 @@ PINNED_SEPARATELY: typ.Final[dict[str, str]] = {
     ".github/workflows/mutation-cargo.yml": (
         "a reusable workflow, which caller job env cannot reach"
     ),
+    ".github/workflows/delayed-pr-comment.yml": (
+        "a reusable workflow that sleeps and compiles nothing, so it moves "
+        "with its own fixes rather than with the Rust setup pin"
+    ),
 }
 
 #: Pins known to install sccache while exporting neither half. Reverting
