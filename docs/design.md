@@ -976,11 +976,32 @@ configuration can use the runtime directly. See
   locales reuse the same helper by passing a different language identifier.
 
 - **Consumer integration:** Callers either pass a fully built
-  `FluentBundle<&FluentResource>` or supply paths that are loaded into a bundle
-  before building `FluentLocalizer`. The derive macro's builder gains optional
-  setters for locale selection and for registering consumer bundles so
-  applications can perform all localization wiring alongside existing
-  configuration discovery.
+  `FluentBundle<Arc<FluentResource>>` through `with_consumer_bundle` or supply
+  `&'static str` resources through `with_consumer_resources`, which the builder
+  parses and registers in caller-provided order. A prebuilt bundle takes
+  precedence over resource strings, even invalid ones. The derive macro's
+  builder gains optional setters for locale selection and for registering
+  consumer bundles so applications can perform all localization wiring
+  alongside existing configuration discovery.
+
+- **Bidirectional isolation:** `Fluent` wraps every interpolated value in
+  U+2068 FIRST STRONG ISOLATE and U+2069 POP DIRECTIONAL ISOLATE while
+  `use_isolating` is `true`, which protects right-to-left substitutions inside
+  left-to-right copy. The marks are invisible, but they defeat `grep`, exact
+  string comparison, and snapshot assertions taken from diagnostics, and some
+  terminals and log viewers render them as replacement glyphs.
+  `FluentLocalizerBuilder::with_use_isolating` stores an `Option<bool>`: `None`
+  preserves `Fluent`'s `true` default and any supplied bundle's own setting,
+  while an explicit value is applied once in `try_build` to both the defaults
+  bundle and the consumer bundle, including a prebuilt one. Applying the value
+  after construction keeps setter order irrelevant and makes fallback lookups
+  and the embedded Clap error copy agree with the consumer catalogue. A
+  locale-script default—disabling isolation automatically for left-to-right
+  scripts—was rejected: it would make rendering depend on the locale tag rather
+  than the text, change output for existing callers who only upgrade the crate,
+  and still be wrong for right-to-left values interpolated into a left-to-right
+  locale's copy. The setting controls one `Fluent` formatting option; it is not
+  general bidirectional sanitization.
 
 - **Macro participation:** Generated code accepts a `&dyn Localizer` and emits
   identifiers for every user-facing string. Developers can override the

@@ -31,6 +31,55 @@ types without declaring their own versions of those dependencies. Lookup
 returns owned strings, and `Localizer: Send + Sync` supports shared application
 state.
 
+## Interpolated values and isolation marks
+
+Fluent isolates every interpolated value with U+2068 FIRST STRONG ISOLATE and
+U+2069 POP DIRECTIONAL ISOLATE. The marks tell a bidirectional algorithm that a
+substituted value may run right-to-left while the surrounding message runs
+left-to-right, so an Arabic name inside an English sentence renders in the
+intended order.
+
+They are also invisible characters in the output. Some terminals, fonts, and
+log viewers draw them as boxes or question marks, and they defeat `grep`,
+string comparison, and snapshot assertions taken from diagnostics. Isolation is
+rarely wanted in left-to-right terminal copy.
+
+`FluentLocalizerBuilder::with_use_isolating` chooses the behaviour explicitly:
+
+- Leaving the setting unspecified keeps Fluent's `true` default, so existing
+  output is unchanged.
+- `with_use_isolating(false)` removes the marks from both the consumer
+  catalogue and the embedded defaults, including the built-in Clap error copy.
+- `with_use_isolating(true)` restores the marks on a bundle that was built
+  without them, such as a supplied prebuilt bundle whose own
+  `set_use_isolating(false)` call the localizer would otherwise honour.
+
+The value is applied once, when `try_build` constructs the bundles, so setter
+order does not matter and the last call wins. A prebuilt consumer bundle still
+takes precedence over consumer resource strings, and the setting then applies
+to that bundle.
+
+```rust
+use ortho_l10n::{FluentLocalizer, FluentValue, LocalizationArgs, Localizer, langid};
+
+let localizer = FluentLocalizer::builder(langid!("en-GB"))
+    .with_use_isolating(false)
+    .with_consumer_resources(["welcome = Hello, { $name }!"])
+    .try_build()?;
+let mut args = LocalizationArgs::new();
+args.insert("name", FluentValue::from("Ada"));
+assert_eq!(
+    localizer.lookup("welcome", Some(&args)).as_deref(),
+    Some("Hello, Ada!"),
+);
+# Ok::<(), ortho_l10n::FluentLocalizerError>(())
+```
+
+This option controls one Fluent formatting setting; it is not general
+bidirectional sanitization and never rewrites catalogue text. Applications that
+interpolate right-to-left values into left-to-right copy should weigh the
+rendering risk before disabling isolation.
+
 The application chooses its locale and fallback text. Static consumer
 catalogues can also use `include_str!("messages.ftl")`; loading a catalogue
 never invokes configuration discovery. Product catalogues and mappings from
@@ -53,6 +102,12 @@ identifier before its dotted-to-hyphen spelling. Missing messages return `None`;
 
 Other languages need `disable_defaults()`, even when consumer resources are
 supplied. A consumer-only localizer can also be empty.
+
+Both bundles are built from the same builder configuration, so
+`with_use_isolating` reaches the embedded defaults and the consumer catalogue
+alike: a consumer message that misses or fails formatting falls through to
+default copy with matching isolation. No wrapper is needed on the
+`ortho_config` side, which re-exports the builder unchanged.
 
 ```rust
 use ortho_l10n::{FluentLocalizer, Localizer, langid};

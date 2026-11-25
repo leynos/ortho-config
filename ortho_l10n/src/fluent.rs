@@ -1,12 +1,12 @@
-//! Fluent bundle utilities extracted from the localization module.
+//! Fluent bundle construction and the localizer builder.
 //!
-//! Keeping parsing, resource registration, and identifier normalization in a
-//! dedicated module keeps `mod.rs` concise while retaining cohesion around
-//! Fluent-specific concerns.
+//! Bundle construction, builder configuration, and the crate-internal access
+//! needed to apply the isolation override live here. Identifier normalization
+//! lives in [`crate::fluent_identifiers`] and is re-exported below so callers
+//! keep the established `crate::fluent` paths.
 
 use fluent_bundle::FluentResource;
 use fluent_bundle::concurrent::FluentBundle;
-use std::borrow::Cow;
 use std::fmt;
 use std::sync::Arc;
 use unic_langid::LanguageIdentifier;
@@ -25,6 +25,17 @@ pub(super) struct BundleWithLocale {
     pub(super) bundle: FluentBundle<Arc<FluentResource>>,
     /// Origin tag used to distinguish consumer catalogues from embedded defaults.
     pub(super) kind: FluentBundleSource,
+}
+
+impl BundleWithLocale {
+    /// Applies `Fluent`'s bidirectional isolation setting to the wrapped bundle.
+    ///
+    /// Access stays inside the crate so consumers configure behaviour through
+    /// [`FluentLocalizerBuilder::with_use_isolating`] rather than by reaching
+    /// into the localizer's bundles.
+    pub(super) fn set_use_isolating(&mut self, value: bool) {
+        self.bundle.set_use_isolating(value);
+    }
 }
 
 impl fmt::Debug for BundleWithLocale {
@@ -93,77 +104,7 @@ pub(super) fn bundle_from_resources(
     })
 }
 
-/// Converts runtime dotted message paths to `Fluent`'s hyphen-separated identifier spelling.
-///
-/// IDs without dots are borrowed unchanged, avoiding allocation on the common lookup path.
-pub(super) fn normalize_identifier(id: &str) -> Cow<'_, str> {
-    if id.contains('.') {
-        Cow::Owned(id.replace('.', super::MESSAGE_ID_SEPARATOR))
-    } else {
-        Cow::Borrowed(id)
-    }
-}
-
-/// Normalizes top-level catalogue IDs while retaining message bodies and line boundaries.
-pub(super) fn normalize_resource_ids(resource: &str) -> String {
-    resource
-        .lines()
-        .map(normalize_id_line)
-        .collect::<Vec<_>>()
-        .join("\n")
-}
-
-/// Returns true when `ch` is accepted by the load-time id normalizer.
-///
-/// Fluent identifiers are ASCII-only and do not permit `.`. This load-time
-/// pre-normalization predicate is intentionally more tolerant so dotted
-/// catalogue ids and existing non-ASCII resource ids can be normalized or
-/// passed through before Fluent parses them.
-fn is_valid_load_time_id_char(ch: char) -> bool {
-    ch.is_alphanumeric() || matches!(ch, '-' | '_' | '.')
-}
-
-/// Validates a load-time resource identifier before pre-normalization.
-fn is_valid_load_time_identifier(id: &str) -> bool {
-    let mut chars = id.chars();
-    let Some(first) = chars.next() else {
-        return false;
-    };
-    first.is_alphabetic() && chars.all(is_valid_load_time_id_char)
-}
-
-/// Rewrites only a valid, unindented assignment key; comments and Fluent body lines pass through.
-fn normalize_id_line(line: &str) -> String {
-    let trimmed = line.trim_start();
-    if trimmed.is_empty() || trimmed.starts_with('#') {
-        return line.to_owned();
-    }
-
-    let Some((left, right)) = line.split_once('=') else {
-        return line.to_owned();
-    };
-
-    // Only normalize top-level identifiers. Indented lines belong to message
-    // bodies, attributes, or variants and must be left untouched.
-    if left.chars().next().is_some_and(char::is_whitespace) {
-        return line.to_owned();
-    }
-
-    let id_segment = left.trim_end();
-    if !is_valid_load_time_identifier(id_segment) {
-        return line.to_owned();
-    }
-
-    let normalized_id = normalize_identifier(id_segment).into_owned();
-    let trailing_ws = left.strip_prefix(id_segment).unwrap_or_default();
-
-    let mut rebuilt = String::with_capacity(line.len());
-    rebuilt.push_str(&normalized_id);
-    rebuilt.push_str(trailing_ws);
-    rebuilt.push('=');
-    rebuilt.push_str(right);
-    rebuilt
-}
+pub(super) use crate::fluent_identifiers::{normalize_identifier, normalize_resource_ids};
 
 impl FluentLocalizerBuilder {
     /// Creates a builder for the requested locale.
@@ -175,7 +116,58 @@ impl FluentLocalizerBuilder {
             consumer_bundle: None,
             report_issue: super::default_reporter(),
             use_defaults: true,
+            use_isolating: None,
         }
+    }
+
+    /// Sets whether `Fluent` isolates interpolated values with Unicode control
+    /// characters.
+    ///
+    /// `Fluent` wraps every interpolated value in U+2068 FIRST STRONG ISOLATE
+    /// and U+2069 POP DIRECTIONAL ISOLATE so bidirectional algorithms keep
+    /// right-to-left substitutions in the surrounding left-to-right text. Those
+    /// characters are invisible in many terminals but are ordinary characters
+    /// to `grep`, snapshot tests, and log pipelines.
+    ///
+    /// Leaving this unset preserves `Fluent`'s `true` default, keeping the
+    /// marks in place. Passing `false` removes them from both the consumer
+    /// catalogue and the embedded defaults, including the built-in Clap error
+    /// copy. Passing `true` restores them on a bundle that was built without
+    /// them, such as a supplied [`FluentBundle`](fluent_bundle::FluentBundle)
+    /// whose own `set_use_isolating(false)` call the localizer would otherwise
+    /// honour.
+    ///
+    /// The value is applied once, when [`Self::try_build`] constructs the
+    /// bundles, so earlier and later calls to this setter have the same effect
+    /// as the last call. Supplying a prebuilt consumer bundle still replaces
+    /// any consumer resource strings; this setting then applies to that bundle.
+    ///
+    /// This is not general bidirectional sanitization. It controls one `Fluent`
+    /// formatting option and never rewrites catalogue text.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use ortho_l10n::{FluentLocalizer, FluentValue, LocalizationArgs, Localizer, langid};
+    ///
+    /// let localizer = FluentLocalizer::builder(langid!("en-US"))
+    ///     .with_use_isolating(false)
+    ///     .with_consumer_resources(["welcome = Hello, { $name }!"])
+    ///     .try_build()
+    ///     .expect("valid catalogue");
+    ///
+    /// let mut args = LocalizationArgs::new();
+    /// args.insert("name", FluentValue::from("Ada"));
+    ///
+    /// assert_eq!(
+    ///     localizer.lookup("welcome", Some(&args)).as_deref(),
+    ///     Some("Hello, Ada!"),
+    /// );
+    /// ```
+    #[must_use]
+    pub const fn with_use_isolating(mut self, value: bool) -> Self {
+        self.use_isolating = Some(value);
+        self
     }
 
     /// Adds consumer-provided Fluent resources to layer over the defaults.
@@ -220,12 +212,21 @@ impl FluentLocalizerBuilder {
     /// Returns [`FluentLocalizerError`] if any catalogue fails to parse or
     /// registers conflicting identifiers.
     pub fn try_build(self) -> Result<FluentLocalizer, FluentLocalizerError> {
-        let defaults = self.build_defaults_bundle()?;
-        let consumer = Self::build_consumer_bundle(
+        let mut defaults = self.build_defaults_bundle()?;
+        let mut consumer = Self::build_consumer_bundle(
             &self.locale,
             self.consumer_bundle,
             &self.consumer_resources,
         )?;
+
+        // Apply the isolation override once, here, so fallback lookups and the
+        // built-in Clap error copy cannot disagree with the consumer catalogue
+        // and the builder's setter order stays irrelevant.
+        if let Some(value) = self.use_isolating {
+            for bundle in [defaults.as_mut(), consumer.as_mut()].into_iter().flatten() {
+                bundle.set_use_isolating(value);
+            }
+        }
 
         Ok(FluentLocalizer {
             consumer,
@@ -281,6 +282,7 @@ impl fmt::Debug for FluentLocalizerBuilder {
                 &self.consumer_bundle.as_ref().map(|bundle| &bundle.locale),
             )
             .field("use_defaults", &self.use_defaults)
+            .field("use_isolating", &self.use_isolating)
             .field("report_issue", &"<formatter>")
             .finish()
     }
@@ -325,38 +327,5 @@ mod tests {
         let locale = langid!("fr-FR");
         let resources = default_resources(&locale);
         assert!(resources.is_none(), "unsupported locale should return None");
-    }
-
-    // =========================================================================
-    // Identifier normalization tests
-    // =========================================================================
-
-    #[test]
-    fn normalizes_top_level_dotted_ids() {
-        let resource = "cli.about = About text";
-        let normalized = normalize_resource_ids(resource);
-        assert_eq!(normalized, "cli-about = About text");
-    }
-
-    #[test]
-    fn leaves_indented_lines_with_equals_untouched() {
-        let resource = "message =\n    section.title = Title line";
-        let normalized = normalize_resource_ids(resource);
-        assert!(normalized.contains("    section.title = Title line"));
-    }
-
-    #[test]
-    fn leaves_terms_and_attributes_unchanged() {
-        let resource = "-term.id = Term value\nmessage = Value\n    .label = Label";
-        let normalized = normalize_resource_ids(resource);
-        assert!(normalized.contains("-term.id = Term value"));
-        assert!(normalized.contains("    .label = Label"));
-    }
-
-    #[test]
-    fn normalizes_unicode_identifiers() {
-        let resource = "ключ.значение = Привет";
-        let normalized = normalize_resource_ids(resource);
-        assert!(normalized.starts_with("ключ-значение = Привет"));
     }
 }
