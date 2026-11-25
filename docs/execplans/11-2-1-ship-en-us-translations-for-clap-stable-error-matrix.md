@@ -1679,6 +1679,17 @@ stopping and reporting.
       local-module control still fails, and the real `pub use anstyle::*;`
       still counts. The full target passes 105 tests and Clippy is clean.
 
+- [x] (2026-11-25) Round-35 refusing a multi-segment internal glob. A
+      `pub use self::local::alias::*;` descends into `local`, where `alias` is a
+      `use` alias for another crate, while this walk checks segments against the
+      enclosing item list. The reviewed source uses only one-segment internal
+      globs (`use super::*;`, twenty-one times), so a glob whose path is local
+      and more than one segment now fails closed; one segment reaches only the
+      enclosing module, which the walk has already audited. The
+      `module_tree/nested_local_glob` decoy is refused and the real
+      `use super::*;` forms still count. The full target passes 106 tests and
+      Clippy is clean.
+
 - [x] (2026-11-21) Round-22 conflict dispositions. Five paths conflicted, and
       every one was resolved by preserving both sides' intent rather than by
       choosing a side wholesale:

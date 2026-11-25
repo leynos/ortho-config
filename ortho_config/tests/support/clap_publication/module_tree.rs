@@ -229,6 +229,9 @@ fn unconditional_module_chain_is_counted() -> Result<()> {
 // A raw module spelling resolves to the same module, so both the collected and
 // the compared names are normalized through one helper.
 #[case::raw_local_module_glob("raw_local_module_glob", "cannot trace to the declaration it counts")]
+// A deeper internal glob descends into a module whose own `use` items the walk
+// never reads, so an alias there can reach another crate.
+#[case::nested_local_glob("nested_local_glob", "cannot trace to the declaration it counts")]
 // A condition the gate cannot evaluate does not exempt the alias shape.
 #[case::conditional_alias("conditional_alias", "as something other than the counted enum")]
 // A tree without a reported crate root is refused rather than guessed at.

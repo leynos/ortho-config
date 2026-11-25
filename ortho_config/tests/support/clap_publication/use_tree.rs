@@ -118,6 +118,13 @@ struct PathWalk<'a> {
     is_local: bool,
     /// The first segment seen, which decides how a glob is judged.
     root: Option<&'a str>,
+    /// How many segments the path has, which decides how a glob is judged.
+    ///
+    /// A one-segment internal glob such as `use super::*;` reaches only the
+    /// enclosing module, which this walk has already audited. A longer internal
+    /// glob descends into a nested module whose own `use` items this walk never
+    /// reads, so it cannot be trusted by name alone.
+    segments: usize,
 }
 
 /// Classify one `use` tree, starting as a local path with no root yet.
@@ -132,6 +139,7 @@ fn classify_binding(
         PathWalk {
             is_local,
             root: None,
+            segments: 0,
         },
         scope,
         imports,
@@ -160,6 +168,7 @@ fn classify_with_root(
             let next = PathWalk {
                 is_local: is_local_here,
                 root: walk.root.or(Some(segment.as_str())),
+                segments: walk.segments + 1,
             };
             classify_with_root(&path.tree, next, scope, imports)
         }
@@ -182,7 +191,7 @@ fn classify_with_root(
         // carry one — `pub use anstyle::*;` — so the reviewed roots are an
         // allow-list, in the same spirit as the closed attribute lists: a new
         // external glob fails the gate until it has been reviewed.
-        syn::UseTree::Glob(_) => classify_glob(walk.root, walk.is_local, scope),
+        syn::UseTree::Glob(_) => classify_glob(&walk, scope),
     }
 }
 
@@ -239,8 +248,18 @@ fn written_paths(tree: &syn::UseTree) -> Vec<Vec<String>> {
 /// A `use std::io as anstyle;` makes `anstyle` an alias for a different crate,
 /// whose `*` can then export an `ErrorKind` the walk never reads, so an
 /// imported name that matches a reviewed root is refused rather than trusted.
-fn classify_glob(root: Option<&str>, is_local: bool, scope: &CrateScope) -> Binding {
-    let Some(glob_root) = root.filter(|_| !is_local) else {
+fn classify_glob(walk: &PathWalk<'_>, scope: &CrateScope) -> Binding {
+    if walk.is_local {
+        // One segment reaches only the enclosing module, which this walk
+        // audits; a deeper internal glob descends into a module whose own `use`
+        // items it never reads, so an alias there could reach another crate.
+        return if walk.segments <= 1 {
+            Binding::Unrelated
+        } else {
+            Binding::Foreign
+        };
+    }
+    let Some(glob_root) = walk.root else {
         return Binding::Unrelated;
     };
     // A reviewed root is trusted only when nothing in the crate reuses its
