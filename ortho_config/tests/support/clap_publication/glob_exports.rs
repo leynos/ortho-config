@@ -15,7 +15,8 @@ use cap_std::fs_utf8::Dir;
 use cargo_metadata::Package;
 use syn::Item;
 
-use super::audit::is_error_kind_name;
+use super::audit::{declares_module_path, is_error_kind_name};
+use super::expansion::refuse_unverified_attributes;
 use super::library::library_crate_root;
 use super::source::{parse_sources, rust_sources};
 use super::tokens::identifier_name;
@@ -37,6 +38,10 @@ pub(crate) fn reviewed_glob_supplies_no_inventory(package: &Package) -> Result<(
     let sources = rust_sources(&directory, Utf8Path::new(""))?;
     let parsed = parse_sources(&directory, source_root, &sources)?;
     for (relative, file) in &parsed {
+        // A procedural attribute or derive can add an `ErrorKind` the parse
+        // does not show, so the shared attribute audit runs over every file
+        // before its items are trusted, exactly as the counted source's is.
+        refuse_unverified_attributes(file, relative)?;
         if let Some(place) = mentions_error_kind(&file.items, "") {
             bail!(
                 "the reviewed glob crate {} declares `ErrorKind` in {relative} {place}, so its \
@@ -180,12 +185,10 @@ fn unproven_glob(tree: &syn::UseTree, items: &[Item]) -> bool {
         syn::UseTree::Path(path) => {
             let root = identifier_name(&path.ident);
             // `self` and `super` reach only the enclosing modules this walk
-            // reads. A `crate::`-rooted glob may traverse an alias bound
-            // anywhere in the crate, so a multi-segment one is unproven.
-            if matches!(root.as_str(), "self" | "super") {
-                return false;
-            }
-            if root == "crate" {
+            // reads — but only at one segment. `self::alias::*` resolves
+            // `alias` in this module, where it can be a `use` alias for
+            // another crate, exactly as a multi-segment `crate::` path can.
+            if matches!(root.as_str(), "self" | "super" | "crate") {
                 return !matches!(&*path.tree, syn::UseTree::Glob(_));
             }
             // A sibling-module glob carries only names read from that module's
@@ -202,11 +205,9 @@ fn path_redirect(items: &[Item]) -> Option<String> {
         let Item::Mod(module) = item else {
             return None;
         };
-        let redirected = module
-            .attrs
-            .iter()
-            .any(|attribute| attribute.path().is_ident("path"));
-        redirected.then(|| format!("at `mod {}`", module.ident))
+        // The shared recursive search resolves `cfg_attr`, so a redirect
+        // applied through it is caught as well as a directly written one.
+        declares_module_path(&module.attrs).then(|| format!("at `mod {}`", module.ident))
     })
 }
 

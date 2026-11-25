@@ -1760,6 +1760,20 @@ stopping and reporting.
       crate::reset::RESET;`. The real `anstyle` 1.0.14 passes, the full target
       passes 108 tests, Clippy is clean and CodeScene reports 10.0.
 
+- [x] (2026-11-25) Round-42 resolving `self`/`super` glob paths, conditional
+      redirects, and attribute expansions in the dependency audit. Three more
+      shapes: `self::alias::*` can traverse a `use` alias exactly as a
+      multi-segment `crate::` path can; `#[cfg_attr(all(), path = "…")]` applies
+      a redirect the immediate-attribute check missed; and the audit read parsed
+      items without the attribute audit, so a procedural attribute or derive
+      could add an `ErrorKind` the parse never shows. Multi-segment
+      `self`/`super`/`crate` globs are now unproven, the redirect check is the
+      shared recursive `declares_module_path`, and the audit runs
+      `refuse_unverified_attributes` over every file before trusting its items.
+      The Window leg's `Test and Measure Coverage` step and the Linux `Publish
+      dry run` step failed on the previous head for reasons unrelated to this
+      diff: the publish step is the known main-owned release-ordering blocker
+      recorded as issue #414.
 - [x] (2026-11-21) Round-22 conflict dispositions. Five paths conflicted, and
       every one was resolved by preserving both sides' intent rather than by
       choosing a side wholesale:
