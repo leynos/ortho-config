@@ -425,15 +425,15 @@ def main(argv: typ.Sequence[str] | None = None) -> int:
     Returns
     -------
     int
-        ``0`` on success, ``1`` when the target is missing (``check`` only).
-
-    Raises
-    ------
-    ToolchainLookupError
-        If the suite's toolchain cannot be determined.
+        ``0`` on success, ``1`` when the target is missing (``check`` only) or
+        the suite's toolchain cannot be determined.
     """
     arguments = build_parser().parse_args(argv)
-    satisfied, missing, absent = survey(arguments.installer, arguments.target)
+    try:
+        satisfied, missing, absent = survey(arguments.installer, arguments.target)
+    except ToolchainLookupError as error:
+        print(f"whitaker windows target: {error}")
+        return 1
     for channel in absent:
         print(
             f"whitaker windows target: {channel} is staged but its toolchain is "

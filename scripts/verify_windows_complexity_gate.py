@@ -203,7 +203,7 @@ def run_gate(
     Raises
     ------
     GateVerificationError
-        If the invocation outlives its deadline.
+        If the invocation outlives its deadline or cannot be started.
     """
     try:
         return subprocess.run(  # noqa: S603 - a fixed argv, no shell.
@@ -219,6 +219,8 @@ def run_gate(
             f"the {target} probe did not finish within "
             f"{INVOCATION_DEADLINE_SECONDS}s"
         ) from expired
+    except OSError as error:
+        raise GateVerificationError(f"could not run {whitaker!r}: {error}") from error
 
 
 def gate_environment() -> dict[str, str]:
@@ -228,13 +230,21 @@ def gate_environment() -> dict[str, str]:
     toolchain and the package cache through it, and dropping any of them would
     make the probe fail for a reason that is not the gate's.
 
+    `CARGO_ENCODED_RUSTFLAGS` is removed rather than left alone. Cargo reads it
+    in preference to `RUSTFLAGS`, and an empty value wins as well, so an
+    inherited one would displace the warning policy this probe exists to apply
+    and the over-limit example would merely warn. The Makefile un-exports the
+    same variable for the same reason.
+
     Returns
     -------
     dict of str to str
-        The inherited environment with `RUSTFLAGS` replaced.
+        The inherited environment with `RUSTFLAGS` replaced and
+        `CARGO_ENCODED_RUSTFLAGS` removed.
     """
     environment = dict(os.environ)
     environment["RUSTFLAGS"] = STRICT_RUSTFLAGS
+    environment.pop("CARGO_ENCODED_RUSTFLAGS", None)
     return environment
 
 
