@@ -129,13 +129,14 @@ impl FluentLocalizerBuilder {
     /// characters are invisible in many terminals but are ordinary characters
     /// to `grep`, snapshot tests, and log pipelines.
     ///
-    /// Leaving this unset preserves `Fluent`'s `true` default, keeping the
-    /// marks in place. Passing `false` removes them from both the consumer
-    /// catalogue and the embedded defaults, including the built-in Clap error
-    /// copy. Passing `true` restores them on a bundle that was built without
-    /// them, such as a supplied [`FluentBundle`](fluent_bundle::FluentBundle)
-    /// whose own `set_use_isolating(false)` call the localizer would otherwise
-    /// honour.
+    /// Leaving this unset preserves each bundle's own setting: resource-built
+    /// bundles keep `Fluent`'s `true` default, and a supplied prebuilt bundle
+    /// keeps whatever it chose. Passing `false` removes the marks from both the
+    /// consumer catalogue and the embedded defaults, including the built-in
+    /// Clap error copy. Passing `true` restores them on a bundle that was built
+    /// without them, such as a supplied
+    /// [`FluentBundle`](fluent_bundle::FluentBundle) whose own
+    /// `set_use_isolating(false)` call the localizer would otherwise honour.
     ///
     /// The value is applied once, when [`Self::try_build`] constructs the
     /// bundles, so earlier and later calls to this setter have the same effect

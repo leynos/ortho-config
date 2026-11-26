@@ -991,11 +991,12 @@ configuration can use the runtime directly. See
   string comparison, and snapshot assertions taken from diagnostics, and some
   terminals and log viewers render them as replacement glyphs.
   `FluentLocalizerBuilder::with_use_isolating` stores an `Option<bool>`: `None`
-  preserves `Fluent`'s `true` default and any supplied bundle's own setting,
-  while an explicit value is applied once in `try_build` to both the defaults
-  bundle and the consumer bundle, including a prebuilt one. Applying the value
-  after construction keeps setter order irrelevant and makes fallback lookups
-  and the embedded Clap error copy agree with the consumer catalogue. A
+  preserves each bundle's own setting—`Fluent`'s `true` default for
+  resource-built bundles and whatever a supplied bundle chose—while an explicit
+  value is applied once in `try_build` to both the defaults bundle and the
+  consumer bundle, including a prebuilt one, so both then agree. Applying the
+  value after construction keeps setter order irrelevant and makes fallback
+  lookups and the embedded Clap error copy agree with the consumer catalogue. A
   locale-script default—disabling isolation automatically for left-to-right
   scripts—was rejected: it would make rendering depend on the locale tag rather
   than the text, change output for existing callers who only upgrade the crate,

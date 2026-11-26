@@ -46,8 +46,9 @@ rarely wanted in left-to-right terminal copy.
 
 `FluentLocalizerBuilder::with_use_isolating` chooses the behaviour explicitly:
 
-- Leaving the setting unspecified keeps Fluent's `true` default, so existing
-  output is unchanged.
+- Leaving the setting unspecified preserves each bundle's own setting:
+  resource-built bundles keep Fluent's `true` default, and a supplied prebuilt
+  bundle keeps whatever it chose.
 - `with_use_isolating(false)` removes the marks from both the consumer
   catalogue and the embedded defaults, including the built-in Clap error copy.
 - `with_use_isolating(true)` restores the marks on a bundle that was built
@@ -103,11 +104,13 @@ identifier before its dotted-to-hyphen spelling. Missing messages return `None`;
 Other languages need `disable_defaults()`, even when consumer resources are
 supplied. A consumer-only localizer can also be empty.
 
-Both bundles are built from the same builder configuration, so
-`with_use_isolating` reaches the embedded defaults and the consumer catalogue
-alike: a consumer message that misses or fails formatting falls through to
-default copy with matching isolation. No wrapper is needed on the
-`ortho_config` side, which re-exports the builder unchanged.
+When `with_use_isolating` is supplied, both the embedded defaults and the
+consumer catalogue receive that value, so a consumer message that misses or
+fails formatting falls through to default copy with matching isolation. Leaving
+the setting unset preserves each bundle's own setting: a supplied prebuilt
+bundle that opted out keeps mark-free output while the embedded defaults keep
+Fluent's default isolation, so a fallback can reintroduce the marks. No wrapper
+is needed on the `ortho_config` side, which re-exports the builder unchanged.
 
 ```rust
 use ortho_l10n::{FluentLocalizer, Localizer, langid};
