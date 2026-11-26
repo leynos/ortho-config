@@ -305,12 +305,11 @@ fn golden_subcommand_split_see_also(
     );
 }
 
-/// Test that a positional operand renders its value name and leads the synopsis.
-#[rstest]
-fn golden_positional_operand_ordering(mut minimal_metadata: LocalizedDocMetadata) {
-    minimal_metadata.fields.push(LocalizedFieldMetadata {
-        name: "proposal".to_owned(),
-        help: "Proposal identifier.".to_owned(),
+/// Builds a positional field at `index`, carrying `value_name`.
+fn positional_field(name: &str, value_name: &str, index: u16) -> LocalizedFieldMetadata {
+    LocalizedFieldMetadata {
+        name: name.to_owned(),
+        help: format!("{name} operand."),
         long_help: None,
         value: Some(ValueType::String),
         default: None,
@@ -319,14 +318,14 @@ fn golden_positional_operand_ordering(mut minimal_metadata: LocalizedDocMetadata
         cli: Some(CliMetadata {
             long: None,
             short: None,
-            value_name: Some("PROPOSAL".to_owned()),
+            value_name: Some(value_name.to_owned()),
             multiple: false,
             takes_value: true,
             value_optional: false,
             possible_values: vec![],
             hide_in_help: false,
             positional: Some(PositionalMetadata {
-                index: 1,
+                index,
                 variadic: false,
                 var_arg: false,
                 last: false,
@@ -337,19 +336,23 @@ fn golden_positional_operand_ordering(mut minimal_metadata: LocalizedDocMetadata
         examples: vec![],
         links: vec![],
         notes: vec![],
-    });
-    minimal_metadata.fields.push(LocalizedFieldMetadata {
-        name: "check".to_owned(),
-        help: "Check command.".to_owned(),
+    }
+}
+
+/// Builds a named option field that takes `value_name`.
+fn flag_field(name: &str, value_name: &str) -> LocalizedFieldMetadata {
+    LocalizedFieldMetadata {
+        name: name.to_owned(),
+        help: format!("{name} option."),
         long_help: None,
         value: Some(ValueType::String),
         default: None,
         required: false,
         deprecated: None,
         cli: Some(CliMetadata {
-            long: Some("check".to_owned()),
+            long: Some(name.to_owned()),
             short: None,
-            value_name: Some("COMMAND".to_owned()),
+            value_name: Some(value_name.to_owned()),
             multiple: false,
             takes_value: true,
             value_optional: false,
@@ -362,7 +365,16 @@ fn golden_positional_operand_ordering(mut minimal_metadata: LocalizedDocMetadata
         examples: vec![],
         links: vec![],
         notes: vec![],
-    });
+    }
+}
+
+/// Test that a positional operand renders its value name and leads the synopsis.
+#[rstest]
+fn golden_positional_operand_ordering(mut minimal_metadata: LocalizedDocMetadata) {
+    minimal_metadata
+        .fields
+        .push(positional_field("proposal", "PROPOSAL", 1));
+    minimal_metadata.fields.push(flag_field("check", "COMMAND"));
 
     let output = generate_to_string(&minimal_metadata, &RoffConfig::default());
     let synopsis = output

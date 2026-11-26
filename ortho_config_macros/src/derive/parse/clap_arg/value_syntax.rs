@@ -51,56 +51,71 @@ pub(super) fn is_default_value_key(meta: &ParseNestedMeta) -> bool {
 pub(super) fn parse_bool(meta: &ParseNestedMeta) -> syn::Result<Option<bool>> {
     match argument(meta)? {
         None => Ok(Some(true)),
-        Some(Expr::Lit(lit)) => match lit.lit {
-            Lit::Bool(value) => Ok(Some(value.value)),
-            _ => Ok(None),
-        },
+        Some(Expr::Lit(lit)) => Ok(literal_bool(&lit.lit)),
         Some(_) => Ok(None),
     }
 }
 
 /// Parses a string literal argument, reporting non-literals as `None`.
 pub(super) fn parse_lit_str(meta: &ParseNestedMeta) -> syn::Result<Option<String>> {
-    match argument(meta)? {
-        Some(Expr::Lit(lit)) => match lit.lit {
-            Lit::Str(value) => Ok(Some(value.value())),
-            _ => Ok(None),
-        },
+    literal_argument(meta, |lit| match lit {
+        Lit::Str(value) => Ok(Some(value.value())),
         _ => Ok(None),
-    }
+    })
 }
 
 /// Parses an integer literal argument.
 pub(super) fn parse_usize(meta: &ParseNestedMeta) -> syn::Result<Option<usize>> {
+    literal_argument(meta, |lit| match literal_int(lit) {
+        Some(value) => Ok(Some(value.base10_parse()?)),
+        None => Ok(None),
+    })
+}
+
+/// Applies `convert` to a literal argument, ignoring non-literal arguments.
+fn literal_argument<T>(
+    meta: &ParseNestedMeta,
+    convert: impl FnOnce(&Lit) -> syn::Result<Option<T>>,
+) -> syn::Result<Option<T>> {
     match argument(meta)? {
-        Some(Expr::Lit(lit)) => match lit.lit {
-            Lit::Int(value) => Ok(Some(value.base10_parse()?)),
-            _ => Ok(None),
-        },
+        Some(Expr::Lit(lit)) => convert(&lit.lit),
         _ => Ok(None),
+    }
+}
+
+/// Extracts the boolean value of a literal, when it is one.
+const fn literal_bool(lit: &Lit) -> Option<bool> {
+    match lit {
+        Lit::Bool(value) => Some(value.value),
+        _ => None,
+    }
+}
+
+/// Extracts the integer value of a literal, when it is one.
+const fn literal_int(lit: &Lit) -> Option<&syn::LitInt> {
+    match lit {
+        Lit::Int(value) => Some(value),
+        _ => None,
     }
 }
 
 /// Parses a literal `num_args` count or range.
 pub(super) fn parse_value_range(meta: &ParseNestedMeta) -> syn::Result<Option<ValueRange>> {
-    match argument(meta)? {
-        Some(expression) => literal_value_range(&expression),
-        None => Ok(None),
-    }
+    argument(meta)?.map_or(Ok(None), |expression| literal_value_range(&expression))
 }
 
 /// Converts a literal count or range expression into a value range.
 fn literal_value_range(expression: &Expr) -> syn::Result<Option<ValueRange>> {
     match expression {
         Expr::Lit(literal) => literal_count(literal),
-        Expr::Range(range) => Ok(literal_range(range)),
+        Expr::Range(range) => Ok(Some(literal_range(range))),
         _ => Ok(None),
     }
 }
 
 /// Converts a literal integer into an exact value count.
 fn literal_count(literal: &syn::ExprLit) -> syn::Result<Option<ValueRange>> {
-    let Lit::Int(value) = &literal.lit else {
+    let Some(value) = literal_int(&literal.lit) else {
         return Ok(None);
     };
     let count = value.base10_parse()?;
@@ -111,7 +126,7 @@ fn literal_count(literal: &syn::ExprLit) -> syn::Result<Option<ValueRange>> {
 }
 
 /// Converts a literal range into its inclusive value bounds.
-fn literal_range(range: &syn::ExprRange) -> Option<ValueRange> {
+fn literal_range(range: &syn::ExprRange) -> ValueRange {
     let start = range.start.as_deref().and_then(lit_usize);
     let end = range.end.as_deref().and_then(lit_usize);
     let min = start.unwrap_or(0);
@@ -119,18 +134,15 @@ fn literal_range(range: &syn::ExprRange) -> Option<ValueRange> {
         RangeLimits::Closed(_) => end.unwrap_or(usize::MAX),
         RangeLimits::HalfOpen(_) => end.map_or(usize::MAX, |value| value.saturating_sub(1)),
     };
-    Some(ValueRange { min, max })
+    ValueRange { min, max }
 }
 
 /// Reads a literal integer expression when it is suitable as a range bound.
 fn lit_usize(expr: &Expr) -> Option<usize> {
-    match expr {
-        Expr::Lit(lit) => match &lit.lit {
-            Lit::Int(value) => value.base10_parse().ok(),
-            _ => None,
-        },
-        _ => None,
-    }
+    let Expr::Lit(lit) = expr else {
+        return None;
+    };
+    literal_int(&lit.lit).and_then(|value| value.base10_parse().ok())
 }
 
 /// Reads the final path segment of an `ArgAction` expression.
