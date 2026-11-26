@@ -1850,6 +1850,33 @@ stopping and reporting.
       current base and ADR while keeping the earlier replay as history. The
       full target passes 110 tests on the replayed head, Clippy is clean, and
       the PR reports `MERGEABLE` again.
+
+- [x] (2026-11-26) Round-49 hosted certificate and the two remaining blockers.
+      On head `2ef02429`, hosted run 45714124311 passes `msrv`, both Clippy
+      legs, all three packaging dry runs, and on both `build-test` legs every
+      step except `Publish dry run` — including `Lint`, `Workflow contract
+      tests` and both `Test and Measure Coverage` runs, whose Linux log records
+      the boundary suite at 44 passed and 10 ignored. Locally, `make check-fmt`
+      (118 files unchanged), `make markdownlint`, `make lint` and the full
+      `clap_error_coverage` target (110 tests) pass. Two blockers remain, both
+      outside this branch's authority:
+      - **`Publish dry run` (#414).** The step fails with `E0432: unresolved
+        import ortho_config_macros::RequiredConfigSchema`, the published-macro
+        release-ordering class #414 documents, introduced by main's #589. It is
+        not this diff's: the step passed on this branch's pre-rebase head
+        (run 45314648127) and appears only after rebasing onto `c2d63075`.
+        Resolving it needs a published `ortho_config_macros` or a
+        maintainer-approved remedy.
+      - **Standalone `make test` and `make boundary` locally.** `make test`
+        fails only at `cargo-orthohelp --test compile_time`'s own 900 s child
+        deadline, a file this branch does not touch; `make boundary` fails only
+        on its 440/900 s nested-build allowances. Every failure observed is a
+        deadline or allowance exhaustion under compile-admission saturation
+        (queues of 100-640 for two days), never an assertion or a compiler
+        diagnostic. The hosted runs cannot stand in for these two targets:
+        CI invokes a coverage action rather than `make test` or
+        `make boundary`.
+
 - [x] (2026-11-21) Round-22 conflict dispositions. Five paths conflicted, and
       every one was resolved by preserving both sides' intent rather than by
       choosing a side wholesale:
