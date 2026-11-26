@@ -371,8 +371,14 @@ check-whitaker-windows-target: ## Verify Whitaker's toolchain can build the Wind
 # The gate is only worth its runtime if it can still fail. This runs the same
 # command against a two-function fixture: the in-limit example must pass, and
 # the over-limit example, enabled by a Cargo feature, must be reported.
+#
+# `WHITAKER` is passed through so an override selects the same launcher here as
+# in the pass above; otherwise a caller who points the gate at another
+# installation would have the self-test validate whichever `whitaker` PATH
+# resolves, which may be a different one.
 check-windows-complexity-gate: check-whitaker-windows-target ## Prove the Windows complexity gate passes and fails as specified
-	$(PYTHON) scripts/verify_windows_complexity_gate.py --target $(WINDOWS_TARGET)
+	$(PYTHON) scripts/verify_windows_complexity_gate.py \
+		--whitaker $(call shell_quote,$(WHITAKER)) --target $(WINDOWS_TARGET)
 
 # The inventory is discovered inside the recipe and handed over NUL-separated.
 # `$(shell ...)` splits on whitespace and has no way to quote a path, so a file

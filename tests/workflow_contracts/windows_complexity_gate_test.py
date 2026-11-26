@@ -28,7 +28,7 @@ import typing as typ
 
 import pytest
 from makefile_support import recipe_lines
-from workflow_reading import read_workflows, workflow_jobs, workflow_steps
+from workflow_reading import read_workflows, workflow_jobs
 
 REPOSITORY_ROOT: typ.Final[pathlib.Path] = pathlib.Path(__file__).resolve().parents[2]
 WORKFLOWS: typ.Final[pathlib.Path] = REPOSITORY_ROOT / ".github" / "workflows"
@@ -265,15 +265,18 @@ def test_the_probe_carries_both_directions() -> None:
 
 
 def test_the_self_test_target_runs_the_verifier(makefile: str) -> None:
-    """The self-test target invokes the script, at the same triple.
+    """The self-test target invokes the script, at the same triple and launcher.
 
     The script defaults to the same triple, so passing the variable is what
-    keeps a `WINDOWS_TARGET=` override honest.
+    keeps a `WINDOWS_TARGET=` override honest. `$(WHITAKER)` is passed for the
+    same reason: a caller who overrides the launcher must not have the
+    self-test validate whichever `whitaker` PATH resolves instead.
     """
     command = " ".join(recipe_lines(makefile, SELF_TEST_TARGET))
     assert command, f"{SELF_TEST_TARGET} has no recipe"
     assert "scripts/verify_windows_complexity_gate.py" in command, command
     assert "--target $(WINDOWS_TARGET)" in command, command
+    assert "--whitaker" in command and "$(WHITAKER)" in command, command
 
 
 def test_continuous_integration_runs_the_gate_and_its_self_test(
@@ -324,25 +327,26 @@ def test_the_host_pass_is_still_the_one_lint_runs(jobs: dict[str, dict[str, obje
     )
 
 
-def test_the_install_whitaker_contract_knows_about_both_legs() -> None:
-    """The gate's job installs Whitaker through the same pinned action.
+def test_the_gate_job_installs_whitaker_itself(
+    jobs: dict[str, dict[str, object]],
+) -> None:
+    """The job that runs the pass also installs the suite.
 
-    `whitaker_install_test.py` asserts one install step; this asserts the
-    reason there is more than one is a second Linux job, so a Windows install
-    cannot arrive unnoticed.
+    `whitaker_install_test.py` holds every install step to the pinned action
+    on a Linux runner, and `sccache_wiring_test.py` holds the caching wiring.
+    What neither can see is *which* job owns the install: a job that runs the
+    pass without installing the suite borrows another job's, and would fail
+    only when that job stopped running.
     """
-    install_steps = [
-        step
-        for document in read_workflows(WORKFLOWS).values()
-        for step in workflow_steps(document)
-        if step.get("name") == "Install Whitaker"
+    installing = [
+        job_name
+        for job_name, job in jobs.items()
+        if f"make {LINT_TARGET}" in " ".join(_run_steps(job))
     ]
-    assert len(install_steps) >= 2, (
-        "the Windows-target gate needs its own Whitaker install"
-    )
-    for step in install_steps:
-        assert re.search(
-            r"leynos/shared-actions/\.github/actions/install-whitaker@[0-9a-f]{40}$",
-            str(step.get("uses", "")),
-        ), f"an install step is not the pinned action: {step.get('uses')!r}"
-        assert "run" not in step, "an install step carries a script of its own"
+    assert installing, f"no job runs `make {LINT_TARGET}`"
+    for job_name in installing:
+        steps = jobs[job_name].get("steps") or []
+        assert any(
+            isinstance(step, dict) and step.get("name") == "Install Whitaker"
+            for step in steps
+        ), f"{job_name} runs `make {LINT_TARGET}` without installing Whitaker"

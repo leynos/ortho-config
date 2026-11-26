@@ -9,17 +9,25 @@ lint-whitaker-windows`` asks for the Windows target instead, which keeps them.
 That cross-check needs the Windows target's ``rust-std`` component in the
 toolchain the suite runs on. That toolchain is the installer's, not the one
 ``rust-toolchain.toml`` pins, so the component cannot be added by a bare
-``rustup target add``: the channel has to be read from the installer first.
-This module owns that lookup, its ``check`` and ``install`` verbs, and nothing
-else, so the Makefile keeps expressing *what* the gate needs rather than how
-the installer happens to name its toolchain.
+``rustup target add``: the channel has to be discovered first. This module owns
+that discovery, its ``check`` and ``install`` verbs, and nothing else, so the
+Makefile keeps expressing *what* the gate needs rather than how the installer
+happens to name its toolchain.
 
-The lookup reads ``whitaker-installer install --dry-run``, which prints the
-configuration it would act on and writes nothing. Its ``Toolchain:`` line is
-the same value the real install uses, and naming it explicitly means a change
-in that output fails this gate loudly instead of silently checking the wrong
-compiler. The installer reports on standard error, so both streams are read:
-which one carries the line is not a contract worth depending on.
+Two sources name a channel, and they are not always the same one:
+
+- ``whitaker-installer list --json`` reports the channels whose suite is
+  staged, which is what ``cargo dylint`` can load.
+- ``whitaker-installer install --dry-run`` reports the channel the installer
+  would build for now, which is what a *successful* install stages.
+
+An upgrade can advance the second without completing the first, and the
+bootstrap record the lint run reads keeps naming the suite that survived. So
+the candidate set is the union of both: provisioning only the configured
+channel would leave the surviving suite without its ``rust-std``, and
+provisioning only the staged ones would leave a first install unprovisioned.
+Channels whose toolchain ``rustup`` does not have are reported and skipped,
+because neither a suite nor a component can run on a compiler that is absent.
 
 Run via ``make install-whitaker-windows-target`` or
 ``make check-whitaker-windows-target``.
@@ -28,10 +36,12 @@ Run via ``make install-whitaker-windows-target`` or
 from __future__ import annotations
 
 import argparse
+import json
 import subprocess  # noqa: S404 - the installer and rustup are the subject.
 import typing as typ
 
 #: The line ``whitaker-installer install --dry-run`` prints its toolchain on.
+#: The installer writes its report to standard error, so both streams are read.
 TOOLCHAIN_PREFIX: typ.Final[str] = "Toolchain: "
 
 #: The default installer executable. The `whitaker` wrapper resolves the same
@@ -44,9 +54,16 @@ DEFAULT_INSTALLER: typ.Final[str] = "whitaker-installer"
 #: `tests/workflow_contracts/windows_complexity_gate_test.py`.
 DEFAULT_TARGET: typ.Final[str] = "x86_64-pc-windows-msvc"
 
+#: A query's ceiling. Each one inspects local state and none compiles, so a
+#: query that outlives this is hung rather than slow.
+QUERY_DEADLINE_SECONDS: typ.Final[int] = 300
+
+#: An install's ceiling. It may download the target's standard library.
+INSTALL_DEADLINE_SECONDS: typ.Final[int] = 1800
+
 
 class ToolchainLookupError(RuntimeError):
-    """Raised when the suite toolchain cannot be read from the installer."""
+    """Raised when the suite's toolchain cannot be determined."""
 
 
 def parse_toolchain(dry_run_output: str) -> str:
@@ -87,8 +104,106 @@ def parse_toolchain(dry_run_output: str) -> str:
     )
 
 
-def suite_toolchain(installer: str) -> str:
-    """Return the channel Whitaker's installer builds its suite for.
+def parse_staged_channels(listing: str) -> list[str]:
+    """Return the channels a staged suite is reported for.
+
+    Parameters
+    ----------
+    listing : str
+        The output of ``whitaker-installer list --json``.
+
+    Returns
+    -------
+    list of str
+        The channels, in the order the installer reported them.
+
+    Raises
+    ------
+    ToolchainLookupError
+        If the document is not the expected JSON shape.
+
+    Examples
+    --------
+    >>> parse_staged_channels('{"toolchains": [{"channel": "nightly-a"}]}')
+    ['nightly-a']
+    >>> parse_staged_channels('{"toolchains": []}')
+    []
+    """
+    try:
+        document = json.loads(listing)
+        return [str(entry["channel"]) for entry in document["toolchains"]]
+    except (json.JSONDecodeError, KeyError, TypeError) as error:
+        raise ToolchainLookupError(
+            f"the installer's suite listing is not the expected JSON: {error}"
+        ) from error
+
+
+def candidate_channels(configured: str, staged: typ.Iterable[str]) -> list[str]:
+    """Return every channel a suite could run on, without duplicates.
+
+    Parameters
+    ----------
+    configured : str
+        The channel the installer would build for now.
+    staged : iterable of str
+        The channels whose suite is already staged.
+
+    Returns
+    -------
+    list of str
+        The union of the two, sorted so a report is order-stable.
+
+    Examples
+    --------
+    >>> candidate_channels("nightly-b", ["nightly-a", "nightly-b"])
+    ['nightly-a', 'nightly-b']
+    >>> candidate_channels("nightly-b", [])
+    ['nightly-b']
+    """
+    return sorted({configured, *staged})
+
+
+def _run(
+    argv: list[str],
+    *,
+    deadline: int,
+    check: bool = True,
+) -> subprocess.CompletedProcess[str]:
+    """Run one local query or install, capturing both streams.
+
+    Parameters
+    ----------
+    argv : list of str
+        The command line, already split.
+    deadline : int
+        Seconds the command may take before it is treated as hung.
+    check : bool
+        Whether a non-zero exit is an error.
+
+    Returns
+    -------
+    subprocess.CompletedProcess
+        The finished process.
+
+    Raises
+    ------
+    ToolchainLookupError
+        If the command cannot be run or outlives its deadline.
+    """
+    try:
+        return subprocess.run(  # noqa: S603 - a fixed argv, no shell.
+            argv,
+            check=check,
+            capture_output=True,
+            text=True,
+            timeout=deadline,
+        )
+    except (OSError, subprocess.SubprocessError) as error:
+        raise ToolchainLookupError(f"{argv[0]} failed: {error}") from error
+
+
+def configured_channel(installer: str) -> str:
+    """Return the channel Whitaker's installer would build its suite for.
 
     Parameters
     ----------
@@ -98,29 +213,89 @@ def suite_toolchain(installer: str) -> str:
     Returns
     -------
     str
-        The toolchain channel the suite runs on.
-
-    Raises
-    ------
-    ToolchainLookupError
-        If the installer cannot be run, or its output carries no channel.
+        The toolchain channel the next install would stage.
     """
-    try:
-        completed = subprocess.run(  # noqa: S603 - a fixed argv, no shell.
-            [installer, "install", "--dry-run"],
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-    except (OSError, subprocess.CalledProcessError) as error:
-        raise ToolchainLookupError(
-            f"could not read {installer!r}'s configured toolchain: {error}"
-        ) from error
+    completed = _run(
+        [installer, "install", "--dry-run"], deadline=QUERY_DEADLINE_SECONDS
+    )
     return parse_toolchain(completed.stdout + completed.stderr)
 
 
-def installed_targets(channel: str) -> set[str]:
-    """Return the target triples ``rustup`` has installed for *channel*.
+def staged_channels(installer: str) -> list[str]:
+    """Return the channels whose suite Whitaker has already staged.
+
+    Parameters
+    ----------
+    installer : str
+        The installer executable to query.
+
+    Returns
+    -------
+    list of str
+        The staged channels, empty when nothing is staged yet.
+    """
+    completed = _run([installer, "list", "--json"], deadline=QUERY_DEADLINE_SECONDS)
+    return parse_staged_channels(completed.stdout)
+
+
+def installed_toolchains() -> set[str]:
+    """Return the toolchains ``rustup`` already has, by name without host.
+
+    The host triple is stripped because a channel is named without it
+    everywhere else. ``rustup target list --toolchain`` is deliberately not
+    used to decide whether a toolchain exists: rustup installs a missing one
+    on demand, so that query would download a compiler to answer "is it
+    installed?".
+
+    Returns
+    -------
+    set of str
+        The installed channels, such as ``nightly-2026-05-28``.
+    """
+    completed = _run(["rustup", "toolchain", "list"], deadline=QUERY_DEADLINE_SECONDS)
+    return {
+        strip_host(line.split()[0])
+        for line in completed.stdout.splitlines()
+        if line.strip()
+    }
+
+
+def strip_host(toolchain: str) -> str:
+    """Return a toolchain name without its host triple suffix.
+
+    Parameters
+    ----------
+    toolchain : str
+        A name as ``rustup`` prints it, possibly with a host triple.
+
+    Returns
+    -------
+    str
+        The channel alone.
+
+    Examples
+    --------
+    >>> strip_host("nightly-2026-05-28-x86_64-unknown-linux-gnu")
+    'nightly-2026-05-28'
+    >>> strip_host("nightly-2026-05-28")
+    'nightly-2026-05-28'
+    """
+    known_hosts = (
+        "x86_64-unknown-linux-gnu",
+        "aarch64-unknown-linux-gnu",
+        "x86_64-pc-windows-msvc",
+        "aarch64-apple-darwin",
+        "x86_64-apple-darwin",
+    )
+    for host in known_hosts:
+        suffix = f"-{host}"
+        if toolchain.endswith(suffix):
+            return toolchain[: -len(suffix)]
+    return toolchain
+
+
+def installed_targets(channel: str) -> set[str] | None:
+    """Return the triples ``rustup`` has for *channel*, or ``None`` if absent.
 
     Parameters
     ----------
@@ -129,14 +304,15 @@ def installed_targets(channel: str) -> set[str]:
 
     Returns
     -------
-    set of str
-        The installed triples, empty when `rustup` reports none.
+    set of str or None
+        The installed triples, or ``None`` when ``rustup`` has no such
+        toolchain, which is the one answer that is not "none are installed".
     """
-    completed = subprocess.run(  # noqa: S603 - a fixed argv, no shell.
+    if channel not in installed_toolchains():
+        return None
+    completed = _run(
         ["rustup", "target", "list", "--installed", "--toolchain", channel],
-        check=True,
-        capture_output=True,
-        text=True,
+        deadline=QUERY_DEADLINE_SECONDS,
     )
     return set(completed.stdout.split())
 
@@ -151,10 +327,56 @@ def install_target(channel: str, target: str) -> None:
     target : str
         The target triple to add.
     """
-    subprocess.run(  # noqa: S603 - a fixed argv, no shell.
+    _run(
         ["rustup", "target", "add", "--toolchain", channel, target],
-        check=True,
+        deadline=INSTALL_DEADLINE_SECONDS,
     )
+
+
+def survey(
+    installer: str, target: str
+) -> tuple[list[str], list[str], list[str]]:
+    """Report which candidate channels have, need, or cannot take the target.
+
+    Parameters
+    ----------
+    installer : str
+        The installer executable to query.
+    target : str
+        The target triple the gate needs.
+
+    Returns
+    -------
+    tuple of list of str
+        The channels that already have the target, those that do not, and
+        those whose toolchain ``rustup`` does not have.
+
+    Raises
+    ------
+    ToolchainLookupError
+        If no candidate channel has an installed toolchain, because then
+        there is nothing to provision and nothing that could run the suite.
+    """
+    channels = candidate_channels(
+        configured_channel(installer), staged_channels(installer)
+    )
+    satisfied: list[str] = []
+    missing: list[str] = []
+    absent: list[str] = []
+    for channel in channels:
+        targets = installed_targets(channel)
+        if targets is None:
+            absent.append(channel)
+        elif target in targets:
+            satisfied.append(channel)
+        else:
+            missing.append(channel)
+    if not satisfied and not missing:
+        raise ToolchainLookupError(
+            "no candidate Whitaker toolchain is installed: "
+            + ", ".join(absent or ["none reported"])
+        )
+    return satisfied, missing, absent
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -193,22 +415,39 @@ def main(argv: typ.Sequence[str] | None = None) -> int:
     Raises
     ------
     ToolchainLookupError
-        If the suite toolchain cannot be read.
+        If the suite's toolchain cannot be determined.
     """
     arguments = build_parser().parse_args(argv)
-    channel = suite_toolchain(arguments.installer)
+    satisfied, missing, absent = survey(arguments.installer, arguments.target)
+    for channel in absent:
+        print(
+            f"whitaker windows target: {channel} is staged but its toolchain is "
+            "not installed; skipping it",
+        )
     if arguments.verb == "install":
-        install_target(channel, arguments.target)
-        print(f"whitaker windows target: {arguments.target} installed for {channel}")
+        for channel in missing:
+            install_target(channel, arguments.target)
+            print(
+                f"whitaker windows target: {arguments.target} installed for {channel}"
+            )
+        if not missing:
+            print(
+                f"whitaker windows target: {arguments.target} is installed for "
+                + ", ".join(satisfied)
+            )
         return 0
-    if arguments.target in installed_targets(channel):
-        print(f"whitaker windows target: {arguments.target} is installed for {channel}")
-        return 0
-    print(
-        f"whitaker windows target: {arguments.target} is missing from {channel}.\n"
-        f"Run `make install-whitaker-windows-target` to add it.",
-    )
-    return 1
+    for channel in satisfied:
+        print(
+            f"whitaker windows target: {arguments.target} is installed for {channel}"
+        )
+    if missing:
+        print(
+            f"whitaker windows target: {arguments.target} is missing from "
+            + ", ".join(missing)
+            + ".\nRun `make install-whitaker-windows-target` to add it.",
+        )
+        return 1
+    return 0
 
 
 if __name__ == "__main__":

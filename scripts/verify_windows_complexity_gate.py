@@ -50,6 +50,11 @@ IN_LIMIT_FUNCTION: typ.Final[str] = "in_limit"
 #: turns the lint's `warn` default into a gate.
 STRICT_RUSTFLAGS: typ.Final[str] = "-D warnings"
 
+#: One probe invocation's ceiling. The crate has no dependencies of its own
+#: beyond the standard library, so the only slow part is the first build of
+#: the target's `std`, which the job's own ceiling already accommodates.
+INVOCATION_DEADLINE_SECONDS: typ.Final[int] = 1800
+
 #: A diagnostic such as `has a cognitive complexity of 12 (limit 9)`.
 COMPLEXITY_DIAGNOSTIC: typ.Final[re.Pattern[str]] = re.compile(
     r"has a cognitive complexity of (\d+) \(limit (\d+)\)"
@@ -145,6 +150,11 @@ def run_gate(
 ) -> subprocess.CompletedProcess[str]:
     """Run the gate over the probe crate and return the finished process.
 
+    The deadline is per invocation, and each one compiles a single crate: a
+    cold start pays for the target's dependency graph once, and the second
+    invocation reuses it. A hung compiler therefore fails here rather than
+    occupying a runner until the job's own ceiling.
+
     Parameters
     ----------
     whitaker : str
@@ -158,14 +168,26 @@ def run_gate(
     -------
     subprocess.CompletedProcess
         The finished process, with both streams captured.
+
+    Raises
+    ------
+    GateVerificationError
+        If the invocation outlives its deadline.
     """
-    return subprocess.run(  # noqa: S603 - a fixed argv, no shell.
-        gate_command(whitaker=whitaker, target=target, over_limit=over_limit),
-        check=False,
-        capture_output=True,
-        text=True,
-        env=gate_environment(),
-    )
+    try:
+        return subprocess.run(  # noqa: S603 - a fixed argv, no shell.
+            gate_command(whitaker=whitaker, target=target, over_limit=over_limit),
+            check=False,
+            capture_output=True,
+            text=True,
+            env=gate_environment(),
+            timeout=INVOCATION_DEADLINE_SECONDS,
+        )
+    except subprocess.TimeoutExpired as expired:
+        raise GateVerificationError(
+            f"the {target} probe did not finish within "
+            f"{INVOCATION_DEADLINE_SECONDS}s"
+        ) from expired
 
 
 def gate_environment() -> dict[str, str]:

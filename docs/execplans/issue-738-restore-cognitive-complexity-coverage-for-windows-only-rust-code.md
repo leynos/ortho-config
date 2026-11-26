@@ -153,3 +153,18 @@ records the fixture's deliberate non-membership.
   "the over-limit example passed at a limit of 9".
 - 2026-11-26: Make targets, CI job, contracts, fixture and documentation
   written. Formatting, Markdown, spelling and docstring gates pass.
+- 2026-11-26: First CI run green, including the `lint-whitaker-windows` job,
+  whose log reports `in-limit example accepted at limit 9` and
+  `over-limit example reported at 11 (limit 9)`.
+- 2026-11-26: CodeRabbit raised two findings, both accepted. The self-test now
+  receives `$(WHITAKER)`, so an override selects the same launcher as the pass.
+  The provisioning helper now takes the union of the staged and configured
+  channels, because an interrupted upgrade can leave the surviving suite on a
+  different toolchain from the one the installer would build next; channels
+  whose toolchain `rustup` does not already have are reported and skipped,
+  since installing one would download a compiler.
+- 2026-11-26: `make test` locally fails only in `-p ortho_l10n --test boundary`,
+  where thirteen tests report the same 440 s nested `cargo package` deadline.
+  The shared compile pool held 251 waiting requests from other agents'
+  worktrees at the time, and the same tests pass in CI on this commit. Local
+  discharge is blocked on host load, not on this change.
