@@ -976,8 +976,9 @@ configuration can use the runtime directly. See
   locales reuse the same helper by passing a different language identifier.
 
 - **Consumer integration:** Callers either pass a fully built
-  `FluentBundle<&FluentResource>` or supply paths that are loaded into a bundle
-  before building `FluentLocalizer`. The derive macro's builder gains optional
+  `FluentBundle<Arc<FluentResource>>` through `with_consumer_bundle`, or supply
+  `&'static str` resources through `with_consumer_resources`, which `try_build`
+  parses into a concurrent bundle. The derive macro's builder gains optional
   setters for locale selection and for registering consumer bundles so
   applications can perform all localization wiring alongside existing
   configuration discovery.
@@ -1009,6 +1010,19 @@ consumer-provided resources over it. Formatting errors raised during
 allowing the next bundle—or the caller’s fallback string—to supply the final
 message. Builders expose `with_error_reporter` so applications and tests can
 capture these issues without reconfiguring global loggers.
+
+`FluentLocalizerBuilder::with_use_isolating` records an `Option<bool>`. `None`,
+the default, leaves each bundle as constructed: resource-built bundles keep
+Fluent's `true` isolating default, and a supplied bundle keeps the setting its
+creator chose. `Some(value)` is applied once in `try_build` to both owned
+bundles, including a prebuilt consumer bundle, so the value also governs
+fallback lookups and the embedded clap-error catalogue, and builder-call order
+does not matter. A locale-script default was rejected: the requested locale
+does not describe the script of each interpolated value, so it cannot decide
+bidirectional safety, and the option is not general bidirectional sanitization.
+Isolation exists so right-to-left values remain readable inside left-to-right
+text; disabling it is appropriate only when the rendered text is known to be
+left-to-right.
 
 The implementation introduces a `LocalizationArgs<'a>` alias that wraps a
 `HashMap<&'a str, FluentValue<'a>>` so Fluent lookups retain access to named

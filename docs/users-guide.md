@@ -1338,6 +1338,53 @@ identifiers must use an explicit root rather than the binary name. Missing
 translations fall back to the original `clap` text and emit a warning event, so
 users still receive a useful error.
 
+### Remove Unicode isolation marks from diagnostics
+
+`FluentLocalizer` follows Fluent's default of wrapping every interpolated value
+in U+2068 FIRST STRONG ISOLATE and U+2069 POP DIRECTIONAL ISOLATE. The marks
+keep right-to-left values readable inside left-to-right text, but many
+terminals, fonts, and log viewers do not display them, and they break `grep`,
+string comparison, and snapshot tests. A default missing-argument diagnostic
+therefore contains an invisible U+2068 before `<PATH>` and a U+2069 after it.
+
+Call `with_use_isolating(false)` when the rendered text is known to be
+left-to-right. The following program prints
+`error: Missing required argument: <PATH>` on its first line, followed by
+clap's retained usage tail:
+
+<!-- tested-example: guide-localization-isolation -->
+```rust
+use clap::{ColorChoice, CommandFactory, Parser};
+use ortho_config::{FluentLocalizer, LocalizeCmd, langid, parse_localized_command};
+
+#[derive(Debug, Parser)]
+#[command(name = "acme", bin_name = "acme")]
+struct Cli {
+    /// File to read.
+    path: String,
+}
+
+fn main() -> Result<(), clap::Error> {
+    let localizer = FluentLocalizer::builder(langid!("en-US"))
+        .with_use_isolating(false)
+        .try_build()
+        .expect("embedded en-US catalogue");
+    let command = Cli::command()
+        .color(ColorChoice::Never)
+        .localize(&localizer);
+    if let Err(error) = parse_localized_command::<Cli, _, _>(command, ["acme"], &localizer) {
+        print!("{error}");
+    }
+    Ok(())
+}
+```
+
+The setting is applied to the embedded defaults and to the consumer bundle at
+build time, including a prebuilt bundle supplied through
+`with_consumer_bundle`, so it also covers fallback lookups and the embedded
+clap-error copy. This is not general bidirectional sanitization. Keep the
+default when a right-to-left value may be interpolated.
+
 ### Use the generated message identifiers
 
 Derived configurations implement `OrthoConfigLocalization`. Refer to Fluent

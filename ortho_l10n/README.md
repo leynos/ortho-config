@@ -36,6 +36,31 @@ catalogues can also use `include_str!("messages.ftl")`; loading a catalogue
 never invokes configuration discovery. Product catalogues and mappings from
 application diagnostics to message identifiers belong to the consumer.
 
+### Bidirectional isolation
+
+Fluent wraps every interpolated value in U+2068 FIRST STRONG ISOLATE and U+2069
+POP DIRECTIONAL ISOLATE by default. The marks keep right-to-left values
+readable inside left-to-right text, but many terminals, fonts, and log viewers
+do not display them, and they break `grep`, string comparison, and snapshot
+tests on diagnostics. Disable them when the rendered text is known to be
+left-to-right:
+
+```rust
+use ortho_l10n::{FluentLocalizer, FluentValue, LocalizationArgs, Localizer, langid};
+
+let localizer = FluentLocalizer::builder(langid!("en-GB"))
+    .with_consumer_resources(["welcome = Hello, { $name }!"])
+    .with_use_isolating(false)
+    .try_build()?;
+let mut args = LocalizationArgs::new();
+args.insert("name", FluentValue::from("Ada"));
+assert_eq!(localizer.lookup("welcome", Some(&args)).as_deref(), Some("Hello, Ada!"));
+# Ok::<(), ortho_l10n::FluentLocalizerError>(())
+```
+
+This is not general bidirectional sanitization. Keep the default when a
+right-to-left value may be interpolated into the text.
+
 ## Defaults and precedence
 
 `FluentLocalizer::builder` retains the existing embedded English and Japanese
@@ -50,6 +75,14 @@ prebuilt consumer bundle takes precedence over resource strings, even invalid
 strings. Lookup checks the consumer catalogue before defaults, trying an exact
 identifier before its dotted-to-hyphen spelling. Missing messages return `None`;
 `Localizer::message` supplies the application's fallback.
+
+An explicit `with_use_isolating` value is applied once at build time to both
+the embedded defaults and the consumer bundle, including a prebuilt bundle
+supplied through `with_consumer_bundle`. It therefore governs fallback lookups
+as well as consumer messages, and the order of the builder calls does not
+matter. Without an explicit setting, bundles built from resources keep Fluent's
+isolating default and a supplied bundle keeps whatever setting its creator
+chose.
 
 Other languages need `disable_defaults()`, even when consumer resources are
 supplied. A consumer-only localizer can also be empty.
