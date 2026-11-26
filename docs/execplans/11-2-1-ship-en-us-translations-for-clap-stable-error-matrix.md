@@ -1854,9 +1854,11 @@ stopping and reporting.
 - [x] (2026-11-26) Round-49 hosted certificate and the two remaining blockers.
       On head `2ef02429`, hosted run 45714124311 passes `msrv`, both Clippy
       legs, all three packaging dry runs, and on both `build-test` legs every
-      step except `Publish dry run` — including `Lint`, `Workflow contract
-      tests` and both `Test and Measure Coverage` runs, whose Linux log records
-      the boundary suite at 44 passed and 10 ignored. Locally, `make check-fmt`
+      step except `Publish dry run`. On Linux `Lint`, `Workflow contract tests`
+      and both `Test and Measure Coverage` runs pass, and the Linux coverage log
+      records the boundary suite at 44 passed and 10 ignored. On Windows the
+      general `Lint` step is skipped, and the Clippy-only lint plus both coverage
+      runs pass. Locally, `make check-fmt`
       (118 files unchanged), `make markdownlint`, `make lint` and the full
       `clap_error_coverage` target (110 tests) pass. Two blockers remain, both
       outside this branch's authority:
