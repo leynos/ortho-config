@@ -73,11 +73,6 @@ const SIMPLE_RUNS: &[SimpleRun] = &[
         stdout: "verbose=true\n",
     },
     SimpleRun {
-        id: "guide-localization-isolation",
-        args: &[],
-        stdout: "error: Missing required argument: <PATH>\n",
-    },
-    SimpleRun {
         id: "guide-hermetic-discovery",
         args: &[],
         stdout: "candidate=/srv/acme/server.toml\n",
@@ -154,26 +149,39 @@ const SIMPLE_RUNS: &[SimpleRun] = &[
     },
 ];
 
-/// Runs every [`SimpleRun`] against the built workspace.
+/// Examples whose expected output is the published transcript fence beside them.
+///
+/// The document is loaded rather than restated here: a copy would let the
+/// published transcript and the tested text drift apart.
+const PUBLISHED_TRANSCRIPTS: &[(&str, &str)] = &[
+    ("guide-skill-validation", "guide-skill-validation-output"),
+    (
+        "guide-localization-isolation",
+        "guide-localization-isolation-output",
+    ),
+];
+
+/// Runs every [`SimpleRun`] and every published transcript against the built workspace.
 pub(super) fn assert_simple_runs(workspace: &mut ExampleWorkspace) -> Result<()> {
     SIMPLE_RUNS
         .iter()
         .try_for_each(|run| assert_simple_run(workspace, run))?;
-    assert_skill_validation_transcript(workspace)
+    PUBLISHED_TRANSCRIPTS
+        .iter()
+        .try_for_each(|(id, transcript)| assert_published_transcript(workspace, id, transcript))
 }
 
-/// Asserts the skill-validation example against its published transcript.
-///
-/// This example's expected output is the fence beside it in the users' guide,
-/// so the document is loaded rather than restated here: a copy would let the
-/// published transcript and the tested text drift apart.
-fn assert_skill_validation_transcript(workspace: &mut ExampleWorkspace) -> Result<()> {
-    const ID: &str = "guide-skill-validation";
-    let published = documented_example("guide-skill-validation-output")?;
-    let actual = run_stdout(workspace, ID, &[])?;
+/// Asserts one example's stdout against the transcript fence published beside it.
+fn assert_published_transcript(
+    workspace: &mut ExampleWorkspace,
+    id: &'static str,
+    transcript: &str,
+) -> Result<()> {
+    let published = documented_example(transcript)?;
+    let actual = run_stdout(workspace, id, &[])?;
     ensure!(
         actual == published.body,
-        "{ID} stdout differed from the published transcript: \
+        "{id} stdout differed from the published transcript: \
          expected {:?}, got {actual:?}",
         published.body
     );
