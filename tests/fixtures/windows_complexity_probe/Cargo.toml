@@ -1,0 +1,16 @@
+# Standalone on purpose: the `over_limit` feature is meant to fail the
+# complexity gate, so a workspace build with `--all-features` would fail every
+# time it ran. `make check-windows-complexity-gate` drives this crate directly.
+[package]
+name = "windows_complexity_probe"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[features]
+# Enables the example that must be reported. One crate then demonstrates both
+# directions: the default build is the in-limit pass, this feature the
+# over-limit failure.
+over_limit = []

@@ -3109,12 +3109,14 @@ Two rules keep this structure from decaying:
   into a branch ladder. Clippy's `cognitive_complexity` would count those
   branches, so it is not enabled: Whitaker's experimental
   `macro_aware_cognitive_complexity` gates complexity at 9 (`dylint.toml`),
-  skipping branching a macro generated. In this workspace the enabling crate is
-  `rstest-bdd`, a dev-dependency, so the ladder appears in every test build
-  even though the shipped libraries never enable it. A function that reports
-  two facts still delegates each to a small `fn log_<fact>` helper, as
-  `bridge/telemetry.rs` and the atomic-write helpers in `output/mod.rs` do;
-  their module docs record the reason.
+  skipping branching a macro generated. `make lint-whitaker-windows` applies
+  the same lint and limit to Windows-only code (see
+  [Windows-only code and the complexity gate](#windows-only-code-and-the-complexity-gate)).
+  In this workspace the enabling crate is `rstest-bdd`, a dev-dependency, so
+  the ladder appears in every test build even though the shipped libraries
+  never enable it. A function that reports two facts still delegates each to a
+  small `fn log_<fact>` helper, as `bridge/telemetry.rs` and the atomic-write
+  helpers in `output/mod.rs` do; their module docs record the reason.
 - **Split by size, not by taste.** The vocabulary, the entrypoints and their
   documentation together reach the 400-line module cap, which is why the
   emitters and the counters live in sibling modules. Moving code back would
@@ -4054,7 +4056,9 @@ references (the one-SHA contract in `sccache_wiring_test.py`, which exempts
 commit hashes, and the Whitaker pin follows the rule for every non-exempt
 reference). The workflow contract `whitaker_install_test.py` asserts exactly one
 `Install Whitaker` step, using the action at a full commit hash, with no
-script of its own, on the Linux leg only.
+script of its own, on the Linux leg only. A second Linux job installs it the
+same way for the Windows-target complexity pass described below; both steps are
+Linux, because the Windows leg runs Clippy alone.
 
 Whitaker takes none of the
 [development build standard](#development-build-standard). `make lint-whitaker`
@@ -4063,6 +4067,58 @@ because Whitaker runs on the toolchain its installer manages rather than on
 this repository's pinned nightly, and `mold` is not a prerequisite it can rely
 on. `build_standard_routing_test.py` holds the assignment to exactly
 `-D warnings`.
+
+### Windows-only code and the complexity gate
+
+A Dylint lint runs inside a compiler driver, so the suite scores only the `cfg`
+surface that driver was asked to build. On the host, every `#[cfg(windows)]`
+item is removed before any lint sees it, and the Windows continuous-integration
+(CI) leg runs `make lint-clippy` alone. After PR #737 replaced Clippy's
+`cognitive_complexity` with Whitaker's macro-aware lint, Windows-only code such
+as `windows_normalized_key` therefore had no complexity gate at all
+([#738](https://github.com/leynos/ortho-config/issues/738)).
+
+`make lint-whitaker-windows` restores that coverage without a Windows Whitaker
+lane, which the issue records as not required. It runs the same suite at the
+same target Clippy's Windows leg builds, from a Linux runner:
+
+```sh
+RUSTFLAGS="$(STRICT_RUSTFLAGS)" $(WHITAKER) --all -- \
+  --all-targets --all-features --target $(WINDOWS_TARGET)
+```
+
+Three properties are deliberate:
+
+- **One threshold.** Both passes read `[macro_aware_cognitive_complexity]` in
+  `dylint.toml`, so the limit is 9 for Windows-only code too, and neither
+  recipe carries a `max_complexity` override. `WINDOWS_TARGET` defaults to
+  `x86_64-pc-windows-msvc`, the triple the Windows leg builds natively.
+- **One macro policy.** Branches a macro generated are not counted, in either
+  pass, because it is the same lint. The only difference from the host pass is
+  the target, which is what makes the two surfaces comparable at all.
+- **No Windows toolchain.** `cargo check` does not link, so the cross-check
+  needs the target's `rust-std` and nothing else: no MSVC linker, no SDK, no
+  Windows runner.
+
+The `rust-std` component belongs in Whitaker's own toolchain, which is the
+installer's rather than the pin in `rust-toolchain.toml`.
+`make install-whitaker-windows-target` reads that channel from
+`whitaker-installer install --dry-run` and adds the component with `rustup`;
+`make check-whitaker-windows-target` verifies it and is a prerequisite of the
+gate, so a missing component is reported as missing rather than as a lint
+failure from inside Cargo. The split mirrors `install-build-tools` and
+`check-build-tools`: a gate does not reach the network on its own.
+
+A rolling suite can change what it scores, and the command can lose its target
+without any commit here failing, so the gate carries its own evidence.
+`make check-windows-complexity-gate` runs the same command over
+`tests/fixtures/windows_complexity_probe`, a standalone crate — deliberately
+outside the workspace, or `--all-features` would fail every build — whose every
+item is `#[cfg(windows)]`. Its default build carries only an in-limit example
+and must exit zero; its `over_limit` feature adds an example that scores above
+the limit and must be reported. Running that check at the host target instead
+makes the over-limit example vanish, which is the failure the probe exists to
+catch.
 
 ### Responding to `bumpy_road_function` findings
 
@@ -4253,6 +4309,7 @@ they take.
 | `make build`                                         | The host's standard, restated; no `-D warnings`                              | Development          |
 | `make release`                                       | None: an empty assignment displaces the configuration                        | Production           |
 | `make lint-whitaker`                                 | `-D warnings` alone                                                          | Whitaker's toolchain |
+| `make lint-whitaker-windows`                         | `-D warnings` alone, at the Windows target                                   | Whitaker's toolchain |
 | `make msrv-build`                                    | `-D warnings` alone, on the stable MSRV compiler                             | MSRV                 |
 | `clippy-beta` lane                                   | `-D warnings` alone, with `BUILD_STANDARD=0` on `cargo +beta`                | Advisory beta        |
 | Coverage in CI                                       | `-D warnings` from the job; `cargo llvm-cov` appends `-Cinstrument-coverage` | Coverage             |
@@ -4270,7 +4327,8 @@ Notes on individual rows:
   `-D warnings` by design.
 - `make lint-whitaker` assigns `STRICT_RUSTFLAGS` (`-D warnings`) alone.
   Whitaker runs on its installer-managed toolchain and takes none of the
-  standard.
+  standard. `make lint-whitaker-windows` makes the same assignment for the same
+  reason; only its target differs.
 - `make msrv-build` runs on a stable compiler, which refuses the nightly-only
   flags, so it assigns `STRICT_RUSTFLAGS` alone to displace the configuration.
 - Releases are not a development route and are not built on a stable compiler:

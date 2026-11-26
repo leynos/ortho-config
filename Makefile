@@ -1,4 +1,6 @@
 .PHONY: help all clean test boundary build release lint lint-clippy lint-whitaker \
+	lint-whitaker-windows check-whitaker-windows-target \
+	install-whitaker-windows-target check-windows-complexity-gate \
 	docstring-coverage fmt check-fmt markdownlint spellcheck spelling nixie \
 	typecheck msrv-build python-test-deps publish-check powershell-wrapper-validate \
 	test-workflow-contracts install-kani kani-check install-verus \
@@ -119,13 +121,18 @@ TYPOS_CONFIG_BUILDER = $(UV_ENV) $(UV) tool run --python 3.14 --from \
 PUBLISH_CHECK_FLAGS ?=
 PYTHON_VENV ?= scripts/.venv
 UV ?= uv
+# The interpreter for the repository's own maintenance scripts, as distinct
+# from `PYTHON_VERSION`, which names the interpreter `uv` downloads for the
+# test suites. `python3` is what CI already runs them with.
+PYTHON ?= python3
 PYTHON_VERSION ?= 3.13
 PYTHON_DEPS_FILE ?= scripts/requirements-test.txt
 GIT ?= git
 PYTEST_FLAGS ?= --doctest-modules scripts/bump_version.py scripts/discard_build_trees.py \
 	scripts/release_archive.py scripts/release_archive_naming.py \
 	scripts/verify_child_cargo_reader_equivalence.py \
-	scripts/verify_release_archives.py scripts/tests -q
+	scripts/verify_release_archives.py scripts/verify_windows_complexity_gate.py \
+	scripts/whitaker_windows_target.py scripts/tests -q
 # Pinned rather than tracking the default branch: the publish step depends
 # on the pre-flight skip, which v0.3.1 is the first release to carry
 # (leynos/lading#261). An unpinned `uvx --from git+...` would also change
@@ -330,6 +337,42 @@ lint-clippy: check-build-tools ## Run rustdoc and Clippy with warnings denied
 # STRICT_RUSTFLAGS alone, not GATE_RUSTFLAGS.
 lint-whitaker: ## Run the Whitaker Dylint suite with warnings denied
 	RUSTFLAGS="$(STRICT_RUSTFLAGS)" $(WHITAKER) --all -- --all-targets --all-features
+
+# Whitaker lints inside the compiler, so the suite sees only the `cfg` surface
+# the compiler was asked to build. On the host that surface has no
+# `#[cfg(windows)]` item in it: the compiler removes those before any lint
+# runs, which is why the host pass alone left Windows-only code unscored after
+# Clippy's `cognitive_complexity` was retired (issue #738). Asking for the
+# Windows target keeps them, so the same suite, the same `dylint.toml`
+# threshold, and the same macro-aware scoring reach the code that runs on
+# Windows only. Cross-checking needs the target's `rust-std` and no linker,
+# because `cargo check` does not link.
+#
+# The assignment is `STRICT_RUSTFLAGS` alone for the same reason the host pass
+# uses it: Whitaker runs on its installer-managed toolchain, not this
+# repository's.
+WINDOWS_TARGET ?= x86_64-pc-windows-msvc
+
+lint-whitaker-windows: check-whitaker-windows-target ## Score the Windows-only cfg surface with Whitaker
+	RUSTFLAGS="$(STRICT_RUSTFLAGS)" $(WHITAKER) --all -- \
+		--all-targets --all-features --target $(WINDOWS_TARGET)
+
+# The suite's toolchain is the installer's, not this repository's, so the
+# target's `rust-std` has to be added to that toolchain rather than to the pin
+# in `rust-toolchain.toml`. Split into an install step and a check step for the
+# same reason `install-build-tools` and `check-build-tools` are split: a gate
+# reports a missing prerequisite instead of reaching the network on its own.
+install-whitaker-windows-target: ## Install the Windows rust-std for Whitaker's toolchain
+	$(PYTHON) scripts/whitaker_windows_target.py install --target $(WINDOWS_TARGET)
+
+check-whitaker-windows-target: ## Verify Whitaker's toolchain can build the Windows target
+	$(PYTHON) scripts/whitaker_windows_target.py check --target $(WINDOWS_TARGET)
+
+# The gate is only worth its runtime if it can still fail. This runs the same
+# command against a two-function fixture: the in-limit example must pass, and
+# the over-limit example, enabled by a Cargo feature, must be reported.
+check-windows-complexity-gate: check-whitaker-windows-target ## Prove the Windows complexity gate passes and fails as specified
+	$(PYTHON) scripts/verify_windows_complexity_gate.py --target $(WINDOWS_TARGET)
 
 # The inventory is discovered inside the recipe and handed over NUL-separated.
 # `$(shell ...)` splits on whitespace and has no way to quote a path, so a file

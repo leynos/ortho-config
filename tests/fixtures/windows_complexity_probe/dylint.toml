@@ -1,0 +1,10 @@
+# The gate under test reads this file, so the probe is scored at exactly the
+# workspace's threshold and with the same macro-aware handling. The contract
+# `tests/workflow_contracts/windows_complexity_gate_test.py` holds these two
+# settings equal to the repository's own `dylint.toml`, because a probe tuned
+# to a different limit would prove nothing about the real gate.
+[whitaker]
+experimental = ["macro_aware_cognitive_complexity"]
+
+[macro_aware_cognitive_complexity]
+max_complexity = 9

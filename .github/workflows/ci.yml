@@ -520,6 +520,86 @@ jobs:
           LADING_SKIP_PREFLIGHT: 'true'
         run: make publish-check
 
+  # Cognitive-complexity coverage for Windows-only code (issue #738).
+  #
+  # Whitaker's lints run inside a compiler driver, so the suite scores only
+  # the `cfg` surface that driver was asked to build. The host pass in
+  # `make lint` therefore sees no `#[cfg(windows)]` item at all — the compiler
+  # removes those before any lint runs — and the Windows leg of `build-test`
+  # runs Clippy alone. After PR #737 retired Clippy's `cognitive_complexity`
+  # in favour of Whitaker's macro-aware lint, Windows-only code had no
+  # complexity gate.
+  #
+  # This job restores that coverage without a Windows Whitaker lane, which the
+  # issue records as not required: it runs the same suite, at the same
+  # `dylint.toml` threshold, with the same macro-aware scoring, checked at the
+  # Windows target from Linux. Only the target differs, so the metric cannot
+  # drift between the two surfaces.
+  #
+  # The cross-check needs the target's `rust-std` and no linker, because
+  # `cargo check` does not link: no Windows runner, MSVC linker or SDK is
+  # involved. That component goes into Whitaker's own toolchain, which is the
+  # installer's rather than this repository's pin, so
+  # `make install-whitaker-windows-target` reads the channel from the
+  # installer first.
+  lint-whitaker-windows:
+    name: Whitaker (windows target)
+    runs-on: ubuntu-latest
+    # The suite's toolchain compiles the whole workspace a second time, for a
+    # target with no cache history. An hour covers a cold run and a cache miss
+    # without leaving a stuck job unbilled for GitHub's default six hours.
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    env:
+      CARGO_TERM_COLOR: always
+      SCCACHE_GHA_ENABLED: "true"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      - name: Setup Rust
+        uses: leynos/shared-actions/.github/actions/setup-rust@0eabb6bc07148981de5da395e30cd78d83f5c7c2
+
+      # The same pinned action the required Linux leg installs, so the suite
+      # this job lints with is the suite that leg lints with.
+      - name: Install Whitaker
+        uses: leynos/shared-actions/.github/actions/install-whitaker@0eabb6bc07148981de5da395e30cd78d83f5c7c2
+
+      # Split from the lint step so a missing component is reported as
+      # missing, rather than as a lint failure from inside Cargo.
+      - name: Install the Windows rust-std for Whitaker's toolchain
+        run: make install-whitaker-windows-target
+
+      - name: Lint Windows-only code
+        run: make lint-whitaker-windows
+
+      # The suite is a rolling release, so a revision can change what the lint
+      # scores, and the command can lose its target without anything here
+      # failing. This runs the same command over a two-function fixture: the
+      # in-limit example must pass and the over-limit example must be reported.
+      - name: Prove the gate can still fail
+        run: make check-windows-complexity-gate
+
+      # Always runs, because the statistics of a failed build are often what
+      # explains it. Invoked through `SCCACHE_PATH` with no fallback, for the
+      # reason the other caching jobs give: a bare `sccache` reports on
+      # whichever binary PATH resolves, which may not be the one that did the
+      # compiling.
+      - name: Report sccache statistics (lint-whitaker-windows)
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            printf '### sccache (lint-whitaker-windows)\n\n'
+            printf -- '- backend: %s\n\n' \
+              "${{ env.SCCACHE_GHA_ENABLED == 'true' && 'GitHub Actions cache' || 'local disk' }}"
+            printf '```\n'
+            "${SCCACHE_PATH}" --show-stats
+            printf '```\n'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
   # Early-warning job for Clippy lints landing on the Rust beta channel.
   # It is advisory (`continue-on-error`) so new lints surface on the pull
   # request without blocking merges; the pinned-toolchain lint job above
