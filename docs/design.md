@@ -966,8 +966,11 @@ configuration can use the runtime directly. See
 - **Fluent-backed implementation:** `FluentLocalizer` wraps a default bundle of
   library strings and an optional consumer bundle. Lookups favour the consumer
   bundle, falling back to the defaults when a message or attribute is missing.
-  Formatting errors are logged and result in `None` so the caller can fall back
-  to `clap`'s native message.
+  A formatting error is reported to the installed reporter and the lookup
+  continues with the next bundle, so a broken consumer pattern can still be
+  covered by embedded copy. Only when every bundle misses or fails to format
+  does the lookup return `None`, letting the caller fall back to `clap`'s
+  native message.
 
 - **Bundling defaults:** Default message catalogues live under
   `ortho_l10n/locales/<lang>/messages.ftl` and are embedded with
@@ -976,11 +979,39 @@ configuration can use the runtime directly. See
   locales reuse the same helper by passing a different language identifier.
 
 - **Consumer integration:** Callers either pass a fully built
-  `FluentBundle<&FluentResource>` or supply paths that are loaded into a bundle
-  before building `FluentLocalizer`. The derive macro's builder gains optional
-  setters for locale selection and for registering consumer bundles so
-  applications can perform all localization wiring alongside existing
-  configuration discovery.
+  `FluentBundle<Arc<FluentResource>>` through `with_consumer_bundle` or supply
+  `&'static str` resources through `with_consumer_resources`, which the builder
+  parses and registers in caller-provided order. A prebuilt bundle takes
+  precedence over resource strings, even invalid ones. The derive macro's
+  builder gains optional setters for locale selection and for registering
+  consumer bundles so applications can perform all localization wiring
+  alongside existing configuration discovery.
+
+- **Bidirectional isolation:** while `use_isolating` is `true`, `Fluent` wraps
+  a substituted variable, or another non-literal expression, in an outer pair
+  of U+2068 FIRST STRONG ISOLATE and U+2069 POP DIRECTIONAL ISOLATE marks when
+  the pattern also contains literal text, which protects right-to-left
+  substitutions inside left-to-right copy. The resolver adds no outer marks in
+  three cases: a pattern that is a single placeable, such as
+  `name = { $name }`, because there is no surrounding text to protect; a direct
+  message reference or term reference; and a string literal. A referenced
+  message can still isolate its own placeables, so the outer marks are not a
+  guarantee about a reference's rendered content. The marks are invisible, but
+  they defeat `grep`, exact string comparison, and snapshot assertions taken
+  from diagnostics, and some terminals and log viewers render them as
+  replacement glyphs. `FluentLocalizerBuilder::with_use_isolating` stores an
+  `Option<bool>`: `None` preserves each bundle's own setting—`Fluent`'s `true`
+  default for resource-built bundles and whatever a supplied bundle chose—while
+  an explicit value is applied once in `try_build` to both the defaults bundle
+  and the consumer bundle, including a prebuilt one, so both then agree.
+  Applying the value after construction keeps setter order irrelevant and makes
+  fallback lookups and the embedded Clap error copy agree with the consumer
+  catalogue. A locale-script default—disabling isolation automatically for
+  left-to-right scripts—was rejected: it would make rendering depend on the
+  locale tag rather than the text, change output for existing callers who only
+  upgrade the crate, and still be wrong for right-to-left values interpolated
+  into a left-to-right locale's copy. The setting controls one `Fluent`
+  formatting option; it is not general bidirectional sanitization.
 
 - **Macro participation:** Generated code accepts a `&dyn Localizer` and emits
   identifiers for every user-facing string. Developers can override the

@@ -51,6 +51,8 @@ const EXPECTED_EXAMPLE_IDS: &[&str] = &[
     "guide-localization",
     "guide-localization-ids",
     "guide-localization-ids-output",
+    "guide-localization-isolation",
+    "guide-localization-isolation-output",
     "guide-metrics-install",
     "guide-missing-values",
     "guide-missing-values-output",

@@ -166,6 +166,9 @@
   `renderer` field when building documentation IR or `AgentCommand` literals,
   optionally declare how a command renders, collect bridge-cache metrics from
   the CLI, and adopt the shared test subprocess helpers.
+- [v0.12.0 migration guide](v0-12-0-migration-guide.md): no required code
+  changes; optionally call `with_use_isolating(false)` to remove the Unicode
+  isolation marks `Fluent` writes around interpolated values.
 
 ## Testing and documentation references
 

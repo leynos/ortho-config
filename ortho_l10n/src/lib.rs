@@ -16,6 +16,7 @@ pub use identifier::{
 pub use unic_langid::{LanguageIdentifier, langid};
 
 mod fluent;
+mod fluent_identifiers;
 mod identifier;
 use fluent::{BundleWithLocale, normalize_identifier};
 
@@ -119,6 +120,10 @@ pub struct FluentLocalizer {
 }
 
 /// Builds a [`FluentLocalizer`].
+///
+/// Configure bidirectional isolation with
+/// [`with_use_isolating`](FluentLocalizerBuilder::with_use_isolating) when
+/// terminal diagnostics must not carry `Fluent`'s invisible isolate marks.
 pub struct FluentLocalizerBuilder {
     /// Locale shared by embedded and consumer catalogues built from this configuration.
     locale: LanguageIdentifier,
@@ -130,6 +135,11 @@ pub struct FluentLocalizerBuilder {
     report_issue: FormattingIssueReporter,
     /// Controls whether a built-in language catalogue is required and loaded.
     use_defaults: bool,
+    /// Overrides `Fluent`'s bidirectional isolation of interpolated values.
+    ///
+    /// `None` leaves every bundle as its constructor or caller left it, so
+    /// `Fluent`'s `true` default and any supplied bundle's own setting survive.
+    use_isolating: Option<bool>,
 }
 
 /// Errors surfaced when constructing a [`FluentLocalizer`].
@@ -322,3 +332,6 @@ mod tests;
 
 #[cfg(test)]
 mod characterization;
+
+#[cfg(test)]
+mod isolation_tests;
