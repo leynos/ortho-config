@@ -15,6 +15,12 @@ The workspace runs one unified test workflow via Make targets:
 These are required quality gates for code changes. Behavioural coverage runs
 inside the standard Rust test harness, not a bespoke test runner.
 
+`make test` runs `cargo fetch --locked` before the test commands so that nested
+builds a test starts find the package cache warm. That step requires a current
+`Cargo.lock`: a stale lock fails the gate before any test runs, which is the
+intended signal to regenerate it rather than let the tests resolve dependencies
+themselves.
+
 `make lint` also runs `interrogate` over every tracked and non-ignored untracked
 `*.py` and `*.pyi` file. Git path discovery includes hidden directories and
 does not restrict the scan to package and test directories, so Python sources
@@ -912,9 +918,16 @@ runtime and derive-time Fluent identifier segments. Reuse it, or the
 complete-identifier helpers re-exported beside it, from command localization,
 derive output, and future lookup-id generation instead of duplicating ASCII
 normalization rules. Keep the tolerant catalogue load path in
-`ortho_l10n/src/fluent.rs` separate: it exists only to pre-normalize
-hand-authored resource ids such as dotted catalogue keys before Fluent parses
-them, and must not be used to validate generated command ids.
+`ortho_l10n/src/fluent_identifiers.rs` separate: it exists only to
+pre-normalize hand-authored resource ids such as dotted catalogue keys before
+Fluent parses them, and must not be used to validate generated command ids.
+That module owns `normalize_identifier`, `normalize_resource_ids`, and the
+load-time identifier predicates; `ortho_l10n/src/fluent.rs` re-exports the two
+lookup entry points so the established `crate::fluent` paths keep working. The
+split is a module-size decision, not a behavioural one: bundle construction,
+builder configuration, and the crate-internal isolation override earn their own
+file, and the identifier rewriting is cohesive enough to stand beside them
+without exceeding the module limit.
 
 `#[derive(OrthoConfig)]` emits `OrthoConfigLocalization` for the deriving
 configuration. Its `LOCALIZATION_BASE` is the dotted catalogue root from
@@ -1397,6 +1410,18 @@ consumer's catalogue over them. See
 [ADR-0015](adrs/adr-0015-localization-runtime-boundary.md) for why the runtime
 is a separate crate and why `ortho_config` re-exports its actual types instead
 of adding bridge traits.
+
+`FluentLocalizerBuilder::with_use_isolating` controls the bidirectional
+isolation marks `Fluent` writes around interpolated values. An unset
+`Option<bool>` preserves each bundle's own setting, so resource-built bundles
+keep `Fluent`'s `true` default and a supplied prebuilt bundle keeps whatever it
+chose. An explicit value is applied once in `try_build` to the embedded
+defaults and the consumer bundle, including a prebuilt one, which makes setter
+order irrelevant and keeps fallback copy and the built-in Clap error text
+consistent with the consumer catalogue. The option changes one `Fluent`
+formatting setting; it does not sanitize catalogue text. See
+[the design document](design.md#412-localization-architecture) for the contract
+and why a locale-script default was rejected.
 
 The remaining proposals belong at clear ownership boundaries: locale lifecycle,
 Clap coverage, and translation interfaces in the core localizer; identifier

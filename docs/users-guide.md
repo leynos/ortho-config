@@ -2908,6 +2908,10 @@ how JSON mode frames its streams is roadmap 7.2.4.
 Each release with compatibility notes has a migration guide that separates
 required changes from improvements that can be adopted later:
 
+- [v0.12.0 migration guide](v0-12-0-migration-guide.md) — from v0.11.0. No
+  code changes are required; the guide covers the opt-in
+  `with_use_isolating(false)` option for removing Unicode isolation marks from
+  localized output.
 - [v0.11.0 migration guide](v0-11-0-migration-guide.md) — from v0.10.0. Only
   Rust code that builds documentation IR or `AgentCommand` literals needs a
   change; JSON, Fluent catalogues, and derived configuration do not.

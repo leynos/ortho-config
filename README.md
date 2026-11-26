@@ -271,6 +271,8 @@ ______________________________________________________________________
 
 - [User's guide][users-guide] — build a real CLI one practical task at a time,
   with worked examples.
+- [v0.12.0 migration guide][migration-guide-v0-12] — upgrade from v0.11.0;
+  no code changes are required, and the opt-in isolation option is described.
 - [v0.11.0 migration guide][migration-guide-v0-11] — upgrade from v0.10.0;
   only struct literals of documentation IR or `AgentCommand` need editing.
 - [v0.10.0 migration guide][migration-guide-v0-10] — upgrade from v0.9.0; most
@@ -324,6 +326,7 @@ less of a chore? Contributions are welcome. Start with the
 [licence]: https://github.com/leynos/ortho-config/blob/main/LICENSE
 [migration-guide]: https://github.com/leynos/ortho-config/blob/main/docs/v0-9-0-migration-guide.md
 [migration-guide-v0-10]: https://github.com/leynos/ortho-config/blob/main/docs/v0-10-0-migration-guide.md
+[migration-guide-v0-12]: https://github.com/leynos/ortho-config/blob/main/docs/v0-12-0-migration-guide.md
 [migration-guide-v0-11]: https://github.com/leynos/ortho-config/blob/main/docs/v0-11-0-migration-guide.md
 [package]: https://crates.io/crates/ortho_config
 [roadmap]: https://github.com/leynos/ortho-config/blob/main/docs/roadmap.md
