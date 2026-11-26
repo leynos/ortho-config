@@ -1883,7 +1883,29 @@ stopping and reporting.
         (queues of 100-640 for two days), never an assertion or a compiler
         diagnostic. The hosted runs cannot stand in for these two targets:
         CI invokes a coverage action rather than `make test` or
-        `make boundary`.
+        `make boundary`. Four boundary attempts recorded 25/19, 28/16, 30/14
+        and 28/16 passed/failed; in the last, every failure is an allowance
+        exhaustion while a nested Cargo invocation waited for a sibling, plus
+        one probe-start timeout, and no assertion and no compiler diagnostic
+        appears in any of them.
+
+- [ ] (2026-11-26) **Impasse on the two external blockers.** The implementation
+      is complete and the whole-plan assessment agrees that no in-scope
+      implementation defect remains on `d1336ba8`. What stops equilibrium is
+      outside this branch's authority:
+      1. **Publication.** `Publish dry run` fails with `E0432` for
+         `ortho_config_macros::RequiredConfigSchema`, the #414 release-ordering
+         class. Owner: the release maintainer, who must publish the macro crate
+         or approve a remedy; both dispatch publish dry runs then need
+         verifying.
+      2. **A quieter host.** Standalone `make test` and `make boundary` need
+         nested Cargo builds to finish inside main's own 900 s and 440 s
+         deadlines. Compile admission has held all four slots with queues of
+         100-640 for two days, and every local failure is a deadline. Owner:
+         whoever can run the gates when the host is idle, or an operator
+         decision to raise those main-owned budgets.
+      This item stays unchecked until one of those conditions changes; the
+      logs under `/tmp` are the evidence.
 
 - [x] (2026-11-21) Round-22 conflict dispositions. Five paths conflicted, and
       every one was resolved by preserving both sides' intent rather than by
