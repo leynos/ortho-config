@@ -92,28 +92,43 @@ mod tests {
     fn normalizes_top_level_dotted_ids() {
         let resource = "cli.about = About text";
         let normalized = normalize_resource_ids(resource);
-        assert_eq!(normalized, "cli-about = About text");
+        assert_eq!(
+            normalized, "cli-about = About text",
+            "a top-level dotted id should be normalized to hyphen spelling: {normalized:?}"
+        );
     }
 
     #[test]
     fn leaves_indented_lines_with_equals_untouched() {
         let resource = "message =\n    section.title = Title line";
         let normalized = normalize_resource_ids(resource);
-        assert!(normalized.contains("    section.title = Title line"));
+        assert!(
+            normalized.contains("    section.title = Title line"),
+            "an indented assignment line should pass through unchanged: {normalized:?}"
+        );
     }
 
     #[test]
     fn leaves_terms_and_attributes_unchanged() {
         let resource = "-term.id = Term value\nmessage = Value\n    .label = Label";
         let normalized = normalize_resource_ids(resource);
-        assert!(normalized.contains("-term.id = Term value"));
-        assert!(normalized.contains("    .label = Label"));
+        assert!(
+            normalized.contains("-term.id = Term value"),
+            "a term definition should pass through unchanged: {normalized:?}"
+        );
+        assert!(
+            normalized.contains("    .label = Label"),
+            "an attribute line should pass through unchanged: {normalized:?}"
+        );
     }
 
     #[test]
     fn normalizes_unicode_identifiers() {
         let resource = "ключ.значение = Привет";
         let normalized = normalize_resource_ids(resource);
-        assert!(normalized.starts_with("ключ-значение = Привет"));
+        assert!(
+            normalized.starts_with("ключ-значение = Привет"),
+            "a non-ASCII dotted id should normalize while its value survives: {normalized:?}"
+        );
     }
 }

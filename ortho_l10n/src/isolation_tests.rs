@@ -214,9 +214,14 @@ fn disabled_isolation_still_reports_formatting_failures() {
 
 #[test]
 fn disabled_isolation_still_falls_back_to_embedded_defaults() {
+    // The consumer owns `cli.usage` but references an argument the caller never
+    // supplies, so the consumer pattern fails to format and the lookup must
+    // continue to the embedded default. Without a consumer `cli.usage` the
+    // assertion below would pass on a plain miss and prove nothing about
+    // fallback after a formatting failure.
     let localizer = FluentLocalizer::builder(langid!("en-US"))
         .with_use_isolating(false)
-        .with_consumer_resources(["welcome = Hello, { $missing }!"])
+        .with_consumer_resources(["cli.usage = Usage: { $missing }"])
         .try_build()
         .expect("valid catalogues");
     let mut args = LocalizationArgs::new();
