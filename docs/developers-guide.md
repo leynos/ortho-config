@@ -4113,13 +4113,16 @@ value parsing to a helper such as `parse_default_from_meta`,
 each helper to one decision keeps the weighted clusters apart while leaving
 each parse contract in one readable place.
 
-Test and helper targets are in scope too. The hosted lint log can stop at the
+Test and helper targets are in scope too. A hosted lint log can stop at the
 first failing library target, before the suite reaches a `tests/` target or a
-test-support crate, so only a whole local `make lint` shows whether those
-targets are clean. The boundary-test and test-helper findings for issue #697
-were resolved the same way: the render helpers and the serialization
-regressions now name the steps they used to inline, and every concurrency,
-deadline, ordering and closure assertion stayed in place.
+test-support crate, so a log that ends at a library failure says nothing about
+them. A successful hosted run covers those targets, and `make lint-whitaker`
+reaches them locally because it passes `--all-targets`; run it, or the whole
+`make lint`, before concluding that they are clean. The boundary-test and
+test-helper findings for issue #697 were resolved the same way: the render
+helpers and the serialization regressions now name the steps they used to
+inline, and every concurrency, deadline, ordering and closure assertion stayed
+in place.
 
 ### The advisory Clippy-on-beta lane
 
