@@ -966,8 +966,11 @@ configuration can use the runtime directly. See
 - **Fluent-backed implementation:** `FluentLocalizer` wraps a default bundle of
   library strings and an optional consumer bundle. Lookups favour the consumer
   bundle, falling back to the defaults when a message or attribute is missing.
-  Formatting errors are logged and result in `None` so the caller can fall back
-  to `clap`'s native message.
+  A formatting error is reported to the installed reporter and the lookup
+  continues with the next bundle, so a broken consumer pattern can still be
+  covered by embedded copy. Only when every bundle misses or fails to format
+  does the lookup return `None`, letting the caller fall back to `clap`'s
+  native message.
 
 - **Bundling defaults:** Default message catalogues live under
   `ortho_l10n/locales/<lang>/messages.ftl` and are embedded with

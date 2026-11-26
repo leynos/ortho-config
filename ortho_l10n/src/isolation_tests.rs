@@ -120,10 +120,15 @@ fn explicit_setting_outranks_a_prebuilt_bundle(
     );
 }
 
-#[test]
-fn unspecified_setting_preserves_a_prebuilt_bundle_without_isolation() {
+#[rstest]
+#[case::opted_out_bundle(false, PLAIN_WELCOME)]
+#[case::isolating_bundle(true, ISOLATED_WELCOME)]
+fn unspecified_setting_preserves_a_prebuilt_bundles_own_isolation(
+    #[case] bundle_setting: bool,
+    #[case] expected: &str,
+) {
     let mut bundle = prebuilt_bundle(WELCOME_RESOURCE);
-    bundle.set_use_isolating(false);
+    bundle.set_use_isolating(bundle_setting);
     let localizer = FluentLocalizer::builder(langid!("en-US"))
         .disable_defaults()
         .with_consumer_bundle(bundle)
@@ -132,7 +137,7 @@ fn unspecified_setting_preserves_a_prebuilt_bundle_without_isolation() {
 
     assert_eq!(
         render_welcome(&localizer),
-        PLAIN_WELCOME,
+        expected,
         "an unspecified setting should leave the supplied bundle untouched"
     );
 }
@@ -159,6 +164,36 @@ fn setter_order_does_not_change_the_rendered_message() {
         render_welcome(&resources_first),
         PLAIN_WELCOME,
         "both orders should render the opted-out text"
+    );
+}
+
+#[test]
+fn setter_order_does_not_change_a_prebuilt_bundle() {
+    // The prebuilt path applies the override during `try_build`, not when the
+    // setter runs, so a setting made before the bundle is supplied must survive
+    // and match one made afterwards.
+    let isolation_first = FluentLocalizer::builder(langid!("en-US"))
+        .disable_defaults()
+        .with_use_isolating(false)
+        .with_consumer_bundle(prebuilt_bundle(WELCOME_RESOURCE))
+        .try_build()
+        .expect("prebuilt bundle should build");
+    let bundle_first = FluentLocalizer::builder(langid!("en-US"))
+        .disable_defaults()
+        .with_consumer_bundle(prebuilt_bundle(WELCOME_RESOURCE))
+        .with_use_isolating(false)
+        .try_build()
+        .expect("prebuilt bundle should build");
+
+    assert_eq!(
+        render_welcome(&isolation_first),
+        render_welcome(&bundle_first),
+        "supplying the prebuilt bundle before or after the setting should match"
+    );
+    assert_eq!(
+        render_welcome(&isolation_first),
+        PLAIN_WELCOME,
+        "the setting should apply to the prebuilt bundle in either order"
     );
 }
 
@@ -213,15 +248,43 @@ fn disabled_isolation_still_reports_formatting_failures() {
 }
 
 #[test]
+fn disabled_isolation_falls_back_when_the_consumer_message_is_absent() {
+    let localizer = FluentLocalizer::builder(langid!("en-US"))
+        .with_use_isolating(false)
+        .with_consumer_resources(["unrelated = text"])
+        .try_build()
+        .expect("valid catalogues");
+    let mut args = LocalizationArgs::new();
+    args.insert("binary", FluentValue::from("acme"));
+
+    assert_eq!(
+        localizer.lookup("cli.usage", Some(&args)).as_deref(),
+        Some("Usage: acme [OPTIONS] <COMMAND>"),
+        "a plain consumer miss should fall back to the plain default copy"
+    );
+}
+
+#[test]
 fn disabled_isolation_still_falls_back_to_embedded_defaults() {
     // The consumer owns `cli.usage` but references an argument the caller never
     // supplies, so the consumer pattern fails to format and the lookup must
     // continue to the embedded default. Without a consumer `cli.usage` the
     // assertion below would pass on a plain miss and prove nothing about
     // fallback after a formatting failure.
+    let captured = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let reporter: FormattingIssueReporter = {
+        let issues = Arc::clone(&captured);
+        Arc::new(move |issue: &FormattingIssue| {
+            issues
+                .lock()
+                .expect("issue log mutex")
+                .push(issue.id.clone());
+        })
+    };
     let localizer = FluentLocalizer::builder(langid!("en-US"))
         .with_use_isolating(false)
         .with_consumer_resources(["cli.usage = Usage: { $missing }"])
+        .with_error_reporter(reporter)
         .try_build()
         .expect("valid catalogues");
     let mut args = LocalizationArgs::new();
@@ -231,5 +294,10 @@ fn disabled_isolation_still_falls_back_to_embedded_defaults() {
         localizer.lookup("cli.usage", Some(&args)).as_deref(),
         Some("Usage: acme [OPTIONS] <COMMAND>"),
         "a consumer formatting failure should fall through to the plain default copy"
+    );
+    assert_eq!(
+        *captured.lock().expect("issue log mutex"),
+        vec![String::from("cli.usage")],
+        "the consumer formatting failure should reach the reporter before the fallback"
     );
 }

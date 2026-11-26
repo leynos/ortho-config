@@ -44,7 +44,10 @@ log viewers draw them as boxes or question marks, and they defeat `grep`,
 string comparison, and snapshot assertions taken from diagnostics. Isolation is
 rarely wanted in left-to-right terminal copy.
 
-`FluentLocalizerBuilder::with_use_isolating` chooses the behaviour explicitly:
+`FluentLocalizerBuilder::with_use_isolating` chooses the behaviour explicitly.
+The option first ships in v0.12.0; this crate's install line above moves with
+each release, so a project pinned to an earlier version must upgrade before
+using it.
 
 - Leaving the setting unspecified preserves each bundle's own setting:
   resource-built bundles keep Fluent's `true` default, and a supplied prebuilt
