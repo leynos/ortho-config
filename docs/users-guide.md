@@ -1342,13 +1342,14 @@ users still receive a useful error.
 
 Fluent isolates substituted values with two invisible characters: U+2068 FIRST
 STRONG ISOLATE and U+2069 POP DIRECTIONAL ISOLATE. A localized missing-argument
-error therefore carries a mark on each side of the interpolated value, where
-unlocalized copy has none. Isolation applies when a message interleaves literal
-text with a variable or another non-literal expression; a pattern that is a
-single placeable, such as `name = { $name }`, and a message reference, term
-reference, or string literal all carry no marks. The marks keep right-to-left
-substitutions in the intended order inside left-to-right copy, but they also
-cause trouble:
+error therefore carries an outer mark on each side of the interpolated value,
+where unlocalized copy has none. Isolation applies while it is enabled and the
+message interleaves literal text with a variable or another non-literal
+expression; a pattern that is a single placeable, such as `name = { $name }`,
+and a direct message reference, term reference, or string literal all receive
+no outer marks, though a referenced message may add its own marks inside its
+own pattern. The marks keep right-to-left substitutions in the intended order
+inside left-to-right copy, but they also cause trouble:
 
 - some terminals, fonts, and log viewers draw them as boxes or question marks;
 - they defeat `grep`, exact string comparison, and snapshot assertions on

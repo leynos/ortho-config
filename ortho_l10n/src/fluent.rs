@@ -123,14 +123,16 @@ impl FluentLocalizerBuilder {
     /// Sets whether `Fluent` isolates interpolated values with Unicode control
     /// characters.
     ///
-    /// When a pattern interleaves literal text with a variable or another
-    /// non-literal expression, `Fluent` wraps that value in U+2068 FIRST STRONG
-    /// ISOLATE and U+2069 POP DIRECTIONAL ISOLATE so bidirectional algorithms
-    /// keep right-to-left substitutions in the surrounding left-to-right text.
-    /// A pattern that is a single placeable, a message reference, a term
-    /// reference, or a string literal is not isolated. Those characters are
-    /// invisible in many terminals but are ordinary characters to `grep`,
-    /// snapshot tests, and log pipelines.
+    /// While isolation is enabled, `Fluent` wraps a placeable in an outer pair
+    /// of marks — U+2068 FIRST STRONG ISOLATE and U+2069 POP DIRECTIONAL
+    /// ISOLATE — when the pattern also contains literal text and the expression
+    /// is a variable or another non-literal expression, so bidirectional
+    /// algorithms keep right-to-left substitutions in the surrounding
+    /// left-to-right text. A pattern that is a single placeable, a direct
+    /// message reference, a term reference, or a string literal receives no
+    /// outer marks; a referenced message can still isolate its own placeables.
+    /// Those characters are invisible in many terminals but are ordinary
+    /// characters to `grep`, snapshot tests, and log pipelines.
     ///
     /// Leaving this unset preserves each bundle's own setting: resource-built
     /// bundles keep `Fluent`'s `true` default, and a supplied prebuilt bundle

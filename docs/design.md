@@ -988,28 +988,30 @@ configuration can use the runtime directly. See
   alongside existing configuration discovery.
 
 - **Bidirectional isolation:** while `use_isolating` is `true`, `Fluent` wraps
-  a substituted variable, or another non-literal expression, in U+2068 FIRST
-  STRONG ISOLATE and U+2069 POP DIRECTIONAL ISOLATE when the pattern also
-  contains literal text, which protects right-to-left substitutions inside
-  left-to-right copy. The resolver excludes three cases: a pattern that is a
-  single placeable, such as `name = { $name }`, because there is no surrounding
-  text to protect; a message reference or term reference; and a string literal.
-  The marks are invisible, but they defeat `grep`, exact string comparison, and
-  snapshot assertions taken from diagnostics, and some terminals and log
-  viewers render them as replacement glyphs.
-  `FluentLocalizerBuilder::with_use_isolating` stores an `Option<bool>`: `None`
-  preserves each bundle's own setting—`Fluent`'s `true` default for
-  resource-built bundles and whatever a supplied bundle chose—while an explicit
-  value is applied once in `try_build` to both the defaults bundle and the
-  consumer bundle, including a prebuilt one, so both then agree. Applying the
-  value after construction keeps setter order irrelevant and makes fallback
-  lookups and the embedded Clap error copy agree with the consumer catalogue. A
-  locale-script default—disabling isolation automatically for left-to-right
-  scripts—was rejected: it would make rendering depend on the locale tag rather
-  than the text, change output for existing callers who only upgrade the crate,
-  and still be wrong for right-to-left values interpolated into a left-to-right
-  locale's copy. The setting controls one `Fluent` formatting option; it is not
-  general bidirectional sanitization.
+  a substituted variable, or another non-literal expression, in an outer pair
+  of U+2068 FIRST STRONG ISOLATE and U+2069 POP DIRECTIONAL ISOLATE marks when
+  the pattern also contains literal text, which protects right-to-left
+  substitutions inside left-to-right copy. The resolver adds no outer marks in
+  three cases: a pattern that is a single placeable, such as
+  `name = { $name }`, because there is no surrounding text to protect; a direct
+  message reference or term reference; and a string literal. A referenced
+  message can still isolate its own placeables, so the outer marks are not a
+  guarantee about a reference's rendered content. The marks are invisible, but
+  they defeat `grep`, exact string comparison, and snapshot assertions taken
+  from diagnostics, and some terminals and log viewers render them as
+  replacement glyphs. `FluentLocalizerBuilder::with_use_isolating` stores an
+  `Option<bool>`: `None` preserves each bundle's own setting—`Fluent`'s `true`
+  default for resource-built bundles and whatever a supplied bundle chose—while
+  an explicit value is applied once in `try_build` to both the defaults bundle
+  and the consumer bundle, including a prebuilt one, so both then agree.
+  Applying the value after construction keeps setter order irrelevant and makes
+  fallback lookups and the embedded Clap error copy agree with the consumer
+  catalogue. A locale-script default—disabling isolation automatically for
+  left-to-right scripts—was rejected: it would make rendering depend on the
+  locale tag rather than the text, change output for existing callers who only
+  upgrade the crate, and still be wrong for right-to-left values interpolated
+  into a left-to-right locale's copy. The setting controls one `Fluent`
+  formatting option; it is not general bidirectional sanitization.
 
 - **Macro participation:** Generated code accepts a `&dyn Localizer` and emits
   identifiers for every user-facing string. Developers can override the
