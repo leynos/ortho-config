@@ -238,69 +238,75 @@ def staged_channels(installer: str) -> list[str]:
     return parse_staged_channels(completed.stdout)
 
 
-def installed_toolchains() -> set[str]:
-    """Return the toolchains ``rustup`` already has, by name without host.
+def installed_toolchains() -> list[str]:
+    """Return the toolchains ``rustup`` already has, as ``rustup`` names them.
 
-    The host triple is stripped because a channel is named without it
-    everywhere else. ``rustup target list --toolchain`` is deliberately not
-    used to decide whether a toolchain exists: rustup installs a missing one
-    on demand, so that query would download a compiler to answer "is it
-    installed?".
+    The names keep their host qualifier, because which hosts exist is
+    ``rustup``'s answer and not something to reconstruct from a list here.
+    ``installed_targets`` compares a channel against these names instead.
+
+    ``rustup target list --toolchain`` is deliberately not used to decide
+    whether a toolchain exists: rustup installs a missing one on demand, so
+    that query would download a compiler to answer "is it installed?".
 
     Returns
     -------
-    set of str
-        The installed channels, such as ``nightly-2026-05-28``.
+    list of str
+        The installed toolchains, host qualifier included.
     """
     completed = _run(["rustup", "toolchain", "list"], deadline=QUERY_DEADLINE_SECONDS)
-    return {
-        strip_host(line.split()[0])
-        for line in completed.stdout.splitlines()
-        if line.strip()
-    }
+    return [
+        line.split()[0] for line in completed.stdout.splitlines() if line.strip()
+    ]
 
 
-def strip_host(toolchain: str) -> str:
-    """Return a toolchain name without its host triple suffix.
+def is_installed(channel: str, toolchains: typ.Iterable[str]) -> bool:
+    """Report whether ``rustup`` has the toolchain *channel* names.
+
+    A channel names a toolchain whether or not the installed entry carries a
+    host qualifier, and rustup permits any host, not only the five this
+    repository happens to build on. So an entry matches when it is the channel
+    or the channel plus a host, and the host is never enumerated here.
 
     Parameters
     ----------
-    toolchain : str
-        A name as ``rustup`` prints it, possibly with a host triple.
+    channel : str
+        The channel to look for, such as ``nightly-2026-05-28``.
+    toolchains : iterable of str
+        The names ``rustup toolchain list`` reported.
 
     Returns
     -------
-    str
-        The channel alone.
+    bool
+        Whether one of them is that channel.
 
     Examples
     --------
-    >>> strip_host("nightly-2026-05-28-x86_64-unknown-linux-gnu")
-    'nightly-2026-05-28'
-    >>> strip_host("nightly-2026-05-28")
-    'nightly-2026-05-28'
+    >>> is_installed("nightly-2026-05-28", ["nightly-2026-05-28-x86_64-unknown-linux-gnu"])
+    True
+    >>> is_installed("nightly-2026-05-28", ["nightly-2026-05-28-x86_64-unknown-linux-musl"])
+    True
+    >>> is_installed("nightly-2026-05-28", ["nightly-2026-05-28"])
+    True
+    >>> is_installed("nightly-2026-05-28", ["nightly-2025-09-18-x86_64-unknown-linux-gnu"])
+    False
     """
-    known_hosts = (
-        "x86_64-unknown-linux-gnu",
-        "aarch64-unknown-linux-gnu",
-        "x86_64-pc-windows-msvc",
-        "aarch64-apple-darwin",
-        "x86_64-apple-darwin",
+    return any(
+        name == channel or name.startswith(f"{channel}-") for name in toolchains
     )
-    for host in known_hosts:
-        suffix = f"-{host}"
-        if toolchain.endswith(suffix):
-            return toolchain[: -len(suffix)]
-    return toolchain
 
 
-def installed_targets(channel: str) -> set[str] | None:
+def installed_targets(channel: str, toolchains: typ.Iterable[str]) -> set[str] | None:
     """Return the triples ``rustup`` has for *channel*, or ``None`` if absent.
 
     Parameters
     ----------
     channel : str
         The toolchain channel to ask about.
+    toolchains : iterable of str
+        The names ``rustup toolchain list`` reported, consulted before asking
+        for the targets so an absent toolchain is never installed as a side
+        effect of the question.
 
     Returns
     -------
@@ -308,7 +314,7 @@ def installed_targets(channel: str) -> set[str] | None:
         The installed triples, or ``None`` when ``rustup`` has no such
         toolchain, which is the one answer that is not "none are installed".
     """
-    if channel not in installed_toolchains():
+    if not is_installed(channel, toolchains):
         return None
     completed = _run(
         ["rustup", "target", "list", "--installed", "--toolchain", channel],
@@ -360,11 +366,12 @@ def survey(
     channels = candidate_channels(
         configured_channel(installer), staged_channels(installer)
     )
+    toolchains = installed_toolchains()
     satisfied: list[str] = []
     missing: list[str] = []
     absent: list[str] = []
     for channel in channels:
-        targets = installed_targets(channel)
+        targets = installed_targets(channel, toolchains)
         if targets is None:
             absent.append(channel)
         elif target in targets:
