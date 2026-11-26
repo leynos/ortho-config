@@ -263,7 +263,7 @@ impl FluentLocalizerBuilder {
     /// # Ok::<(), ortho_l10n::FluentLocalizerError>(())
     /// ```
     #[must_use]
-    pub fn with_use_isolating(mut self, use_isolating: bool) -> Self {
+    pub const fn with_use_isolating(mut self, use_isolating: bool) -> Self {
         self.use_isolating = Some(use_isolating);
         self
     }

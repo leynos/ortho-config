@@ -6,7 +6,7 @@
 //! positional, both with the default setting and with isolation disabled.
 
 use clap::error::ErrorKind;
-use clap::{ColorChoice, CommandFactory, Parser};
+use clap::{ArgMatches, ColorChoice, CommandFactory, Parser};
 use ortho_config::{FluentLocalizer, LocalizeCmd, langid, parse_localized_command};
 
 /// Parser whose single positional argument is deliberately required.
@@ -17,13 +17,18 @@ struct RequiredPositional {
     path: String,
 }
 
-/// Parses an empty argument list, which must fail on the missing positional.
-fn parse_without_positional(localizer: &FluentLocalizer) -> clap::Error {
+/// Parses an empty argument list, so the required positional must be reported.
+///
+/// The result is returned rather than unwrapped so the calling tests can use
+/// `expect_err` where the lint policy permits it; this helper is not itself a
+/// test function.
+fn parse_without_positional(
+    localizer: &FluentLocalizer,
+) -> Result<(RequiredPositional, ArgMatches), clap::Error> {
     let command = RequiredPositional::command()
         .color(ColorChoice::Never)
         .localize(localizer);
     parse_localized_command::<RequiredPositional, _, _>(command, ["isolation-fixture"], localizer)
-        .expect_err("the required positional argument is missing")
 }
 
 /// Returns the first rendered line, which is the translated message.
@@ -34,7 +39,8 @@ fn first_line(rendered: &str) -> &str {
 #[test]
 fn default_diagnostic_isolates_the_interpolated_argument() {
     let localizer = FluentLocalizer::embedded(langid!("en-US")).expect("embedded en-US catalogue");
-    let error = parse_without_positional(&localizer);
+    let error = parse_without_positional(&localizer)
+        .expect_err("the required positional argument is missing");
     assert_eq!(
         error.kind(),
         ErrorKind::MissingRequiredArgument,
@@ -58,7 +64,8 @@ fn disabled_isolation_produces_a_greppable_diagnostic() {
         .with_use_isolating(false)
         .try_build()
         .expect("embedded en-US catalogue");
-    let error = parse_without_positional(&localizer);
+    let error = parse_without_positional(&localizer)
+        .expect_err("the required positional argument is missing");
     assert_eq!(
         error.kind(),
         ErrorKind::MissingRequiredArgument,
