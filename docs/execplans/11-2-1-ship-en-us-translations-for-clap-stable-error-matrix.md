@@ -1864,9 +1864,11 @@ stopping and reporting.
       outside this branch's authority:
       - **`Publish dry run` (#414).** The step fails with `E0432: unresolved
         import ortho_config_macros::RequiredConfigSchema`, the published-macro
-        release-ordering class #414 documents, introduced by main's #589. It is
-        not this diff's: the step passed on this branch's pre-rebase head
-        (run 45314648127) and appears only after rebasing onto `c2d63075`.
+        release-ordering class #414 documents. The base already contains that
+        import, and no run in this branch's history evidences a passing publish
+        dry run: pull-request runs skip both publish steps, so the earlier green
+        run did not exercise them. The step's own log is the evidence, and it
+        names a symbol from main's #589 rather than anything this branch adds.
         Resolving it needs a published `ortho_config_macros` or a
         maintainer-approved remedy.
       - **Standalone `make test` and `make boundary` locally.** `make test`
