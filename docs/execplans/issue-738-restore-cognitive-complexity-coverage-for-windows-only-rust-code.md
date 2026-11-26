@@ -163,6 +163,12 @@ records the fixture's deliberate non-membership.
   different toolchain from the one the installer would build next; channels
   whose toolchain `rustup` does not already have are reported and skipped,
   since installing one would download a compiler.
+- 2026-11-27: A second CodeRabbit review cleared both earlier findings and
+  raised one more, accepted: the provisioning helper compared a channel against
+  `rustup toolchain list` after stripping one of five hard-coded host suffixes,
+  so a musl-qualified toolchain looked absent. It now treats an entry as naming
+  a channel when it is that channel or the channel plus a host, which never
+  needs the host list, and reads the installed toolchains once per run.
 - 2026-11-26: `make test` locally fails only in `-p ortho_l10n --test boundary`,
   where thirteen tests report the same 440 s nested `cargo package` deadline.
   The shared compile pool held 251 waiting requests from other agents'

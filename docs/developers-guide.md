@@ -4102,12 +4102,19 @@ Three properties are deliberate:
 
 The `rust-std` component belongs in Whitaker's own toolchain, which is the
 installer's rather than the pin in `rust-toolchain.toml`.
-`make install-whitaker-windows-target` reads that channel from
-`whitaker-installer install --dry-run` and adds the component with `rustup`;
-`make check-whitaker-windows-target` verifies it and is a prerequisite of the
-gate, so a missing component is reported as missing rather than as a lint
-failure from inside Cargo. The split mirrors `install-build-tools` and
-`check-build-tools`: a gate does not reach the network on its own.
+`make install-whitaker-windows-target` adds it with `rustup` to every channel a
+suite could run on: the ones `whitaker-installer list --json` reports as
+staged, and the one `whitaker-installer install --dry-run` would build next.
+Both are needed. An upgrade can advance the configured channel without staging
+its suite, and the bootstrap record the lint run reads keeps naming the suite
+that survived, so provisioning only the configured channel would leave that
+suite without the component. Channels whose toolchain `rustup` does not already
+have are reported and skipped, because `rustup target add` installs a missing
+toolchain on demand. `make check-whitaker-windows-target` verifies the
+component and is a prerequisite of the gate, so a missing one is reported as
+missing rather than as a lint failure from inside Cargo. The split mirrors
+`install-build-tools` and `check-build-tools`: a gate does not reach the
+network on its own.
 
 A rolling suite can change what it scores, and the command can lose its target
 without any commit here failing, so the gate carries its own evidence.
