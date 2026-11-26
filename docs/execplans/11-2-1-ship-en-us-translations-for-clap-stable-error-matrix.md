@@ -1865,10 +1865,14 @@ stopping and reporting.
       - **`Publish dry run` (#414).** The step fails with `E0432: unresolved
         import ortho_config_macros::RequiredConfigSchema`, the published-macro
         release-ordering class #414 documents. The base already contains that
-        import, and no run in this branch's history evidences a passing publish
-        dry run: pull-request runs skip both publish steps, so the earlier green
-        run did not exercise them. The step's own log is the evidence, and it
-        names a symbol from main's #589 rather than anything this branch adds.
+        import. Two pre-replay dispatch runs did pass both publish steps —
+        43796595772 on `6d421d5f` and 43815862535 on `18c53fdd` — so the step
+        works when the released macro crate matches the tree, and fails once
+        the tree needs a macro that has not been published. Those heads diverge
+        from this candidate and certify nothing about it; what they establish is
+        that the failure is a release-ordering fact about `RequiredConfigSchema`
+        rather than a defect in this diff. On the current base, pull-request
+        runs skip both publish steps and both dispatch publish dry runs fail.
         Resolving it needs a published `ortho_config_macros` or a
         maintainer-approved remedy.
       - **Standalone `make test` and `make boundary` locally.** `make test`
