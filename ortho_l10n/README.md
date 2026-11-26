@@ -33,16 +33,21 @@ state.
 
 ## Interpolated values and isolation marks
 
-When a message interleaves text with placeables, Fluent isolates each
-interpolated value with U+2068 FIRST STRONG ISOLATE and U+2069 POP DIRECTIONAL
-ISOLATE. The marks tell a bidirectional algorithm that a substituted value may
-run right-to-left while the surrounding message runs left-to-right, so an
-Arabic name inside an English sentence renders in the intended order.
+When a message interleaves literal text with a variable or another non-literal
+expression, Fluent wraps that value in U+2068 FIRST STRONG ISOLATE and U+2069
+POP DIRECTIONAL ISOLATE. The marks tell a bidirectional algorithm that a
+substituted value may run right-to-left while the surrounding message runs
+left-to-right, so an Arabic name inside an English sentence renders in the
+intended order.
 
-Fluent does not isolate a pattern that is a single placeable, such as
-`name = { $name }`, because there is no surrounding text to protect. A caller
-that embeds such a value in its own left-to-right copy therefore gets no marks
-and must not rely on them.
+Fluent leaves three cases unisolated, so a caller that embeds their result in
+its own left-to-right copy must not rely on the marks:
+
+- a pattern that is a single placeable, such as `name = { $name }`, which has
+  no surrounding text to protect;
+- a message reference such as `{ other-message }` or a term reference such as
+  `{ -term }`; and
+- a string literal such as `{ "fixed text" }`.
 
 They are also invisible characters in the output. Some terminals, fonts, and
 log viewers draw them as boxes or question marks, and they defeat `grep`,

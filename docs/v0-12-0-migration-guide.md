@@ -38,13 +38,17 @@ ortho_config = { version = "0.12.0" }
 
 ## 2. Optionally remove Unicode isolation marks from localized output
 
-When a message interleaves text with placeables, `Fluent` wraps each
-interpolated value in U+2068 FIRST STRONG ISOLATE and U+2069 POP DIRECTIONAL
-ISOLATE. Isolation keeps right-to-left substitutions in the intended order
-inside left-to-right copy, but the marks are invisible characters that some
-terminals and log viewers render as boxes, and they defeat `grep`, exact string
-comparison, and snapshot assertions on diagnostics. A pattern that is a single
-placeable, such as `name = { $name }`, carries no marks in the first place.
+When a message interleaves literal text with a variable or another non-literal
+expression, `Fluent` wraps that value in U+2068 FIRST STRONG ISOLATE and U+2069
+POP DIRECTIONAL ISOLATE. Isolation keeps right-to-left substitutions in the
+intended order inside left-to-right copy, but the marks are invisible
+characters that some terminals and log viewers render as boxes, and they defeat
+`grep`, exact string comparison, and snapshot assertions on diagnostics.
+
+`Fluent` does not isolate a pattern that is a single placeable, such as
+`name = { $name }`, nor a message reference, a term reference, or a string
+literal. Code that embeds those results in its own left-to-right copy cannot
+rely on the marks.
 
 `FluentLocalizerBuilder::with_use_isolating` chooses the behaviour:
 

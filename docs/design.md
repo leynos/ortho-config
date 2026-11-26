@@ -988,13 +988,15 @@ configuration can use the runtime directly. See
   alongside existing configuration discovery.
 
 - **Bidirectional isolation:** while `use_isolating` is `true`, `Fluent` wraps
-  each interpolated value in U+2068 FIRST STRONG ISOLATE and U+2069 POP
-  DIRECTIONAL ISOLATE when the pattern interleaves text with placeables, which
-  protects right-to-left substitutions inside left-to-right copy. A pattern
-  that is a single placeable is not isolated, because there is no surrounding
-  text to protect. The marks are invisible, but they defeat `grep`, exact
-  string comparison, and snapshot assertions taken from diagnostics, and some
-  terminals and log viewers render them as replacement glyphs.
+  a substituted variable, or another non-literal expression, in U+2068 FIRST
+  STRONG ISOLATE and U+2069 POP DIRECTIONAL ISOLATE when the pattern also
+  contains literal text, which protects right-to-left substitutions inside
+  left-to-right copy. The resolver excludes three cases: a pattern that is a
+  single placeable, such as `name = { $name }`, because there is no surrounding
+  text to protect; a message reference or term reference; and a string literal.
+  The marks are invisible, but they defeat `grep`, exact string comparison, and
+  snapshot assertions taken from diagnostics, and some terminals and log
+  viewers render them as replacement glyphs.
   `FluentLocalizerBuilder::with_use_isolating` stores an `Option<bool>`: `None`
   preserves each bundle's own setting—`Fluent`'s `true` default for
   resource-built bundles and whatever a supplied bundle chose—while an explicit
