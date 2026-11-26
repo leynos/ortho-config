@@ -13,9 +13,11 @@ use crate::error::OrthohelpError;
 use crate::ir::LocalizedDocMetadata;
 use crate::metadata::PackageSelection;
 use crate::schema::DocMetadata;
-use crate::{agent_context, ir, locale, metadata, output, policy, powershell, roff};
-use ortho_config::{FluentLocalizer, LanguageIdentifier, Localizer};
-use std::str::FromStr;
+use crate::summary_locale::SummaryLocalizer;
+use crate::{
+    agent_context, ir, locale, metadata, output, policy, powershell, roff, summary_locale,
+};
+use ortho_config::{LanguageIdentifier, Localizer};
 
 /// Run-scoped inputs borrowed by the output-generation phases.
 pub struct GenerationContext<'a> {
@@ -25,8 +27,10 @@ pub struct GenerationContext<'a> {
     pub doc_metadata: &'a DocMetadata,
     /// Resolved output directory.
     pub out_dir: &'a Utf8PathBuf,
-    /// Optional en-US localizer shared by agent-context and localized output.
-    pub en_us_localizer: Option<&'a (LanguageIdentifier, FluentLocalizer)>,
+    /// Optional localizer that resolves the agent-context summaries.
+    /// Localized output reuses it only for its exact locale when it was built
+    /// from package resources.
+    pub summary_localizer: Option<&'a SummaryLocalizer>,
 }
 
 /// Reports whether an output format requires agent-context generation.
@@ -76,8 +80,8 @@ fn build_agent_context(
     context: &GenerationContext<'_>,
 ) -> Result<ortho_config::AgentContext, OrthohelpError> {
     let summary_localizer = context
-        .en_us_localizer
-        .map(|(_, resolved_localizer)| resolved_localizer as &dyn Localizer);
+        .summary_localizer
+        .map(|selected| &selected.localizer as &dyn Localizer);
     let mut agent_context = agent_context::bridge_ir_to_agent_context(
         context.doc_metadata,
         &context.selection.package_name,
@@ -120,44 +124,21 @@ fn log_agent_context_bridged(agent_context: &ortho_config::AgentContext) {
     );
 }
 
-/// Builds the optional en-US localizer shared by agent-context and localized output.
+/// Builds the optional summary localizer shared by agent-context and localized output.
+///
+/// The selection policy — requested or metadata locale, `en-US`, a
+/// same-language discovered locale, then embedded defaults — lives in
+/// [`crate::summary_locale`]; this wrapper applies the format gate.
 pub fn build_agent_context_localizer_if_requested(
     args: &Args,
     selection: &PackageSelection,
-) -> Option<(LanguageIdentifier, FluentLocalizer)> {
+) -> Option<SummaryLocalizer> {
     if !needs_agent_context(args.format) {
         return None;
     }
-    match build_en_us_localizer(&selection.package_root) {
-        Ok(localizer) => Some(localizer),
-        Err(error) => {
-            warn_missing_localizer(&error);
-            None
-        }
-    }
-}
-
-/// Report that en-US resources were unavailable, so summaries are omitted.
-fn warn_missing_localizer(error: &OrthohelpError) {
-    tracing::warn!(error = %error, "no en-US localizer; agent-context summaries omitted");
-}
-
-/// Builds an en-US localizer from the package's consumer resources.
-///
-/// # Errors
-///
-/// Returns a locale or I/O error when the resources cannot be resolved.
-fn build_en_us_localizer(
-    package_root: &Utf8PathBuf,
-) -> Result<(LanguageIdentifier, FluentLocalizer), OrthohelpError> {
-    let locale =
-        LanguageIdentifier::from_str("en-US").map_err(|err| OrthohelpError::InvalidLocale {
-            value: "en-US".to_owned(),
-            message: err.to_string(),
-        })?;
-    let resources = locale::load_consumer_resources(package_root, &locale)?;
-    let localizer = locale::build_localizer(&locale, resources)?;
-    Ok((locale, localizer))
+    let outcome = summary_locale::select_summary_localizer(args, selection);
+    summary_locale::log_summary_selection(&outcome);
+    outcome.selected
 }
 
 /// Localizes the document when the requested formats need localized output.
@@ -175,7 +156,7 @@ pub fn localize_docs_if_requested(
             &context.selection.package_root,
             context.doc_metadata,
             locales,
-            context.en_us_localizer,
+            context.summary_localizer,
         )
     } else {
         Ok(Vec::new())
@@ -184,6 +165,12 @@ pub fn localize_docs_if_requested(
 
 /// Localizes the document metadata for every requested locale.
 ///
+/// The cached summary localizer is reused only for its own exact locale and
+/// only when it was built from package resources. A summary chosen for
+/// `en-GB` therefore never stands in for a requested `fr-FR`, and the
+/// embedded-defaults fallback never masks a requested locale's malformed
+/// catalogue.
+///
 /// # Errors
 ///
 /// Returns an error when a locale's resources cannot be resolved.
@@ -191,14 +178,14 @@ fn localize_docs(
     package_root: &Utf8PathBuf,
     doc_metadata: &DocMetadata,
     locales: &[LanguageIdentifier],
-    en_us_localizer: Option<&(LanguageIdentifier, FluentLocalizer)>,
+    summary_localizer: Option<&SummaryLocalizer>,
 ) -> Result<Vec<LocalizedDocMetadata>, OrthohelpError> {
     let mut localized_docs = Vec::new();
     for locale in locales {
-        if let Some((cached_locale, cached_localizer)) = en_us_localizer
-            && locale == cached_locale
+        if let Some(selected) = summary_localizer
+            && selected.is_reusable_for(locale)
         {
-            localized_docs.push(ir::localize_doc(doc_metadata, locale, cached_localizer));
+            localized_docs.push(ir::localize_doc(doc_metadata, locale, &selected.localizer));
             continue;
         }
         let resources = locale::load_consumer_resources(package_root, locale)?;
@@ -337,4 +324,12 @@ pub(crate) fn default_out_dir(target_directory: &Utf8Path) -> Utf8PathBuf {
 pub fn resolve_out_dir(out_dir: Option<Utf8PathBuf>, selection: &PackageSelection) -> Utf8PathBuf {
     out_dir.unwrap_or_else(|| default_out_dir(&selection.target_directory))
 }
+
+#[cfg(test)]
+#[path = "generation_tests.rs"]
+mod tests;
+
+#[cfg(test)]
+#[path = "generation_reuse_tests.rs"]
+mod reuse_tests;
 // weave: run 'weave explain cargo-orthohelp/src/generation.rs' for per-hunk detail, 'weave check' to verify your resolution

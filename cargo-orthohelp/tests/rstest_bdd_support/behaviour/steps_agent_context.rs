@@ -28,7 +28,7 @@ pub(super) enum JsonField {
 }
 
 impl JsonField {
-    const fn as_str(self) -> &'static str {
+    pub(super) const fn as_str(self) -> &'static str {
         match self {
             Self::SchemaVersion => "schema_version",
             Self::Kind => "kind",
@@ -50,7 +50,7 @@ impl fmt::Display for JsonField {
     }
 }
 
-const BASE_AGENT_CONTEXT_ARGS: [&str; 4] = [
+pub(super) const BASE_AGENT_CONTEXT_ARGS: [&str; 4] = [
     "--format",
     "agent-context",
     "--package",
@@ -80,7 +80,7 @@ fn run_with_format_agent_context_nested(
     run_with_agent_context_args(orthohelp_context, &args)
 }
 
-fn run_with_agent_context_args(
+pub(super) fn run_with_agent_context_args(
     orthohelp_context: &mut OrthoHelpContext,
     args: &[&str],
 ) -> StepResult<()> {
@@ -186,7 +186,7 @@ fn string_field(value: &Value, field: JsonField) -> StepResult<&str> {
         .ok_or_else(|| format!("{field} field missing").into())
 }
 
-fn expect_str_field(value: &Value, field: JsonField, expected: &str) -> StepResult<()> {
+pub(super) fn expect_str_field(value: &Value, field: JsonField, expected: &str) -> StepResult<()> {
     let actual = string_field(value, field)?;
     if actual == expected {
         Ok(())

@@ -6,6 +6,11 @@
 
 mod fixtures;
 
+// The subdirectory keeps the module out of Cargo's top-level integration-test
+// discovery while still compiling as part of this binary's contract suite.
+#[path = "agent_context_contract/locale_summaries.rs"]
+mod locale_summaries;
+
 use camino::Utf8PathBuf;
 use cap_std::ambient_authority;
 use cap_std::fs_utf8::Dir;
@@ -15,11 +20,32 @@ use rstest::rstest;
 use serde_json::Value;
 use std::error::Error;
 use std::process::{Command, Output};
+use std::sync::{LazyLock, Mutex, PoisonError};
+use std::time::Duration;
 use tempfile::TempDir;
 
 type TestResult<T = ()> = Result<T, Box<dyn Error + Send + Sync>>;
 
 const EXPECTED_SCHEMA_VERSION: &str = "1";
+
+/// Budget for one `cargo-orthohelp` run, which builds a bridge crate.
+///
+/// The shared runner enforces this deadline and confirms the child's process
+/// tree is gone, so a stalled nested build fails here with a diagnostic rather
+/// than leaking a compiler process. Contract cases serialize on
+/// [`BRIDGE_BUILD_MUTEX`] before this budget starts, so it covers one build
+/// rather than a queue of them; it stays below nextest's 960 s per-test tier so
+/// the runner reports a stalled build before the harness kills the test with no
+/// output.
+const AGENT_CONTEXT_DEADLINE: Duration = Duration::from_secs(900);
+
+/// Serializes bridge builds launched by the contract cases.
+///
+/// The bridge directory is content-addressed and rewritten before each build,
+/// so two cases must never overlap. Taking the guard before the deadline is
+/// created charges each case only for its own build, not for time spent queued
+/// behind its siblings.
+static BRIDGE_BUILD_MUTEX: LazyLock<Mutex<()>> = LazyLock::new(Mutex::default);
 
 #[rstest]
 #[case::simple(
@@ -132,12 +158,31 @@ fn read_agent_context_text(out_dir: &TempDir) -> TestResult<String> {
 }
 
 fn run_agent_context(out_dir: &TempDir, root_type: Option<&str>) -> TestResult<Output> {
+    // Debug tracing must not contaminate the machine-readable stdout.
+    run_agent_context_with(out_dir, root_type, &["--format", "agent-context"], "debug")
+}
+
+/// Runs `cargo-orthohelp` with the given format and logging arguments.
+///
+/// # Errors
+///
+/// Returns an error when the binary path or workspace root cannot be resolved,
+/// the output path is not UTF-8, or the shared runner reports a spawn, deadline,
+/// or cleanup failure.
+fn run_agent_context_with(
+    out_dir: &TempDir,
+    root_type: Option<&str>,
+    extra_args: &[&str],
+    log_filter: &str,
+) -> TestResult<Output> {
+    let _bridge_build_guard = BRIDGE_BUILD_MUTEX
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner);
     let executable = fixtures::cargo_orthohelp_exe()?;
     let mut command = Command::new(executable.as_str());
     command
         .current_dir(fixtures::workspace_root()?.as_std_path())
-        // Debug tracing must not contaminate the machine-readable stdout.
-        .env("RUST_LOG", "debug")
+        .env("RUST_LOG", log_filter)
         .args([
             "orthohelp",
             "--out-dir",
@@ -145,15 +190,18 @@ fn run_agent_context(out_dir: &TempDir, root_type: Option<&str>) -> TestResult<O
                 .path()
                 .to_str()
                 .ok_or("output path should be UTF-8")?,
-            "--format",
-            "agent-context",
             "--package",
             "orthohelp_fixture",
-        ]);
+        ])
+        .args(extra_args);
     if let Some(selected_root_type) = root_type {
         command.args(["--root-type", selected_root_type]);
     }
-    Ok(command.output()?)
+    Ok(test_helpers::process::run_with_deadline(
+        command,
+        AGENT_CONTEXT_DEADLINE,
+        "agent-context contract run",
+    )?)
 }
 
 fn ensure_success(output: &Output) -> TestResult {

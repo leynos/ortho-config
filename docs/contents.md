@@ -117,6 +117,10 @@
   review the shared disclosure projection, its boundaries and cache salt, the
   protected-field records, the names-only catalogue, and the Verus model's
   residual testing boundary.
+- [ADR-0027: Agent-context summary locale selection](adrs/adr-0027-agent-context-summary-locale-selection.md):
+  review the ordered summary-locale preference, the resource-and-build
+  acceptance rule, the same-language fallback, and the decision to report the
+  choice through tracing rather than a schema field.
 - [Archived v0.8.0 roadmap](archive/v0-8-0-roadmap.md): review completed
   phases, steps, and tasks from the roadmap that preceded the active
   agent-native plan.

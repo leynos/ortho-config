@@ -1607,10 +1607,55 @@ roff, PowerShell help, or localized IR output.
 emit their own runtime payload expose `context --json` as defined by
 [ADR-0007](adrs/adr-0007-downstream-context-command-naming.md).
 
-Agent-context output is not localized. The current transform may use the short
-en-US command description as `AgentCommand.summary`, but it must not copy
+Agent-context output is not locale-scoped. The transform resolves
+`AgentCommand.summary` from one catalogue chosen by `summary_locale`: the first
+parseable `--locale`, or the first parseable metadata locale when no `--locale`
+is given; then `en-US`, then a discovered locale matching an earlier
+candidate's language, then the embedded `en-US` defaults. It must not copy
 localized long help, Fluent identifiers, roff fragments, or PowerShell wrapper
-structures into `ortho_config::agent_context`.
+structures into `ortho_config::agent_context`. Selection emits `info` with
+`locale` and `source`, and warns when the choice falls through from the first
+preference or uses the embedded defaults; keep those events structured rather
+than embedding prose in the document. A candidate counts only when the package
+ships resources for it and the localizer builds. The chosen localizer is reused
+for localized output only for its exact locale identifier and only when it was
+built from package resources; the embedded-defaults fallback is summary-only
+and must never mask a malformed catalogue during human-document generation.
+
+#### Summary-locale selection internals
+
+`cargo-orthohelp/src/summary_locale/` owns the selection policy. The general
+locale resolver in `locale.rs` keeps its `--locale` and `--all-locales`
+behaviour, and the Fluent adapter remains in `locale.rs`.
+
+- `candidate.rs` defines the domain vocabulary: `SummaryLocaleSource`,
+  `SummaryLocaleCandidate`, `SummaryLocaleSkip` and `SummaryLocaleSkipKind`,
+  `InvalidSummaryLocale`, `SummaryPreferences`, `SummaryLocalizer`, and
+  `SummarySelection`.
+- `plan.rs` holds the pure policy. `summary_locale_preferences` orders the
+  first parseable requested or metadata locale before `en-US`;
+  `plan_same_language_candidates` matches discovered names by language and
+  rejects variant-bearing directories. `same_language_summary_locales` is the
+  only fallible function there: it returns the discovery error rather than
+  converting it into absence.
+- `mod.rs` runs the resource loop and returns the typed outcome without
+  logging. `diagnostics.rs` turns that outcome into the `info`, `warn`, and
+  `debug` events emitted by `build_agent_context_localizer_if_requested` in
+  `generation.rs`.
+- `SummaryLocalizer::is_reusable_for` is the only gate for reusing the chosen
+  localizer in localized output: it requires the exact locale and
+  `has_package_resources`.
+
+`locale.rs` splits `build_localizer` into resource loading and
+`build_localizer_from_resources`, exposes `parse_locale` and
+`pub(crate) discover_locale_dirs` to the summary policy, and resolves a locale
+directory by exact name, then a case-insensitive match, then the parsed
+identifier, so a canonical `en-GB` finds `locales/en-gb` or `locales/en_GB`.
+
+`cli_test_support.rs` is test-only (`#[cfg(test)] mod cli_test_support;`). It
+builds shared `Args` and `PackageSelection` values, owns temporary package
+roots, and provides the thread-scoped tracing capture used by the warning
+tests. It has no production callers and needs no public API entry.
 
 Represent positional inputs by leaving `AgentInput.long` absent. The adapter
 detects a positional input from existing CLI metadata when
@@ -1666,8 +1711,8 @@ The following functions form the stable agent-context surface for 6.2.2.
 /// Convert bridge documentation IR into an `AgentContext` payload.
 ///
 /// `package` is used to populate `AgentContext.package`.  Pass `None` for
-/// `localizer` to omit command summaries; pass an EN-US `Localizer` to
-/// include them.
+/// `localizer` to omit command summaries; pass the selected summary
+/// `Localizer` to include them.
 #[must_use]
 pub fn bridge_ir_to_agent_context(
     meta: &DocMetadata,

@@ -13,6 +13,7 @@ use std::sync::LazyLock;
 
 const DOCUMENT_PATHS: &[&str] = &[
     "README.md",
+    "cargo-orthohelp/README.md",
     "docs/users-guide.md",
     "docs/cargo-orthohelp-api-guide.md",
     "docs/v0-10-0-migration-guide.md",

@@ -40,6 +40,18 @@ pub fn build_localizer(
     resources: Vec<String>,
 ) -> Result<FluentLocalizer, OrthohelpError> {
     let leaked = leak_resources(resources);
+    build_localizer_from_resources(locale, &leaked)
+}
+
+/// Builds a localizer from already-leaked consumer resource strings.
+///
+/// This is the second half of [`build_localizer`]: resource loading and
+/// lifetime extension happen there, while this function owns the builder
+/// configuration and its fallback rules.
+fn build_localizer_from_resources(
+    locale: &LanguageIdentifier,
+    leaked: &[&'static str],
+) -> Result<FluentLocalizer, OrthohelpError> {
     let has_resources = !leaked.is_empty();
     let base_builder = FluentLocalizer::builder(locale.clone());
     let builder = if has_resources {
@@ -47,15 +59,24 @@ pub fn build_localizer(
     } else {
         base_builder
     };
-    build_localizer_with_fallback(locale, &leaked, has_resources, builder)
+    build_localizer_with_fallback(locale, leaked, has_resources, builder)
 }
 
-/// Loads Fluent resources from `locales/<locale>` in the target package.
+/// Loads Fluent resources from the package directory for `locale`.
+///
+/// Discovery preserves the directory names an author chose, so a canonical
+/// `en-GB` identifier can name a `locales/en-gb` directory. The exact spelling
+/// is preferred; otherwise the first case-insensitive match in sorted
+/// discovery order wins, which keeps the choice deterministic on a
+/// case-sensitive filesystem.
 pub fn load_consumer_resources(
     package_root: &Utf8Path,
     locale: &LanguageIdentifier,
 ) -> Result<Vec<String>, OrthohelpError> {
-    let locale_dir = package_root.join("locales").join(locale.to_string());
+    let Some(directory_name) = resolve_locale_directory(package_root, &locale.to_string())? else {
+        return Ok(Vec::new());
+    };
+    let locale_dir = package_root.join("locales").join(directory_name);
     let Some(dir) = open_optional_dir(locale_dir.as_path())? else {
         return Ok(Vec::new());
     };
@@ -66,6 +87,34 @@ pub fn load_consumer_resources(
         .iter()
         .map(|file| read_resource(&dir, file, &locale_dir))
         .collect()
+}
+
+/// Resolves the on-disk directory name for a requested locale.
+///
+/// Returns `None` when no directory matches. Only the directory name is
+/// tolerant of case; the locale identifier itself keeps its canonical form for
+/// matching, logging, and localizer construction.
+fn resolve_locale_directory(
+    package_root: &Utf8Path,
+    requested: &str,
+) -> Result<Option<String>, OrthohelpError> {
+    let exact = package_root.join("locales").join(requested);
+    if open_optional_dir(exact.as_path())?.is_some() {
+        return Ok(Some(requested.to_owned()));
+    }
+    let discovered = discover_locale_dirs(package_root)?;
+    if let Some(name) = discovered
+        .iter()
+        .find(|name| name.eq_ignore_ascii_case(requested))
+    {
+        return Ok(Some(name.clone()));
+    }
+    let Ok(requested_identifier) = parse_locale(requested) else {
+        return Ok(None);
+    };
+    Ok(discovered
+        .into_iter()
+        .find(|name| parse_locale(name).is_ok_and(|parsed| parsed == requested_identifier)))
 }
 
 /// List the `.ftl` files directly inside `dir`, ignoring other entries.
@@ -121,11 +170,7 @@ fn read_resource(
 fn parse_locales(values: &[String]) -> Result<Vec<LanguageIdentifier>, OrthohelpError> {
     let mut output = Vec::new();
     for value in values {
-        let locale =
-            LanguageIdentifier::from_str(value).map_err(|err| OrthohelpError::InvalidLocale {
-                value: value.clone(),
-                message: err.to_string(),
-            })?;
+        let locale = parse_locale(value)?;
         if output.iter().any(|existing| existing == &locale) {
             continue;
         }
@@ -134,12 +179,20 @@ fn parse_locales(values: &[String]) -> Result<Vec<LanguageIdentifier>, Orthohelp
     Ok(output)
 }
 
+/// Parses one locale value, keeping the caller's message for diagnostics.
+pub(crate) fn parse_locale(value: &str) -> Result<LanguageIdentifier, OrthohelpError> {
+    LanguageIdentifier::from_str(value).map_err(|err| OrthohelpError::InvalidLocale {
+        value: value.to_owned(),
+        message: err.to_string(),
+    })
+}
+
 /// Lists package locale subdirectories in sorted order for `--all-locales` fallback.
 ///
 /// A missing `locales` directory means no locales were discovered; directory
 /// enumeration and entry-inspection errors retain the directory path in the
 /// returned error.
-fn discover_locale_dirs(package_root: &Utf8Path) -> Result<Vec<String>, OrthohelpError> {
+pub(crate) fn discover_locale_dirs(package_root: &Utf8Path) -> Result<Vec<String>, OrthohelpError> {
     let locales_root = package_root.join("locales");
     let Some(dir) = open_optional_dir(locales_root.as_path())? else {
         return Ok(Vec::new());
@@ -218,135 +271,5 @@ fn build_localizer_with_fallback(
 }
 
 #[cfg(test)]
-mod tests {
-    //! Unit tests for locale resolution helpers.
-
-    use super::*;
-    use camino::Utf8PathBuf;
-    use cap_std::ambient_authority;
-    use cap_std::fs_utf8::Dir;
-    use rstest::{fixture, rstest};
-    use tempfile::TempDir;
-
-    #[rstest]
-    fn defaults_to_en_us(base_args: Args) {
-        let selection = selection_with_locales(Utf8PathBuf::from("."), None);
-
-        let locales = resolve_locales(&base_args, &selection).expect("resolve locales");
-        assert_eq!(locales.len(), 1);
-        let locale = locales.first().expect("expected one locale");
-        assert_eq!(locale.to_string(), "en-US");
-    }
-
-    #[rstest]
-    fn uses_metadata_locales_when_requested(mut base_args: Args) {
-        base_args.should_use_all_locales = true;
-        let selection =
-            selection_with_locales(Utf8PathBuf::from("."), Some(vec!["fr-FR".to_owned()]));
-
-        let locales = resolve_locales(&base_args, &selection).expect("resolve locales");
-        assert_eq!(locales.len(), 1);
-        let locale = locales.first().expect("expected one locale");
-        assert_eq!(locale.to_string(), "fr-FR");
-    }
-
-    #[rstest]
-    #[case(
-        vec!["ja-JP".to_owned()],
-        vec!["ja-JP".to_owned()]
-    )]
-    #[case(
-        vec!["en-US".to_owned(), "en-US".to_owned(), "fr-FR".to_owned()],
-        vec!["en-US".to_owned(), "fr-FR".to_owned()]
-    )]
-    fn uses_cli_locales_and_dedupes(
-        mut base_args: Args,
-        #[case] requested: Vec<String>,
-        #[case] expected: Vec<String>,
-    ) {
-        base_args.locale = requested;
-        let selection = selection_with_locales(Utf8PathBuf::from("."), None);
-
-        let locales = resolve_locales(&base_args, &selection).expect("resolve locales");
-        let resolved = locales
-            .into_iter()
-            .map(|locale| locale.to_string())
-            .collect::<Vec<_>>();
-        assert_eq!(resolved, expected);
-    }
-
-    #[rstest]
-    fn discovers_locales_when_metadata_missing(mut base_args: Args) {
-        let temp_dir = TempDir::new().expect("temp dir");
-        let package_root =
-            Utf8PathBuf::from_path_buf(temp_dir.path().to_path_buf()).expect("temp dir is UTF-8");
-        let dir = Dir::open_ambient_dir(package_root.as_path(), ambient_authority())
-            .expect("open temp dir");
-        dir.create_dir_all("locales/en-US")
-            .expect("create locale dir");
-        dir.create_dir_all("locales/fr-FR")
-            .expect("create locale dir");
-
-        base_args.should_use_all_locales = true;
-        let selection = selection_with_locales(package_root, None);
-
-        let locales = resolve_locales(&base_args, &selection).expect("resolve locales");
-        let resolved = locales
-            .into_iter()
-            .map(|locale| locale.to_string())
-            .collect::<Vec<_>>();
-        assert_eq!(resolved, vec!["en-US".to_owned(), "fr-FR".to_owned()]);
-    }
-
-    #[fixture]
-    fn base_args() -> Args {
-        Args {
-            package: None,
-            bin: None,
-            is_lib: false,
-            root_type: None,
-            locale: Vec::new(),
-            should_use_all_locales: false,
-            out_dir: None,
-            cache: crate::cli::CacheArgs {
-                should_cache: false,
-                should_skip_build: false,
-            },
-            format: crate::cli::OutputFormat::Ir,
-            man: crate::cli::ManArgs {
-                section: 1,
-                date: None,
-                should_split_subcommands: false,
-            },
-            powershell: crate::cli::PowerShellArgs {
-                module_name: None,
-                should_split_subcommands: None,
-                should_include_common_parameters: None,
-                help_info_uri: None,
-                should_ensure_en_us: true,
-            },
-            check_agent_native: false,
-            policy_mode: None,
-        }
-    }
-
-    fn selection_with_locales(
-        package_root: Utf8PathBuf,
-        locales: Option<Vec<String>>,
-    ) -> PackageSelection {
-        PackageSelection {
-            package_name: "demo".to_owned(),
-            package_root: package_root.clone(),
-            target_directory: package_root,
-            package_version: "0.1.0".to_owned(),
-            root_type: "demo::Config".to_owned(),
-            locales,
-            windows: None,
-            policy: None,
-            ortho_config_dependency: crate::metadata::OrthoConfigDependency {
-                requirement: "^0.7.0".to_owned(),
-                path: None,
-            },
-        }
-    }
-}
+#[path = "locale_tests.rs"]
+mod tests;

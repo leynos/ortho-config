@@ -2195,9 +2195,25 @@ Each source applies only when every earlier one is absent, so a type declaring
 Agent context is not locale-scoped: `agent-context.json` sits at the output
 root rather than under a locale directory, so a run with several locales still
 writes exactly one such document, which is also written to standard output.
-Command summaries inside it are resolved from the package's `en-US` resources
-rather than from a requested `--locale`, and are omitted when no such resource
-exists.
+Command summaries inside it come from the first parseable requested `--locale`;
+an invalid value is skipped and the next explicit value is considered. When no
+`--locale` is given, the first parseable locale declared in
+`[package.metadata.ortho_config] locales` supplies the preference. A candidate
+is used only when the package ships at least one `.ftl` resource for it and its
+localizer builds; a malformed catalogue is reported and the next candidate is
+tried. When the preferred locale has no usable package resources, the generator
+falls back to `en-US`, then to another discovered locale matching the language
+of an earlier candidate (for example `en-GB` for the `en-US` fallback), and
+finally to the embedded `en-US` defaults, which can still resolve library
+message identifiers. Once a localizer is selected, each summary is looked up
+only in that catalogue: a missing translation or a blank resolution omits that
+command's summary without trying another catalogue. All summaries are omitted
+when the selected catalogue lacks every command identifier, or when no
+localizer builds at all. Skipping an invalid `--locale` applies to summary
+selection only; a `--format all` run still rejects an invalid `--locale` with
+an error in localized generation, even when a valid value follows. Run with
+`RUST_LOG=info` to see the chosen locale and whether it came from the request,
+the metadata, `en-US`, a same-language catalogue, or the embedded defaults.
 
 ### Choose locales
 
