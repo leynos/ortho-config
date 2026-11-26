@@ -27,6 +27,13 @@ pub(super) struct BundleWithLocale {
     pub(super) kind: FluentBundleSource,
 }
 
+impl BundleWithLocale {
+    /// Applies Fluent's bidirectional-isolation setting without exposing the bundle.
+    pub(super) fn set_use_isolating(&mut self, value: bool) {
+        self.bundle.set_use_isolating(value);
+    }
+}
+
 impl fmt::Debug for BundleWithLocale {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("BundleWithLocale")
@@ -175,6 +182,7 @@ impl FluentLocalizerBuilder {
             consumer_bundle: None,
             report_issue: super::default_reporter(),
             use_defaults: true,
+            use_isolating: None,
         }
     }
 
@@ -213,6 +221,53 @@ impl FluentLocalizerBuilder {
         self
     }
 
+    /// Chooses whether formatted values carry Unicode bidirectional isolates.
+    ///
+    /// Fluent defaults to `true` and wraps every interpolated value in
+    /// U+2068 FIRST STRONG ISOLATE and U+2069 POP DIRECTIONAL ISOLATE. The
+    /// marks keep right-to-left values readable inside left-to-right text, but
+    /// many terminals, fonts, and log viewers do not display them, and they
+    /// break `grep`, string comparison, and snapshot tests on diagnostics.
+    ///
+    /// An explicit setting is applied once during [`try_build`] to both
+    /// bundles this builder owns: the embedded defaults and the consumer
+    /// bundle. That includes a bundle supplied through
+    /// [`with_consumer_bundle`]. The last call wins, and the order relative to
+    /// other setters does not matter.
+    ///
+    /// When this method is not called, each bundle keeps the setting it was
+    /// created with: Fluent's `true` default for bundles built from resources,
+    /// and whatever the caller chose for a supplied bundle. Disabling
+    /// isolation is not general bidirectional sanitization. Turn it off only
+    /// when the rendered text is known to be left-to-right, as is usual for
+    /// terminal diagnostics.
+    ///
+    /// [`with_consumer_bundle`]: FluentLocalizerBuilder::with_consumer_bundle
+    /// [`try_build`]: FluentLocalizerBuilder::try_build
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use ortho_l10n::{FluentLocalizer, FluentValue, LocalizationArgs, Localizer, langid};
+    ///
+    /// let localizer = FluentLocalizer::builder(langid!("en-GB"))
+    ///     .with_consumer_resources(["welcome = Hello, { $name }!"])
+    ///     .with_use_isolating(false)
+    ///     .try_build()?;
+    /// let mut args = LocalizationArgs::new();
+    /// args.insert("name", FluentValue::from("Ada"));
+    /// assert_eq!(
+    ///     localizer.lookup("welcome", Some(&args)).as_deref(),
+    ///     Some("Hello, Ada!"),
+    /// );
+    /// # Ok::<(), ortho_l10n::FluentLocalizerError>(())
+    /// ```
+    #[must_use]
+    pub fn with_use_isolating(mut self, use_isolating: bool) -> Self {
+        self.use_isolating = Some(use_isolating);
+        self
+    }
+
     /// Builds the [`FluentLocalizer`], validating both default and consumer bundles.
     ///
     /// # Errors
@@ -220,12 +275,17 @@ impl FluentLocalizerBuilder {
     /// Returns [`FluentLocalizerError`] if any catalogue fails to parse or
     /// registers conflicting identifiers.
     pub fn try_build(self) -> Result<FluentLocalizer, FluentLocalizerError> {
-        let defaults = self.build_defaults_bundle()?;
-        let consumer = Self::build_consumer_bundle(
+        let mut defaults = self.build_defaults_bundle()?;
+        let mut consumer = Self::build_consumer_bundle(
             &self.locale,
             self.consumer_bundle,
             &self.consumer_resources,
         )?;
+        if let Some(use_isolating) = self.use_isolating {
+            for bundle in [defaults.as_mut(), consumer.as_mut()].into_iter().flatten() {
+                bundle.set_use_isolating(use_isolating);
+            }
+        }
 
         Ok(FluentLocalizer {
             consumer,
@@ -281,82 +341,12 @@ impl fmt::Debug for FluentLocalizerBuilder {
                 &self.consumer_bundle.as_ref().map(|bundle| &bundle.locale),
             )
             .field("use_defaults", &self.use_defaults)
+            .field("use_isolating", &self.use_isolating)
             .field("report_issue", &"<formatter>")
             .finish()
     }
 }
 
 #[cfg(test)]
-mod tests {
-    //! Tests for Fluent resource parsing and identifier normalization helpers.
-    use super::*;
-    use rstest::rstest;
-    use unic_langid::langid;
-
-    // =========================================================================
-    // default_resources tests
-    // =========================================================================
-
-    #[rstest]
-    #[case::en_us(langid!("en-US"), EN_US_RESOURCES.as_slice(), "EN_US_RESOURCES", "en-US should return English resources")]
-    #[case::en_gb(langid!("en-GB"), EN_US_RESOURCES.as_slice(), "EN_US_RESOURCES", "en-GB should return English resources (language-based matching)")]
-    #[case::bare_en(langid!("en"), EN_US_RESOURCES.as_slice(), "EN_US_RESOURCES", "bare 'en' should return English resources")]
-    #[case::ja(langid!("ja"), JA_RESOURCES.as_slice(), "JA_RESOURCES", "ja should return Japanese resources")]
-    #[case::ja_jp(langid!("ja-JP"), JA_RESOURCES.as_slice(), "JA_RESOURCES", "ja-JP should return Japanese resources (language-based matching)")]
-    fn default_resources_returns_expected_catalogue(
-        #[case] locale: LanguageIdentifier,
-        #[case] expected_resources: &'static [&'static str],
-        #[case] resource_name: &str,
-        #[case] description: &str,
-    ) {
-        let resources = default_resources(&locale);
-        assert!(
-            resources.is_some(),
-            "{description}: should return Some for locale {locale}"
-        );
-        assert!(
-            std::ptr::eq(resources.expect("checked above"), expected_resources),
-            "{description}: should return {resource_name} for locale {locale}"
-        );
-    }
-
-    #[test]
-    fn default_resources_returns_none_for_unsupported_locale() {
-        let locale = langid!("fr-FR");
-        let resources = default_resources(&locale);
-        assert!(resources.is_none(), "unsupported locale should return None");
-    }
-
-    // =========================================================================
-    // Identifier normalization tests
-    // =========================================================================
-
-    #[test]
-    fn normalizes_top_level_dotted_ids() {
-        let resource = "cli.about = About text";
-        let normalized = normalize_resource_ids(resource);
-        assert_eq!(normalized, "cli-about = About text");
-    }
-
-    #[test]
-    fn leaves_indented_lines_with_equals_untouched() {
-        let resource = "message =\n    section.title = Title line";
-        let normalized = normalize_resource_ids(resource);
-        assert!(normalized.contains("    section.title = Title line"));
-    }
-
-    #[test]
-    fn leaves_terms_and_attributes_unchanged() {
-        let resource = "-term.id = Term value\nmessage = Value\n    .label = Label";
-        let normalized = normalize_resource_ids(resource);
-        assert!(normalized.contains("-term.id = Term value"));
-        assert!(normalized.contains("    .label = Label"));
-    }
-
-    #[test]
-    fn normalizes_unicode_identifiers() {
-        let resource = "ключ.значение = Привет";
-        let normalized = normalize_resource_ids(resource);
-        assert!(normalized.starts_with("ключ-значение = Привет"));
-    }
-}
+#[path = "fluent_tests.rs"]
+mod tests;

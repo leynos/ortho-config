@@ -119,6 +119,11 @@ pub struct FluentLocalizer {
 }
 
 /// Builds a [`FluentLocalizer`].
+///
+/// Formatted values carry Fluent's Unicode bidirectional isolates by default.
+/// Choose that behaviour explicitly with
+/// [`FluentLocalizerBuilder::with_use_isolating`] before
+/// [`try_build`](FluentLocalizerBuilder::try_build).
 pub struct FluentLocalizerBuilder {
     /// Locale shared by embedded and consumer catalogues built from this configuration.
     locale: LanguageIdentifier,
@@ -130,6 +135,8 @@ pub struct FluentLocalizerBuilder {
     report_issue: FormattingIssueReporter,
     /// Controls whether a built-in language catalogue is required and loaded.
     use_defaults: bool,
+    /// Explicit bidirectional-isolation setting applied to every owned bundle at build time.
+    use_isolating: Option<bool>,
 }
 
 /// Errors surfaced when constructing a [`FluentLocalizer`].
@@ -322,3 +329,6 @@ mod tests;
 
 #[cfg(test)]
 mod characterization;
+
+#[cfg(test)]
+mod isolation_tests;
