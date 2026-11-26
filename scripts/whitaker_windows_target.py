@@ -260,13 +260,18 @@ def installed_toolchains() -> list[str]:
     ]
 
 
-def is_installed(channel: str, toolchains: typ.Iterable[str]) -> bool:
-    """Report whether ``rustup`` has the toolchain *channel* names.
+def resolve_toolchains(channel: str, toolchains: typ.Iterable[str]) -> list[str]:
+    """Return the installed toolchains *channel* names, by ``rustup``'s names.
 
-    A channel names a toolchain whether or not the installed entry carries a
-    host qualifier, and rustup permits any host, not only the five this
-    repository happens to build on. So an entry matches when it is the channel
-    or the channel plus a host, and the host is never enumerated here.
+    Rustup permits any host, not only the ones this repository builds on, so
+    the host is never enumerated here: a name matches when it is the channel
+    or the channel plus a host. The host-qualified identities are returned
+    rather than the bare channel because they are what the later `rustup`
+    queries and installs use. Naming the bare channel would let rustup infer
+    the default host, so an installed musl build could stand as proof that the
+    unqualified name resolves, and the next query would install a GNU
+    compiler to answer. The exact name, when ``rustup`` reports one, comes
+    first.
 
     Parameters
     ----------
@@ -277,64 +282,65 @@ def is_installed(channel: str, toolchains: typ.Iterable[str]) -> bool:
 
     Returns
     -------
-    bool
-        Whether one of them is that channel.
+    list of str
+        One identity per installed toolchain naming the channel, empty when
+        there is none.
 
     Examples
     --------
-    >>> is_installed("nightly-2026-05-28", ["nightly-2026-05-28-x86_64-unknown-linux-gnu"])
-    True
-    >>> is_installed("nightly-2026-05-28", ["nightly-2026-05-28-x86_64-unknown-linux-musl"])
-    True
-    >>> is_installed("nightly-2026-05-28", ["nightly-2026-05-28"])
-    True
-    >>> is_installed("nightly-2026-05-28", ["nightly-2025-09-18-x86_64-unknown-linux-gnu"])
-    False
+    >>> resolve_toolchains("nightly-a", ["nightly-a-x86_64-unknown-linux-gnu"])
+    ['nightly-a-x86_64-unknown-linux-gnu']
+    >>> resolve_toolchains("nightly-a", ["nightly-a-x86_64-unknown-linux-musl"])
+    ['nightly-a-x86_64-unknown-linux-musl']
+    >>> resolve_toolchains("nightly-a", ["nightly-b-x86_64-unknown-linux-gnu"])
+    []
+    >>> resolve_toolchains("nightly-a", ["nightly-a-x86_64-unknown-linux-gnu", "nightly-a"])
+    ['nightly-a', 'nightly-a-x86_64-unknown-linux-gnu']
     """
-    return any(
-        name == channel or name.startswith(f"{channel}-") for name in toolchains
-    )
+    named = [
+        name for name in toolchains if name == channel or name.startswith(f"{channel}-")
+    ]
+    return [name for name in named if name == channel] + [
+        name for name in named if name != channel
+    ]
 
 
-def installed_targets(channel: str, toolchains: typ.Iterable[str]) -> set[str] | None:
-    """Return the triples ``rustup`` has for *channel*, or ``None`` if absent.
+def installed_targets(toolchain: str) -> set[str]:
+    """Return the triples ``rustup`` has for one installed *toolchain*.
 
     Parameters
     ----------
-    channel : str
-        The toolchain channel to ask about.
-    toolchains : iterable of str
-        The names ``rustup toolchain list`` reported, consulted before asking
-        for the targets so an absent toolchain is never installed as a side
-        effect of the question.
+    toolchain : str
+        A name ``rustup toolchain list`` reported, host qualifier included.
 
     Returns
     -------
-    set of str or None
-        The installed triples, or ``None`` when ``rustup`` has no such
-        toolchain, which is the one answer that is not "none are installed".
+    set of str
+        The installed triples, empty when the toolchain has none.
     """
-    if not is_installed(channel, toolchains):
-        return None
     completed = _run(
-        ["rustup", "target", "list", "--installed", "--toolchain", channel],
+        ["rustup", "target", "list", "--installed", "--toolchain", toolchain],
         deadline=QUERY_DEADLINE_SECONDS,
     )
     return set(completed.stdout.split())
 
 
-def install_target(channel: str, target: str) -> None:
-    """Add *target*'s standard library to *channel*.
+def install_target(toolchain: str, target: str) -> None:
+    """Add *target*'s standard library to one installed *toolchain*.
+
+    The argument is an identity ``rustup`` reported, not a bare channel, for
+    the reason `resolve_toolchains` returns those: a bare channel lets rustup
+    infer the default host, which may be a compiler that is not installed.
 
     Parameters
     ----------
-    channel : str
-        The toolchain channel to extend.
+    toolchain : str
+        The toolchain identity to extend.
     target : str
         The target triple to add.
     """
     _run(
-        ["rustup", "target", "add", "--toolchain", channel, target],
+        ["rustup", "target", "add", "--toolchain", toolchain, target],
         deadline=INSTALL_DEADLINE_SECONDS,
     )
 
@@ -342,7 +348,7 @@ def install_target(channel: str, target: str) -> None:
 def survey(
     installer: str, target: str
 ) -> tuple[list[str], list[str], list[str]]:
-    """Report which candidate channels have, need, or cannot take the target.
+    """Report which installed toolchains have, need, or cannot take the target.
 
     Parameters
     ----------
@@ -354,8 +360,8 @@ def survey(
     Returns
     -------
     tuple of list of str
-        The channels that already have the target, those that do not, and
-        those whose toolchain ``rustup`` does not have.
+        The toolchain identities that already have the target, those that do
+        not, and the candidate channels ``rustup`` does not have at all.
 
     Raises
     ------
@@ -371,13 +377,15 @@ def survey(
     missing: list[str] = []
     absent: list[str] = []
     for channel in channels:
-        targets = installed_targets(channel, toolchains)
-        if targets is None:
+        identities = resolve_toolchains(channel, toolchains)
+        if not identities:
             absent.append(channel)
-        elif target in targets:
-            satisfied.append(channel)
-        else:
-            missing.append(channel)
+            continue
+        for identity in identities:
+            if target in installed_targets(identity):
+                satisfied.append(identity)
+            else:
+                missing.append(identity)
     if not satisfied and not missing:
         raise ToolchainLookupError(
             "no candidate Whitaker toolchain is installed: "

@@ -26,6 +26,7 @@ import argparse
 import os
 import pathlib
 import re
+import shlex
 import subprocess  # noqa: S404 - the gate is an external command, the subject.
 import typing as typ
 
@@ -105,6 +106,34 @@ def configured_limit(configuration: str) -> int:
     return int(limits[0])
 
 
+def split_launcher(launcher: str) -> list[str]:
+    """Return the argv for a launcher command, without running a shell.
+
+    The Makefile passes `WHITAKER` through `shell_quote`, so the value may be
+    one executable or a command with arguments, such as `env whitaker`. It is
+    split here rather than handed to `subprocess` whole, which would look for
+    a file whose name contains a space. No shell is involved either way.
+
+    Parameters
+    ----------
+    launcher : str
+        The launcher as the caller configured it.
+
+    Returns
+    -------
+    list of str
+        The command and its leading arguments.
+
+    Examples
+    --------
+    >>> split_launcher("whitaker")
+    ['whitaker']
+    >>> split_launcher("env whitaker")
+    ['env', 'whitaker']
+    """
+    return shlex.split(launcher, posix=os.name != "nt")
+
+
 def gate_command(*, whitaker: str, target: str, over_limit: bool) -> list[str]:
     """Return the `whitaker` arguments that score the probe crate.
 
@@ -127,11 +156,13 @@ def gate_command(*, whitaker: str, target: str, over_limit: bool) -> list[str]:
     >>> gate_command(whitaker="whitaker", target="x86_64-pc-windows-msvc",
     ...              over_limit=False)[:2]
     ['whitaker', '--all']
+    >>> gate_command(whitaker="env whitaker", target="t", over_limit=False)[:3]
+    ['env', 'whitaker', '--all']
     >>> "--features" in gate_command(whitaker="w", target="t", over_limit=True)
     True
     """
     command = [
-        whitaker,
+        *split_launcher(whitaker),
         "--all",
         "--manifest-path",
         str(PROBE_DIRECTORY / "Cargo.toml"),
