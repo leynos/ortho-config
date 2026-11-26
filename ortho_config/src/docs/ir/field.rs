@@ -88,6 +88,32 @@ pub struct CliMetadata {
     pub possible_values: Vec<String>,
     /// Whether the flag is hidden from help output.
     pub hide_in_help: bool,
+    /// Positional operand metadata, set only when the field is an operand.
+    ///
+    /// A positional has neither a long nor a short flag; renderers print its
+    /// value name instead of a flag spelling and order operands by `index`.
+    /// Omitted from the wire when absent so flag-only surfaces stay
+    /// byte-compatible with earlier IR, per ADR-0003.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub positional: Option<PositionalMetadata>,
+}
+
+/// Metadata describing one positional CLI operand.
+///
+/// The leaves model independent clap settings: an operand may accept several
+/// values, consume the remaining arguments without requiring `--`, and remain
+/// reachable only after `--`. Keeping them separate preserves every
+/// combination the underlying parser can declare.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct PositionalMetadata {
+    /// One-based positional index assigned by clap.
+    pub index: u16,
+    /// Whether the operand accepts more than one value.
+    pub variadic: bool,
+    /// Whether the operand consumes trailing arguments without requiring `--`.
+    pub var_arg: bool,
+    /// Whether the operand is reachable only through `--`.
+    pub last: bool,
 }
 
 /// Environment variable documentation metadata.

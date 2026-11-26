@@ -121,6 +121,9 @@
   review the ordered summary-locale preference, the resource-and-build
   acceptance rule, the same-language fallback, and the decision to report the
   choice through tracing rather than a schema field.
+- [ADR-0028: Clap declarations drive the documented CLI surface](adrs/adr-0028-clap-declarations-drive-documented-cli-surface.md):
+  review the per-field source rule, positional IR metadata, the subcommand
+  environment and file namespaces, and the localization-path choice.
 - [Archived v0.8.0 roadmap](archive/v0-8-0-roadmap.md): review completed
   phases, steps, and tasks from the roadmap that preceded the active
   agent-native plan.

@@ -181,6 +181,7 @@ macro_rules! define_nested_fixture {
                     value_optional: true,
                     possible_values: vec!["true".to_owned(), "false".to_owned()],
                     hide_in_help: false,
+                    positional: None,
                 }),
                 env: None,
                 file: None,
@@ -220,6 +221,7 @@ macro_rules! define_nested_fixture {
                     value_optional: false,
                     possible_values: Vec::new(),
                     hide_in_help: false,
+                    positional: None,
                 }),
                 env: spec.env.map(|var_name| EnvMetadata {
                     var_name: var_name.to_owned(),

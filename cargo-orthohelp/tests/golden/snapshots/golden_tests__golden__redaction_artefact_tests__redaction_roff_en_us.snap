@@ -24,10 +24,10 @@ Default: \fBString :: from("fast")\fR
 .br
 Possible values: \fIfast, safe\fR
 .TP
-\fB\-\-token\fR \fICHOICE\fR, \fB\-t\fR \fICHOICE\fR
+\fB\-\-token\fR \fITOKEN\fR
 Confidential token used by the fixture service.
 .TP
-\fB\-\-locator\fR \fICHOICE\fR, \fB\-l\fR \fICHOICE\fR
+\fB\-\-locator\fR \fILOCATOR\fR
 Locator the application resolves elsewhere.
 .SH ENVIRONMENT
 .TP
@@ -102,7 +102,7 @@ Rotates the confidential token.
 .PP
 OPTIONS:
 .TP
-\fB\-\-replacement\fR \fICHOICE\fR, \fB\-r\fR \fICHOICE\fR
+\fB\-\-replacement\fR \fIREPLACEMENT\fR
 Confidential replacement token.
 .TP
 \fB\-\-is-dry-run\fR\fI[=BOOL]\fR, \fB\-i\fR\fI[=BOOL]\fR

@@ -88,16 +88,20 @@ fn command_label(variant: &syn::Variant) -> syn::Result<syn::LitStr> {
 
 /// Emits the wrapped argument metadata with application and about identifiers
 /// adjusted to the selected command label.
+///
+/// The child's generated `get_doc_metadata_for_subcommand` owns the
+/// declaration-specific identifier path and the `<PREFIX>_CMDS_<NAME>_` /
+/// `cmds.<name>` projection, so the selector passes the mount context rather
+/// than rebuilding identifiers here.
 fn metadata_expr(variant: &syn::Variant, krate: &TokenStream) -> syn::Result<TokenStream> {
     let args_ty = single_tuple_field(&variant.ident, &variant.fields)?;
     let label = command_label(variant)?;
     Ok(quote! {
         {
-            let mut command_path = parent_path.to_vec();
-            command_path.push(#label.to_string());
+            let label = #label;
             let mut metadata = <#args_ty as #krate::docs::OrthoConfigDocs>
-                ::get_doc_metadata_for_path(&command_path);
-            metadata.app_name = #label.to_string();
+                ::get_doc_metadata_for_subcommand(parent_path, label);
+            metadata.app_name = label.to_string();
             metadata
         }
     })

@@ -89,6 +89,7 @@ fn expand_ortho_config(derive_input: &DeriveInput) -> syn::Result<proc_macro2::T
     }
     .generate()?;
     let localization_ids = generate_localization_ids(&struct_attrs, &ident, &fields, &field_attrs)?;
+    let clap_command_name = derive::parse::clap_command_name(&derive_input.attrs)?;
     let docs_impl = generate_docs_impl(&DocsArgs {
         ident: &ident,
         fields: &fields,
@@ -97,6 +98,7 @@ fn expand_ortho_config(derive_input: &DeriveInput) -> syn::Result<proc_macro2::T
         serde_rename_all,
         cli_fields: &components.cli_field_metadata,
         localization_ids: &localization_ids,
+        clap_command_name: clap_command_name.as_deref(),
         krate: &krate,
     })?;
     emit_identifier_artefact(&localization_ids, &ident)?;

@@ -105,6 +105,7 @@ fn model_cli(cli: &CliMetadata, is_protected: bool) -> CliMetadata {
             cli.possible_values.clone()
         },
         hide_in_help: cli.hide_in_help,
+        positional: cli.positional.clone(),
     }
 }
 

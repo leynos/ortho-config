@@ -71,7 +71,7 @@ fn doc_with_budget(depth: usize, nodes: usize, fields: usize) -> BoxedStrategy<D
                     .collect();
                 let records = record_block(&app_name);
                 sequence(children).prop_map(move |subcommands| DocMetadata {
-                    ir_version: "2.0".to_owned(),
+                    ir_version: "2.1".to_owned(),
                     app_name: app_name.clone(),
                     bin_name: bin_name.clone(),
                     about_id: format!("{app_name}.about"),
@@ -223,6 +223,7 @@ fn any_cli(literals: BoxedStrategy<String>) -> impl Strategy<Value = CliMetadata
                     value_optional,
                     possible_values: values,
                     hide_in_help: hidden,
+                    positional: None,
                 }
             },
         )

@@ -2087,6 +2087,21 @@ fn main() {
 }
 ```
 
+The metadata describes the command line that executes. A field that carries an
+explicit clap `#[arg(...)]` or `#[clap(...)]` declaration is documented from
+that declaration, so a positional operand has no long or short flag, keeps
+clap's value name, and carries its one-based positional index. A clap boolean
+flag is a switch rather than an optional-value flag. Fields without a clap
+declaration keep the long and short flags generated for the OrthoConfig parser.
+
+Subcommand metadata is scoped to the names the subcommand merge reads. A field
+documented through `OrthoConfigSubcommandDocs`, or through a mounted command
+path, reports environment variables as `<PREFIX>_CMDS_<NAME>_<FIELD>` and file
+keys as `cmds.<name>.<key>`. `<NAME>` is the subcommand's clap name. The
+subcommand's `about_id` and field help identifiers agree with its `ABOUT_ID` and
+`ARG_IDS` when the argument type declares a `localization_base`; with a parent
+path they follow the mount path that `LocalizeCmd` resolves.
+
 Or use `cargo-orthohelp` to emit intermediate representation (IR), Unix man
 pages, PowerShell help, compact agent context, or all formats. The
 [README](../README.md#install-the-documentation-generator) explains how to

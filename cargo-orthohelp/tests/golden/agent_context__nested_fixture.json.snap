@@ -199,7 +199,7 @@ expression: snapshot
           "name": "force",
           "long": "force",
           "value_type": "bool",
-          "required": true,
+          "required": false,
           "default": null,
           "enum_values": []
         },

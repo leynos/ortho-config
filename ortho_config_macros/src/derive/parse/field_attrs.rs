@@ -11,8 +11,8 @@ use super::literals::{lit_char, lit_str};
 use super::localization::reject_localized_default;
 use super::{
     CliFieldMode, FieldAttrs, MergeStrategy, apply_field_doc_attr, clap_default_value,
-    clap_field_is_flattened, clap_field_is_subcommand, discard_unknown, parse_ortho_config,
-    reject_subcommand_ortho_config_attrs, serde_field_is_flattened,
+    clap_field_is_flattened, clap_field_is_subcommand, discard_unknown, parse_clap_arg_decl,
+    parse_ortho_config, reject_subcommand_ortho_config_attrs, serde_field_is_flattened,
 };
 
 /// The two disclosure classifications an author may declare on a field.
@@ -81,6 +81,7 @@ pub(crate) fn parse_field_attrs(field: &syn::Field) -> Result<FieldAttrs, syn::E
         reject_subcommand_ortho_config_attrs(field)?;
         return Ok(out);
     }
+    out.clap_arg = parse_clap_arg_decl(field)?;
     parse_ortho_config(&field.attrs, |meta| {
         if !apply_field_attr(meta, &mut out)? {
             // Unknown attributes are intentionally discarded to preserve

@@ -1,5 +1,7 @@
 //! Field-level documentation IR generation.
 
+mod clap_surface;
+mod cli;
 mod defaults;
 mod emission;
 mod resolution;
@@ -20,6 +22,8 @@ use crate::derive::parse::{
     FieldAttrs, ProfileFieldLabel, SerdeRenameAll, serde_serialized_field_key,
 };
 
+use self::clap_surface::{ResolvedClapArg, resolve_clap_args};
+use self::cli::build_cli_tokens;
 use self::emission::render_field_metadata;
 use self::resolution::{resolve_required, resolve_value_type};
 pub(super) use self::shapes::FieldDocArgs;
@@ -29,11 +33,21 @@ use self::shapes::{
 };
 use super::AppName;
 use super::sections::string_tokens;
-use super::{example_tokens, link_tokens, note_tokens, option_char_tokens, option_string_tokens};
+use super::{example_tokens, link_tokens, note_tokens};
 use defaults::{default_env_name, default_field_id};
-use tokens::{build_possible_values, default_tokens, deprecated_tokens};
+use tokens::{default_tokens, deprecated_tokens};
 use validation::{ensure_unique, validate_env_name, validate_file_key};
-use value_types::{is_multi_value, value_type_tokens};
+use value_types::value_type_tokens;
+
+/// Generated field records plus the subcommand projections they require.
+pub(super) struct FieldsMetadata {
+    /// One `FieldMetadata` initializer per documented field.
+    pub(super) records: Vec<TokenStream>,
+    /// Whether any generated environment name needs subcommand projection.
+    pub(super) needs_env_projection: bool,
+    /// Whether any generated file key needs subcommand projection.
+    pub(super) needs_file_projection: bool,
+}
 
 /// Builds one generated documentation record per non-subcommand field.
 ///
@@ -41,7 +55,7 @@ use value_types::{is_multi_value, value_type_tokens};
 /// they are paired by position. Duplicate environment names and file-key paths
 /// are rejected while records are built so the generated metadata is
 /// unambiguous.
-pub(super) fn build_fields_metadata(args: &FieldDocArgs<'_>) -> syn::Result<Vec<TokenStream>> {
+pub(super) fn build_fields_metadata(args: &FieldDocArgs<'_>) -> syn::Result<FieldsMetadata> {
     if args.fields.len() != args.field_attrs.len() {
         return Err(syn::Error::new(
             proc_macro2::Span::call_site(),
@@ -58,12 +72,25 @@ pub(super) fn build_fields_metadata(args: &FieldDocArgs<'_>) -> syn::Result<Vec<
         .iter()
         .map(|meta| (meta.field_name.as_str(), meta))
         .collect::<HashMap<_, _>>();
+    let clap_lookup = resolve_clap_args(args.fields, args.field_attrs)?;
+    let documented = args
+        .fields
+        .iter()
+        .zip(args.field_attrs)
+        .filter(|(_, attrs)| !attrs.cli.is_subcommand());
+    let mut needs_env_projection = false;
+    let mut needs_file_projection = false;
+    for (_, attrs) in documented.clone() {
+        needs_env_projection |= attrs.doc.env_name.is_none();
+        needs_file_projection |= attrs.doc.file_key_path.is_none();
+    }
 
     let mut builder = FieldMetaBuilder {
         app_name: args.app_name,
         prefix: args.prefix,
         serde_rename_all: args.serde_rename_all,
         cli_lookup,
+        clap_lookup,
         localization_args: args
             .localization_ids
             .args
@@ -75,15 +102,16 @@ pub(super) fn build_fields_metadata(args: &FieldDocArgs<'_>) -> syn::Result<Vec<
         krate: args.krate,
     };
 
-    let mut output = Vec::with_capacity(args.fields.len());
-    for (field, attrs) in args.fields.iter().zip(args.field_attrs) {
-        if attrs.cli.is_subcommand() {
-            continue;
-        }
-        output.push(builder.build_field(field, attrs)?);
+    let mut records = Vec::with_capacity(args.fields.len());
+    for (field, attrs) in documented {
+        records.push(builder.build_field(field, attrs)?);
     }
 
-    Ok(output)
+    Ok(FieldsMetadata {
+        records,
+        needs_env_projection,
+        needs_file_projection,
+    })
 }
 
 /// Carries per-struct inputs and cross-field state across one field build.
@@ -99,6 +127,8 @@ struct FieldMetaBuilder<'a> {
     serde_rename_all: Option<SerdeRenameAll>,
     /// CLI metadata collected for the struct, keyed by field name.
     cli_lookup: HashMap<&'a str, &'a CliFieldMetadata>,
+    /// Resolved clap declarations, keyed by field name.
+    clap_lookup: HashMap<String, ResolvedClapArg>,
     /// Localization argument ids for the struct, keyed by field name.
     localization_args: HashMap<&'a str, &'a ArgIdsModel>,
     /// Environment variables already claimed, with the span to blame.
@@ -136,7 +166,11 @@ impl<'a> FieldMetaBuilder<'a> {
             MessageSuffix::LongHelp,
         );
         let value_type = resolve_value_type(attrs, field);
-        let required = resolve_required(field, attrs)?;
+        let required = self
+            .clap_lookup
+            .get(&field_name)
+            .and_then(|declaration| declaration.required)
+            .map_or_else(|| resolve_required(field, attrs), Ok)?;
         let value_context = ValueContext {
             value_tokens: value_type_tokens(value_type.clone(), self.krate),
             required,
@@ -204,60 +238,15 @@ impl<'a> FieldMetaBuilder<'a> {
 
     /// Emits CLI metadata, preserving `None` for fields excluded from the CLI.
     ///
-    /// The value name and help visibility come from documentation attributes;
-    /// option spelling, multiplicity, and value-taking behaviour come from the
-    /// already-resolved CLI metadata and Rust field type.
+    /// An explicit clap declaration wins over the generated parser's surface;
+    /// a field without one keeps the generated long and short flags.
     fn build_cli_tokens(&self, context: &FieldContext<'_>) -> syn::Result<TokenStream> {
-        if context.attrs.cli.is_skipped() {
-            return Ok(quote! { None });
-        }
-        let meta = self.cli_lookup.get(context.field_name).ok_or_else(|| {
-            syn::Error::new_spanned(
-                context.name,
-                "missing CLI metadata for field; this is a macro bug",
-            )
-        })?;
-        let long = option_string_tokens(Some(meta.long.as_str()));
-        let short = option_char_tokens(Some(meta.short));
-        let multiple = is_multi_value(&context.field.ty);
-        let possible_values = build_possible_values(context.value_type);
-        let hide_in_help = context.attrs.doc.cli_hide_in_help;
-
-        // Boolean flags accept an optional `=<BOOL>` value. Report the value
-        // placeholder and allowed literals so renderers can print the
-        // `--flag[=<BOOL>]` form rather than an unexplained bare switch.
-        // Every other option takes a required value, so only boolean flags
-        // mark their value as optional.
-        let (value_name, value_optional, resolved_possible_values) = if meta.is_bool {
-            (
-                option_string_tokens(Some("BOOL")),
-                quote! { true },
-                vec![
-                    quote! { String::from("true") },
-                    quote! { String::from("false") },
-                ],
-            )
-        } else {
-            (
-                option_string_tokens(context.attrs.doc.cli_value_name.as_deref()),
-                quote! { false },
-                possible_values,
-            )
-        };
-
-        let krate = self.krate;
-        Ok(quote! {
-            Some(#krate::docs::CliMetadata {
-                long: #long,
-                short: #short,
-                value_name: #value_name,
-                multiple: #multiple,
-                takes_value: true,
-                value_optional: #value_optional,
-                possible_values: vec![ #( #resolved_possible_values ),* ],
-                hide_in_help: #hide_in_help,
-            })
-        })
+        build_cli_tokens(
+            context,
+            self.clap_lookup.get(context.field_name),
+            self.cli_lookup.get(context.field_name).copied(),
+            self.krate,
+        )
     }
 
     /// Resolves and validates the field's environment name before tokenizing it.
@@ -266,19 +255,32 @@ impl<'a> FieldMetaBuilder<'a> {
     /// prefix-and-field name. Duplicate names are errors, with spans retained
     /// so diagnostics can point back to the source fields.
     fn build_env_tokens(&mut self, context: &FieldContext<'_>) -> syn::Result<TokenStream> {
-        let env_name = context
-            .attrs
-            .doc
-            .env_name
-            .clone()
-            .unwrap_or_else(|| default_env_name(self.prefix, context.field_name));
+        let explicit = context.attrs.doc.env_name.as_deref();
+        let env_name = explicit.map_or_else(
+            || default_env_name(self.prefix, context.field_name),
+            str::to_owned,
+        );
         validate_env_name(context.name, &env_name)?;
         ensure_unique("env", context.name, &env_name, &mut self.env_seen)?;
         let lit = syn::LitStr::new(&env_name, proc_macro2::Span::call_site());
         let krate = self.krate;
+        if explicit.is_some() {
+            return Ok(quote! {
+                #krate::docs::EnvMetadata {
+                    var_name: String::from(#lit),
+                }
+            });
+        }
+
+        let suffix = syn::LitStr::new(
+            &default_env_name(None, context.field_name),
+            proc_macro2::Span::call_site(),
+        );
         Ok(quote! {
             #krate::docs::EnvMetadata {
-                var_name: String::from(#lit),
+                var_name: doc_env_prefix
+                    .as_ref()
+                    .map_or_else(|| String::from(#lit), |prefix| format!("{prefix}{}", #suffix)),
             }
         })
     }
@@ -289,18 +291,28 @@ impl<'a> FieldMetaBuilder<'a> {
     /// field key, including the struct-level rename rule. Duplicate resolved
     /// paths are rejected to keep file-source metadata unambiguous.
     fn build_file_tokens(&mut self, context: &FieldContext<'_>) -> syn::Result<TokenStream> {
-        let key_path = if let Some(key) = context.attrs.doc.file_key_path.clone() {
-            key
-        } else {
-            serde_serialized_field_key(context.field, self.serde_rename_all)?
+        let explicit = context.attrs.doc.file_key_path.as_deref();
+        let key_path = match explicit {
+            Some(key) => key.to_owned(),
+            None => serde_serialized_field_key(context.field, self.serde_rename_all)?,
         };
         validate_file_key(context.name, &key_path)?;
         ensure_unique("file", context.name, &key_path, &mut self.file_seen)?;
         let lit = syn::LitStr::new(&key_path, proc_macro2::Span::call_site());
         let krate = self.krate;
+        if explicit.is_some() {
+            return Ok(quote! {
+                #krate::docs::FileMetadata {
+                    key_path: String::from(#lit),
+                }
+            });
+        }
+
         Ok(quote! {
             #krate::docs::FileMetadata {
-                key_path: String::from(#lit),
+                key_path: doc_file_prefix
+                    .as_ref()
+                    .map_or_else(|| String::from(#lit), |prefix| format!("{prefix}{}", #lit)),
             }
         })
     }

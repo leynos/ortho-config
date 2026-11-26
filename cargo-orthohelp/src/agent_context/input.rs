@@ -17,6 +17,11 @@ use super::default_display::normalize_default_display;
 /// non-positional fields with no long or short flag. Returned inputs populate
 /// name, long flag, value type, required state, default display, and enum
 /// values.
+///
+/// A positional operand is still invocable, so it is retained with
+/// `long: None`. Its order comes from `CliMetadata.positional`, which this
+/// compact schema does not yet carry; agents that need the order read the
+/// documentation IR.
 pub(super) fn build_input(field: &FieldMetadata) -> Option<ortho_config::AgentInput> {
     let cli = field.cli.as_ref()?;
     if cli.hide_in_help {

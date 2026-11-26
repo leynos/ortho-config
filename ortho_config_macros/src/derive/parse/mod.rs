@@ -13,6 +13,7 @@
 use syn::{Attribute, Expr, LitStr};
 
 mod behaviour_attrs;
+mod clap_arg;
 mod clap_attrs;
 mod clap_defaults;
 mod discovery_attrs;
@@ -33,9 +34,11 @@ mod tests;
 mod type_utils;
 
 pub(crate) use behaviour_attrs::parse_behaviour_meta;
+pub(crate) use clap_arg::{ClapArgDecl, ClapPositionalDecl, parse_clap_arg_decl};
 pub(crate) use clap_attrs::{
-    clap_arg_id_from_attribute, clap_arg_id_or_field_name, clap_field_env, clap_field_is_flattened,
-    clap_field_is_subcommand, clap_variant_name, reject_subcommand_ortho_config_attrs,
+    clap_arg_id_from_attribute, clap_arg_id_or_field_name, clap_command_name, clap_field_env,
+    clap_field_is_flattened, clap_field_is_subcommand, clap_variant_name,
+    reject_subcommand_ortho_config_attrs,
 };
 pub(crate) use clap_defaults::{ClapDefaultValue, ClapInferredDefault, clap_default_value};
 pub(crate) use discovery_attrs::{DiscoveryAttrs, MergeStrategy, parse_prefix};
@@ -170,6 +173,12 @@ pub(crate) struct FieldAttrs {
     pub merge_strategy: Option<MergeStrategy>,
     /// How the field participates in command-line parsing.
     pub cli: CliFieldMode,
+    /// Explicit clap argument declaration written on the field.
+    ///
+    /// Present when the author declared `#[arg(...)]`/`#[clap(...)]`; the
+    /// documentation IR then describes clap's surface rather than the
+    /// generated `OrthoConfig` parser's synthesised flags.
+    pub clap_arg: Option<ClapArgDecl>,
     /// Omits a clap-provided default from the CLI merge layer.
     pub cli_default_as_absent: bool,
     /// Opts the field's type into required-value schema composition.

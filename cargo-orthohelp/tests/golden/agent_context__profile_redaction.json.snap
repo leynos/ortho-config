@@ -18,7 +18,7 @@ expression: snapshot
           "name": "locator",
           "long": "locator",
           "value_type": "enum",
-          "required": true,
+          "required": false,
           "default": null,
           "enum_values": []
         },
@@ -53,7 +53,7 @@ expression: snapshot
           "name": "token",
           "long": "token",
           "value_type": "enum",
-          "required": true,
+          "required": false,
           "default": null,
           "enum_values": []
         }
@@ -104,7 +104,7 @@ expression: snapshot
           "name": "replacement",
           "long": "replacement",
           "value_type": "enum",
-          "required": true,
+          "required": false,
           "default": null,
           "enum_values": []
         }
@@ -224,7 +224,7 @@ expression: snapshot
           "rotate"
         ],
         "field_name": "replacement",
-        "key_path": "replacement",
+        "key_path": "cmds.rotate.replacement",
         "exposure": "secret"
       }
     ]

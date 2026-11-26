@@ -265,6 +265,7 @@ fn field(name: &str, hide_in_help: bool) -> FieldMetadata {
             value_optional: false,
             possible_values: Vec::new(),
             hide_in_help,
+            positional: None,
         }),
         env: None,
         file: None,

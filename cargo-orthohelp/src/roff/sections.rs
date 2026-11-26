@@ -75,15 +75,38 @@ pub fn synopsis_section(
         output.push_str(&escape_text(syn));
         output.push('\n');
     } else {
-        let visible_cli_fields = fields
-            .iter()
-            .filter_map(|f| f.cli.as_ref().filter(|c| !c.hide_in_help).map(|c| (f, c)));
-        for (field, cli) in visible_cli_fields {
-            output.push_str(&format_synopsis_option(field, cli));
-        }
+        push_synopsis_entries(&mut output, fields);
     }
 
     output
+}
+
+/// Emits every visible CLI field in synopsis order.
+///
+/// Positional operands lead, ordered by clap's one-based index, because a
+/// reader must supply them in that order. Named flags follow in declaration
+/// order. A positional renders its value name rather than a flag spelling;
+/// [`format_synopsis_option`] already selects that form when the metadata
+/// carries neither a long nor a short flag.
+fn push_synopsis_entries(output: &mut String, fields: &[LocalizedFieldMetadata]) {
+    let visible: Vec<_> = fields
+        .iter()
+        .filter_map(|field| {
+            field
+                .cli
+                .as_ref()
+                .filter(|cli| !cli.hide_in_help)
+                .map(|cli| (field, cli))
+        })
+        .collect();
+    let (mut positionals, flags): (Vec<_>, Vec<_>) = visible
+        .into_iter()
+        .partition(|(_, cli)| cli.positional.is_some());
+    positionals.sort_by_key(|(_, cli)| cli.positional.as_ref().map_or(0, |value| value.index));
+
+    for (field, cli) in positionals.into_iter().chain(flags) {
+        output.push_str(&format_synopsis_option(field, cli));
+    }
 }
 
 /// Formats a synopsis flag and brackets it unless the corresponding field is required.

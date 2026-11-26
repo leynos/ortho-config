@@ -79,7 +79,8 @@ fn nested_greet_command_has_expected_fields_and_examples(
         "expected recipient long flag",
     );
     ensure!(
-        recipient.env.as_ref().map(|env| env.var_name.as_str()) == Some("NESTED_APP_RECIPIENT"),
+        recipient.env.as_ref().map(|env| env.var_name.as_str())
+            == Some("NESTED_APP_CMDS_GREET_RECIPIENT"),
         "expected recipient environment variable",
     );
     ensure!(

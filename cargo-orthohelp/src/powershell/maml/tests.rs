@@ -3,7 +3,9 @@
 use super::super::test_fixtures;
 use super::*;
 use crate::ir::{LocalizedDocMetadata, LocalizedFieldMetadata};
-use crate::schema::{CliMetadata, DefaultValue, EnvMetadata, FileMetadata, ValueType};
+use crate::schema::{
+    CliMetadata, DefaultValue, EnvMetadata, FileMetadata, PositionalMetadata, ValueType,
+};
 use crate::test_support::nested_fixture::nested_doc;
 use rstest::{fixture, rstest};
 
@@ -50,6 +52,7 @@ fn render_help_renders_enum_values(mut minimal_doc: LocalizedDocMetadata) {
             value_optional: false,
             possible_values: vec![],
             hide_in_help: false,
+            positional: None,
         }),
         env: Some(EnvMetadata {
             var_name: "FIXTURE_LEVEL".to_owned(),
@@ -101,6 +104,7 @@ fn optional_value_doc(
             value_optional: true,
             possible_values: vec!["true".to_owned(), "false".to_owned()],
             hide_in_help: false,
+            positional: None,
         }),
         env: None,
         file: None,
@@ -179,6 +183,64 @@ fn render_help_avoids_a_nonsense_flag_name(minimal_doc: LocalizedDocMetadata) {
     assert!(
         xml.contains("clears a lower-precedence `true`"),
         "expected the flag-free description in:\n{xml}"
+    );
+}
+
+#[rstest]
+fn render_help_positions_positional_operands(mut minimal_doc: LocalizedDocMetadata) {
+    minimal_doc.fields.push(LocalizedFieldMetadata {
+        name: "proposal".to_owned(),
+        help: "Proposal identifier.".to_owned(),
+        long_help: None,
+        value: Some(ValueType::String),
+        default: None,
+        required: true,
+        deprecated: None,
+        cli: Some(CliMetadata {
+            long: None,
+            short: None,
+            value_name: Some("PROPOSAL".to_owned()),
+            multiple: false,
+            takes_value: true,
+            value_optional: false,
+            possible_values: vec![],
+            hide_in_help: false,
+            positional: Some(PositionalMetadata {
+                index: 1,
+                variadic: false,
+                var_arg: false,
+                last: false,
+            }),
+        }),
+        env: None,
+        file: None,
+        examples: vec![],
+        links: vec![],
+        notes: vec![],
+    });
+
+    let command = CommandSpec {
+        name: "fixture".to_owned(),
+        metadata: &minimal_doc,
+    };
+    let xml = render_help(
+        &[command],
+        MamlOptions {
+            should_include_common_parameters: false,
+        },
+    );
+
+    assert!(
+        xml.contains("position=\"0\""),
+        "the first positional should map to zero-based position 0:\n{xml}"
+    );
+    assert!(
+        xml.contains("<maml:name>PROPOSAL</maml:name>"),
+        "a positional should display its value name:\n{xml}"
+    );
+    assert!(
+        !xml.contains("--proposal"),
+        "a positional must not advertise a long flag:\n{xml}"
     );
 }
 

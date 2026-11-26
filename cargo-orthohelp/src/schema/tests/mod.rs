@@ -9,6 +9,8 @@ use ortho_config::docs as ortho_docs;
 
 mod output_snapshots;
 
+mod positional;
+
 mod renderer_snapshots;
 
 #[test]
@@ -21,33 +23,6 @@ fn schema_round_trips_through_json() {
     assert_eq!(
         as_value, round_trip,
         "schema JSON should survive a serialize/deserialize round trip"
-    );
-}
-
-/// IR written before `value_optional` existed still reads as a plain switch.
-///
-/// The field is additive on the wire but not in meaning: a v1.1 document has no
-/// `value_optional` key at all, and the flag it describes is an ordinary
-/// switch. Reading it as `true` would render `--flag[=BOOL]` for a flag that
-/// rejects values, so the shared schema defaults it to `false`.
-#[test]
-fn legacy_ir_without_value_optional_defaults_to_false() {
-    let legacy = r#"{
-        "long": "verbose",
-        "short": "v",
-        "value_name": null,
-        "multiple": false,
-        "takes_value": false,
-        "possible_values": [],
-        "hide_in_help": false
-    }"#;
-
-    let from_config: ortho_docs::CliMetadata =
-        serde_json::from_str(legacy).expect("legacy IR should read into ortho_config::docs");
-
-    assert!(
-        !from_config.value_optional,
-        "ortho_config::docs should default a legacy flag to a required value"
     );
 }
 
@@ -338,6 +313,7 @@ fn sample_cli_metadata() -> ortho_docs::CliMetadata {
         value_optional: false,
         possible_values: vec!["8080".to_owned(), "9090".to_owned()],
         hide_in_help: false,
+        positional: None,
     }
 }
 

@@ -26,9 +26,17 @@ pub(crate) fn parse_id_from_meta(
     existing_id: &mut Option<syn::LitStr>,
 ) -> syn::Result<()> {
     if !meta.path.is_ident("id") {
+        // Consume the value of an unrelated key so the enclosing nested-meta
+        // loop stays positioned on the next comma. clap accepts both
+        // `key = expr` and `key(expr)`; an unconsumed parenthesized group
+        // makes the loop report a spurious missing comma.
         if meta.input.peek(syn::Token![=]) {
             let value = meta.value()?;
             let _: syn::Expr = value.parse()?;
+        } else if meta.input.peek(syn::token::Paren) {
+            let content;
+            syn::parenthesized!(content in meta.input);
+            content.parse::<proc_macro2::TokenStream>()?;
         }
         return Ok(());
     }
@@ -68,7 +76,7 @@ pub(crate) fn clap_arg_id_from_attribute(
 /// Only [`clap_arg_id_or_field_name`] should need this: callers that want the
 /// id clap will actually record must go through the resolver, so the fallback
 /// is applied in one place.
-fn clap_arg_id(field: &syn::Field) -> syn::Result<Option<String>> {
+pub(crate) fn clap_arg_id(field: &syn::Field) -> syn::Result<Option<String>> {
     let mut arg_id: Option<syn::LitStr> = None;
     for attr in field.attrs.iter().filter(|attr| is_clap_attribute(attr)) {
         clap_arg_id_from_attribute(attr, &mut arg_id)?;
@@ -110,6 +118,35 @@ fn consume_unknown_meta(meta: &syn::meta::ParseNestedMeta<'_>) -> syn::Result<()
         content.parse::<proc_macro2::TokenStream>()?;
     }
     Ok(())
+}
+
+/// Reads an explicit clap command name from a struct's `#[command(name)]`.
+///
+/// The subcommand merge names its environment and file namespace from the
+/// payload's `CommandFactory` command name, so documentation metadata uses the
+/// same declaration where the author supplied one. A non-literal value is
+/// ignored rather than rejected: clap accepts expressions, and the derive must
+/// not reject a valid clap attribute it cannot resolve statically.
+pub(crate) fn clap_command_name(attrs: &[syn::Attribute]) -> syn::Result<Option<String>> {
+    let mut name = None;
+    for attr in attrs.iter().filter(|attr| is_clap_command_attribute(attr)) {
+        let syn::Meta::List(_) = &attr.meta else {
+            continue;
+        };
+        attr.parse_nested_meta(|meta| {
+            if !meta.path.is_ident("name") {
+                return consume_unknown_meta(&meta);
+            }
+            let expression = meta.value()?.parse::<syn::Expr>()?;
+            if let syn::Expr::Lit(literal) = expression
+                && let syn::Lit::Str(value) = literal.lit
+            {
+                name = Some(value.value());
+            }
+            Ok(())
+        })?;
+    }
+    Ok(name)
 }
 
 /// Parse a clap command `name = "..."` override from an enum variant.

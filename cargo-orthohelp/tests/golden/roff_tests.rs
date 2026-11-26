@@ -10,7 +10,8 @@ use cargo_orthohelp::ir::{
 };
 use cargo_orthohelp::roff::{RoffConfig, generate_to_string};
 use cargo_orthohelp::schema::{
-    CliMetadata, DefaultValue, EnvMetadata, ORTHO_DOCS_IR_VERSION, SourceKind, ValueType,
+    CliMetadata, DefaultValue, EnvMetadata, ORTHO_DOCS_IR_VERSION, PositionalMetadata, SourceKind,
+    ValueType,
 };
 use rstest::{fixture, rstest};
 
@@ -143,6 +144,7 @@ fn golden_enum_rendering(mut minimal_metadata: LocalizedDocMetadata) {
                 "error".to_owned(),
             ],
             hide_in_help: false,
+            positional: None,
         }),
         env: None,
         file: None,
@@ -198,6 +200,7 @@ fn golden_environment_section(mut minimal_metadata: LocalizedDocMetadata) {
             value_optional: false,
             possible_values: vec![],
             hide_in_help: false,
+            positional: None,
         }),
         env: Some(EnvMetadata {
             var_name: "TEST_APP_PORT".to_owned(),
@@ -299,5 +302,86 @@ fn golden_subcommand_split_see_also(
     assert!(
         output.contains("app-bar (1)"),
         "SEE ALSO should reference the bar subcommand man page: {output}"
+    );
+}
+
+/// Test that a positional operand renders its value name and leads the synopsis.
+#[rstest]
+fn golden_positional_operand_ordering(mut minimal_metadata: LocalizedDocMetadata) {
+    minimal_metadata.fields.push(LocalizedFieldMetadata {
+        name: "proposal".to_owned(),
+        help: "Proposal identifier.".to_owned(),
+        long_help: None,
+        value: Some(ValueType::String),
+        default: None,
+        required: true,
+        deprecated: None,
+        cli: Some(CliMetadata {
+            long: None,
+            short: None,
+            value_name: Some("PROPOSAL".to_owned()),
+            multiple: false,
+            takes_value: true,
+            value_optional: false,
+            possible_values: vec![],
+            hide_in_help: false,
+            positional: Some(PositionalMetadata {
+                index: 1,
+                variadic: false,
+                var_arg: false,
+                last: false,
+            }),
+        }),
+        env: None,
+        file: None,
+        examples: vec![],
+        links: vec![],
+        notes: vec![],
+    });
+    minimal_metadata.fields.push(LocalizedFieldMetadata {
+        name: "check".to_owned(),
+        help: "Check command.".to_owned(),
+        long_help: None,
+        value: Some(ValueType::String),
+        default: None,
+        required: false,
+        deprecated: None,
+        cli: Some(CliMetadata {
+            long: Some("check".to_owned()),
+            short: None,
+            value_name: Some("COMMAND".to_owned()),
+            multiple: false,
+            takes_value: true,
+            value_optional: false,
+            possible_values: vec![],
+            hide_in_help: false,
+            positional: None,
+        }),
+        env: None,
+        file: None,
+        examples: vec![],
+        links: vec![],
+        notes: vec![],
+    });
+
+    let output = generate_to_string(&minimal_metadata, &RoffConfig::default());
+    let synopsis = output
+        .split(".SH DESCRIPTION")
+        .next()
+        .expect("synopsis should precede the description");
+
+    let positional_at = synopsis
+        .find("PROPOSAL")
+        .expect("the positional should appear in the synopsis");
+    let flag_at = synopsis
+        .find("\\-\\-check")
+        .expect("the named flag should appear in the synopsis");
+    assert!(
+        positional_at < flag_at,
+        "the positional should lead the synopsis: {synopsis}"
+    );
+    assert!(
+        !synopsis.contains("\\-\\-proposal"),
+        "the positional must not advertise a long flag: {synopsis}"
     );
 }

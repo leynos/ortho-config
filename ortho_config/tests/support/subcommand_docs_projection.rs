@@ -83,6 +83,7 @@ fn marked_field() -> FieldMetadata {
             value_optional: false,
             possible_values: vec![MARKED_SECRET.to_owned()],
             hide_in_help: false,
+            positional: None,
         }),
         env: None,
         file: None,
