@@ -108,7 +108,7 @@ pub(super) fn parse_value_range(meta: &ParseNestedMeta) -> syn::Result<Option<Va
 fn literal_value_range(expression: &Expr) -> syn::Result<Option<ValueRange>> {
     match expression {
         Expr::Lit(literal) => literal_count(literal),
-        Expr::Range(range) => Ok(Some(literal_range(range))),
+        Expr::Range(range) => Ok(literal_range(range)),
         _ => Ok(None),
     }
 }
@@ -126,15 +126,26 @@ fn literal_count(literal: &syn::ExprLit) -> syn::Result<Option<ValueRange>> {
 }
 
 /// Converts a literal range into its inclusive value bounds.
-fn literal_range(range: &syn::ExprRange) -> ValueRange {
-    let start = range.start.as_deref().and_then(lit_usize);
-    let end = range.end.as_deref().and_then(lit_usize);
+///
+/// Returns `None` when a bound is present but not a literal integer, such as
+/// `MIN..=1`. Treating an unreadable lower bound as zero would claim the value
+/// is optional when it may be required, so the declaration is left unmodelled
+/// instead of guessing.
+fn literal_range(range: &syn::ExprRange) -> Option<ValueRange> {
+    let start = match range.start.as_deref() {
+        Some(expression) => Some(lit_usize(expression)?),
+        None => None,
+    };
+    let end = match range.end.as_deref() {
+        Some(expression) => Some(lit_usize(expression)?),
+        None => None,
+    };
     let min = start.unwrap_or(0);
     let max = match range.limits {
         RangeLimits::Closed(_) => end.unwrap_or(usize::MAX),
         RangeLimits::HalfOpen(_) => end.map_or(usize::MAX, |value| value.saturating_sub(1)),
     };
-    ValueRange { min, max }
+    Some(ValueRange { min, max })
 }
 
 /// Reads a literal integer expression when it is suitable as a range bound.

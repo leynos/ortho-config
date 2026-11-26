@@ -33,8 +33,8 @@ pub(super) struct ResolvedClapArg {
     pub(super) multiple: bool,
     /// Whether clap hides the argument from help output.
     pub(super) hide_in_help: bool,
-    /// Explicit clap requiredness, when declared.
-    pub(super) required: Option<bool>,
+    /// Resolved clap requiredness.
+    pub(super) required: bool,
     /// Whether clap skips the field entirely.
     pub(super) is_skipped: bool,
 }
@@ -145,7 +145,12 @@ mod tests {
         let parsed_fields: Vec<_> = data.fields.into_iter().collect();
         let attrs = parsed_fields
             .iter()
-            .map(crate::derive::parse::parse_field_attrs)
+            .map(|field| {
+                crate::derive::parse::parse_field_attrs(
+                    field,
+                    crate::derive::parse::ClapRenameAll::default(),
+                )
+            })
             .collect::<syn::Result<Vec<_>>>()
             .expect("test field attributes should parse");
         (parsed_fields, attrs)

@@ -679,15 +679,25 @@ Deterministic IDs when omitted:
   explicit clap `#[arg(...)]`/`#[clap(...)]` declaration is documented from
   that declaration: its flag spellings, value name, positional index, value
   consumption, and requiredness come from clap rather than from the derive's
-  generated parser. Fields without a clap declaration retain the generated
-  `long` and `short` flags, because those are the surface the OrthoConfig
-  loader itself parses.
+  generated parser. Bare `long` and `short` spellings follow the container's
+  `#[command(rename_all = "...")]` casing; literal spellings and an assigned
+  `id` stay verbatim. Requiredness follows clap, so a value-taking argument
+  with no clap default stays required even when Serde supplies a
+  `#[serde(default)]` for configuration loading. Fields without a clap
+  declaration retain the generated `long` and `short` flags, because those are
+  the surface the OrthoConfig loader itself parses. A configuration root that
+  also declares clap arguments documents the declared command line while
+  `OrthoConfig::load_from_iter` keeps the generated flag form.
 - Subcommand metadata uses the names the subcommand merge reads:
   `<PREFIX>_CMDS_<NAME>_` for environment variables and `cmds.<name>` for file
   keys. `about_id` and field help identifiers follow the struct's declared
   `localization_base` when no parent path is supplied, and the mounted parent
   path otherwise. See
   [ADR-0028](adrs/adr-0028-clap-declarations-drive-documented-cli-surface.md).
+- Roff SYNOPSIS places ordinary positionals first, sorted by clap index. An
+  operand that consumes the rest of the command line (`trailing_var_arg`) or is
+  reachable only after `--` (`last`) follows the named flags, and a `last`
+  operand is preceded by the `--` delimiter.
 
 ### 3.6 Constructors and additive evolution
 

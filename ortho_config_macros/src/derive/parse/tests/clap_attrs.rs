@@ -338,6 +338,10 @@ fn clap_variant_name_cases() -> Result<()> {
             quote! { enum Commands { #[clap(name = "take-leave")] TakeLeave(TakeLeaveArgs), } },
             "take-leave",
         ),
+        (
+            quote! { enum Commands { #[command(name("take-leave"))] TakeLeave(TakeLeaveArgs), } },
+            "take-leave",
+        ),
     ];
 
     for (tokens, expected_name) in cases {
@@ -350,5 +354,27 @@ fn clap_variant_name_cases() -> Result<()> {
             name.value(),
         );
     }
+    Ok(())
+}
+
+#[test]
+fn container_rename_all_cases_derived_argument_names() -> Result<()> {
+    let input: DeriveInput = parse_quote! {
+        #[command(rename_all = "snake_case")]
+        struct Demo {
+            #[arg(long)]
+            output_file: String,
+        }
+    };
+
+    let attrs = parse_first_field_attrs(&input)?;
+    let declaration = attrs
+        .clap_arg
+        .ok_or_else(|| anyhow!("missing clap declaration"))?;
+    ensure!(
+        declaration.long.as_deref() == Some("output_file"),
+        "expected the container casing to reach the derived long flag, got {:?}",
+        declaration.long,
+    );
     Ok(())
 }

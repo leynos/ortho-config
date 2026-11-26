@@ -83,9 +83,13 @@ pub fn synopsis_section(
 
 /// Emits every visible CLI field in synopsis order.
 ///
-/// Positional operands lead, ordered by clap's one-based index, because a
-/// reader must supply them in that order. Named flags follow in declaration
-/// order. A positional renders its value name rather than a flag spelling;
+/// Ordinary positional operands lead, ordered by clap's one-based index,
+/// because a reader must supply them in that order. Named flags follow in
+/// declaration order. An operand that consumes the rest of the command line
+/// (`trailing_var_arg`) or is reachable only after `--` (`last`) follows every
+/// named flag, because a flag placed after it would be parsed as operand data.
+/// A `last` operand additionally follows the emitted delimiter. A positional
+/// renders its value name rather than a flag spelling;
 /// [`format_synopsis_option`] already selects that form when the metadata
 /// carries neither a long nor a short flag.
 fn push_synopsis_entries(output: &mut String, fields: &[LocalizedFieldMetadata]) {
@@ -103,10 +107,36 @@ fn push_synopsis_entries(output: &mut String, fields: &[LocalizedFieldMetadata])
         .into_iter()
         .partition(|(_, cli)| cli.positional.is_some());
     positionals.sort_by_key(|(_, cli)| cli.positional.as_ref().map_or(0, |value| value.index));
+    let (leading, trailing): (Vec<_>, Vec<_>) = positionals
+        .into_iter()
+        .partition(|(_, cli)| !is_greedy_operand(cli));
 
-    for (field, cli) in positionals.into_iter().chain(flags) {
+    for (field, cli) in leading {
         output.push_str(&format_synopsis_option(field, cli));
     }
+    for (field, cli) in flags {
+        output.push_str(&format_synopsis_option(field, cli));
+    }
+    let mut delimiter_written = false;
+    for (field, cli) in trailing {
+        if !delimiter_written && is_last_operand(cli) {
+            output.push_str("\\-\\-\n");
+            delimiter_written = true;
+        }
+        output.push_str(&format_synopsis_option(field, cli));
+    }
+}
+
+/// Reports whether an operand consumes the rest of the command line.
+fn is_greedy_operand(cli: &crate::schema::CliMetadata) -> bool {
+    cli.positional
+        .as_ref()
+        .is_some_and(|value| value.last || value.var_arg)
+}
+
+/// Reports whether an operand is reachable only after the `--` delimiter.
+fn is_last_operand(cli: &crate::schema::CliMetadata) -> bool {
+    cli.positional.as_ref().is_some_and(|value| value.last)
 }
 
 /// Formats a synopsis flag and brackets it unless the corresponding field is required.

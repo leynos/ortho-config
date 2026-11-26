@@ -169,8 +169,11 @@ impl<'a> FieldMetaBuilder<'a> {
         let required = self
             .clap_lookup
             .get(&field_name)
-            .and_then(|declaration| declaration.required)
-            .map_or_else(|| resolve_required(field, attrs), Ok)?;
+            .filter(|declaration| !declaration.is_skipped)
+            .map_or_else(
+                || resolve_required(field, attrs),
+                |declaration| Ok(declaration.required),
+            )?;
         let value_context = ValueContext {
             value_tokens: value_type_tokens(value_type.clone(), self.krate),
             required,

@@ -5,7 +5,9 @@
 
 use syn::{Data, DeriveInput, Fields};
 
-use super::{FieldAttrs, StructAttrs, option_inner, parse_field_attrs, parse_struct_attrs};
+use super::{
+    FieldAttrs, StructAttrs, clap_rename_all, option_inner, parse_field_attrs, parse_struct_attrs,
+};
 
 /// Gathers information from the user-provided struct.
 ///
@@ -23,11 +25,12 @@ pub(crate) fn parse_input(
     input: &DeriveInput,
 ) -> Result<(syn::Ident, Vec<syn::Field>, StructAttrs, Vec<FieldAttrs>), syn::Error> {
     let ident = input.ident.clone();
-    let struct_attrs = parse_struct_attrs(&input.attrs)?;
+    let mut struct_attrs = parse_struct_attrs(&input.attrs)?;
+    struct_attrs.clap_rename_all = clap_rename_all(&input.attrs)?;
     let fields = named_fields(input)?;
     let field_attrs = fields
         .iter()
-        .map(parse_field_attrs)
+        .map(|field| parse_field_attrs(field, struct_attrs.clap_rename_all))
         .collect::<Result<Vec<_>, _>>()?;
     validate_project_root_field(&fields, &field_attrs, &struct_attrs)?;
     Ok((ident, fields, struct_attrs, field_attrs))

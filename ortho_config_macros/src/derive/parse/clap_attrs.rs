@@ -5,6 +5,8 @@
 
 use syn::ext::IdentExt;
 
+use super::clap_rename::ClapRenameAll;
+
 /// Returns `true` when the attribute is `#[arg(...)]` or `#[clap(...)]`.
 pub(crate) fn is_clap_attribute(attr: &syn::Attribute) -> bool {
     attr.path().is_ident("arg") || attr.path().is_ident("clap")
@@ -106,18 +108,64 @@ pub(crate) fn clap_arg_id_or_field_name(field: &syn::Field) -> syn::Result<Strin
     Ok(ident.unraw().to_string())
 }
 
+/// Reads a clap key's argument from either `= expr` or `(expr)`.
+///
+/// clap accepts both spellings. The parenthesized form always consumes its
+/// group, then reports the content only when it parses as an expression, so an
+/// exotic value is ignored rather than turned into a derive error.
+fn clap_argument(meta: &syn::meta::ParseNestedMeta<'_>) -> syn::Result<Option<syn::Expr>> {
+    if meta.input.peek(syn::Token![=]) {
+        return Ok(Some(meta.value()?.parse()?));
+    }
+    if meta.input.peek(syn::token::Paren) {
+        let content;
+        syn::parenthesized!(content in meta.input);
+        let tokens: proc_macro2::TokenStream = content.parse()?;
+        return Ok(syn::parse2(tokens).ok());
+    }
+    Ok(None)
+}
+
 /// Consume the value or parenthesized tokens of an unrelated clap key so the
 /// nested-meta parser can continue without interpreting clap's full grammar.
 fn consume_unknown_meta(meta: &syn::meta::ParseNestedMeta<'_>) -> syn::Result<()> {
-    if meta.input.peek(syn::Token![=]) {
-        let value = meta.value()?;
-        let _: syn::Expr = value.parse()?;
-    } else if meta.input.peek(syn::token::Paren) {
-        let content;
-        syn::parenthesized!(content in meta.input);
-        content.parse::<proc_macro2::TokenStream>()?;
+    clap_argument(meta).map(drop)
+}
+
+/// Reads the string literal a clap key argument spells, when it is literal.
+fn literal_string(expression: Option<syn::Expr>) -> Option<syn::LitStr> {
+    match expression {
+        Some(syn::Expr::Lit(literal)) => match literal.lit {
+            syn::Lit::Str(value) => Some(value),
+            _ => None,
+        },
+        _ => None,
     }
-    Ok(())
+}
+
+/// Reads the container's `#[command(rename_all = "...")]` casing rule.
+///
+/// A non-literal or unknown casing is ignored: clap owns the attribute's
+/// grammar, and the derive must not reject a declaration it cannot resolve.
+pub(crate) fn clap_rename_all(attrs: &[syn::Attribute]) -> syn::Result<ClapRenameAll> {
+    let mut rename_all = ClapRenameAll::default();
+    for attr in attrs.iter().filter(|attr| is_clap_command_attribute(attr)) {
+        let syn::Meta::List(_) = &attr.meta else {
+            continue;
+        };
+        attr.parse_nested_meta(|meta| {
+            if !meta.path.is_ident("rename_all") {
+                return consume_unknown_meta(&meta);
+            }
+            if let Some(value) = literal_string(clap_argument(&meta)?)
+                && let Some(parsed) = ClapRenameAll::parse(&value.value())
+            {
+                rename_all = parsed;
+            }
+            Ok(())
+        })?;
+    }
+    Ok(rename_all)
 }
 
 /// Reads an explicit clap command name from a struct's `#[command(name)]`.
@@ -137,10 +185,7 @@ pub(crate) fn clap_command_name(attrs: &[syn::Attribute]) -> syn::Result<Option<
             if !meta.path.is_ident("name") {
                 return consume_unknown_meta(&meta);
             }
-            let expression = meta.value()?.parse::<syn::Expr>()?;
-            if let syn::Expr::Lit(literal) = expression
-                && let syn::Lit::Str(value) = literal.lit
-            {
+            if let Some(value) = literal_string(clap_argument(&meta)?) {
                 name = Some(value.value());
             }
             Ok(())
@@ -150,6 +195,11 @@ pub(crate) fn clap_command_name(attrs: &[syn::Attribute]) -> syn::Result<Option<
 }
 
 /// Parse a clap command `name = "..."` override from an enum variant.
+///
+/// Both `name = "..."` and `name("...")` are accepted. Unlike the struct-level
+/// command name, a variant name must resolve statically: the selector derives
+/// its runtime label and identifiers from it, so a non-literal value is
+/// rejected rather than silently replaced by a guess.
 pub(crate) fn clap_variant_name(variant: &syn::Variant) -> syn::Result<Option<syn::LitStr>> {
     let mut name = None;
     for attr in variant
@@ -158,13 +208,17 @@ pub(crate) fn clap_variant_name(variant: &syn::Variant) -> syn::Result<Option<sy
         .filter(|attr| is_clap_command_attribute(attr))
     {
         attr.parse_nested_meta(|meta| {
-            if meta.path.is_ident("name") {
-                let value = meta.value()?;
-                let lit: syn::LitStr = value.parse()?;
-                name = Some(lit);
-                return Ok(());
+            if !meta.path.is_ident("name") {
+                return consume_unknown_meta(&meta);
             }
-            consume_unknown_meta(&meta)
+            let expression = clap_argument(&meta)?.ok_or_else(|| {
+                syn::Error::new_spanned(&meta.path, "clap command `name` requires a value")
+            })?;
+            let literal = literal_string(Some(expression)).ok_or_else(|| {
+                syn::Error::new_spanned(&meta.path, "clap command `name` must be a string literal")
+            })?;
+            name = Some(literal);
+            Ok(())
         })?;
     }
     Ok(name)

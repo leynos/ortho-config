@@ -15,6 +15,63 @@ use super::{
     option_string_tokens, output, renderer, sections,
 };
 
+/// Names the helper's mount-path parameter, marking it unused when no
+/// generated expression refers to it.
+///
+/// The trait's default identifiers are composed from the mount path, so a
+/// struct with explicit `about_id` and `synopsis_id` overrides, no localized
+/// arguments, and no subcommand selector never reads the path. Naming the
+/// parameter `_command_path` keeps the generated code warning-free without a
+/// blanket `unused_variables` allowance that would hide a future defect.
+fn command_path_parameter(args: &DocsArgs<'_>) -> TokenStream {
+    if metadata_uses_command_path(args) {
+        quote! { command_path }
+    } else {
+        quote! { _command_path }
+    }
+}
+
+/// Reports whether any generated expression reads the mount path.
+fn metadata_uses_command_path(args: &DocsArgs<'_>) -> bool {
+    uses_section_path(args) || uses_subcommands(args) || uses_localized_field_ids(args)
+}
+
+/// Reports whether the about or synopsis identifier defaults to the path.
+const fn uses_section_path(args: &DocsArgs<'_>) -> bool {
+    let doc = &args.struct_attrs.doc;
+    doc.about_id.is_none() || doc.synopsis_id.is_none()
+}
+
+/// Reports whether the struct nests a subcommand selector.
+fn uses_subcommands(args: &DocsArgs<'_>) -> bool {
+    args.field_attrs
+        .iter()
+        .any(|attrs| attrs.cli.is_subcommand())
+}
+
+/// Reports whether a documented field composes its identifier from the path.
+fn uses_localized_field_ids(args: &DocsArgs<'_>) -> bool {
+    args.fields
+        .iter()
+        .zip(args.field_attrs)
+        .filter(|(_, attrs)| !attrs.cli.is_subcommand() && !has_explicit_field_ids(attrs))
+        .filter_map(|(field, _)| field.ident.as_ref())
+        .any(|ident| has_localized_arg(args, &ident.to_string()))
+}
+
+/// Reports whether both field identifier overrides are written explicitly.
+const fn has_explicit_field_ids(attrs: &crate::derive::parse::FieldAttrs) -> bool {
+    attrs.doc.help_id.is_some() && attrs.doc.long_help_id.is_some()
+}
+
+/// Reports whether a field is present in the captured localization argument ids.
+fn has_localized_arg(args: &DocsArgs<'_>, field_name: &str) -> bool {
+    args.localization_ids
+        .args
+        .iter()
+        .any(|arg| arg.field_name == field_name)
+}
+
 /// Pre-computed token fragments shared by the generated helper and trait impl.
 ///
 /// Keeping them in one owner lets each emitted impl stay a compact declarative
@@ -46,6 +103,8 @@ pub(super) struct DocTokens {
     synopsis_tokens: TokenStream,
     /// Profile selection metadata initializer.
     profiles_tokens: TokenStream,
+    /// Helper parameter name, marked unused when nothing references it.
+    command_path_parameter: TokenStream,
     /// Helper parameter name, marked unused when nothing projects.
     subcommand_parameter: TokenStream,
     /// Environment-prefix local, when one is needed.
@@ -112,6 +171,7 @@ impl DocTokens {
             bin_name_tokens: option_string_tokens(args.struct_attrs.doc.bin_name.as_deref()),
             synopsis_tokens: sections::synopsis_id_tokens(&args.struct_attrs.doc, krate),
             profiles_tokens: build_profiles_meta(args, krate),
+            command_path_parameter: command_path_parameter(args),
             subcommand_parameter: projection.subcommand_parameter(),
             env_prefix_local: projection.env_prefix_local(),
             file_prefix_local: projection.file_prefix_local(),
@@ -136,6 +196,7 @@ impl DocTokens {
             bin_name_tokens,
             synopsis_tokens,
             profiles_tokens,
+            command_path_parameter,
             subcommand_parameter,
             env_prefix_local,
             file_prefix_local,
@@ -150,12 +211,8 @@ impl DocTokens {
                 /// environment and file metadata into the namespace the
                 /// subcommand merge reads.
                 #[doc(hidden)]
-                #[allow(
-                    unused_variables,
-                    reason = "Generated metadata may not reference the mount path"
-                )]
                 fn __ortho_config_doc_metadata(
-                    command_path: &[String],
+                    #command_path_parameter: &[String],
                     #subcommand_parameter: Option<&str>,
                 ) -> #krate::docs::DocMetadata {
                     #env_prefix_local

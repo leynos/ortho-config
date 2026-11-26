@@ -6,13 +6,13 @@
 //! expressions, and the `OrthoConfig` derive must not reject a valid clap
 //! attribute it cannot interpret.
 
-use heck::{ToKebabCase, ToShoutySnakeCase};
+use heck::ToShoutySnakeCase;
 use syn::ext::IdentExt;
 use syn::meta::ParseNestedMeta;
 use syn::spanned::Spanned;
 use syn::{Expr, Lit, Type};
 
-use super::super::discard_unknown;
+use super::super::{ClapRenameAll, discard_unknown, option_inner};
 use super::value_syntax::{
     ValueRange, action_name, argument, is_bare_bool, is_default_value_key, is_vec_field,
     parse_bool, parse_lit_str, parse_usize, parse_value_range, single_char,
@@ -272,20 +272,25 @@ impl ClapArgBuilder {
     }
 
     /// Resolves the declaration against the field's type and clap argument id.
-    pub(super) fn finish(self, field: &syn::Field) -> syn::Result<ClapArgDecl> {
+    pub(super) fn finish(
+        self,
+        field: &syn::Field,
+        rename_all: ClapRenameAll,
+    ) -> syn::Result<ClapArgDecl> {
         let explicit_id = super::super::clap_attrs::clap_arg_id(field)?;
         let field_ident = field.ident.as_ref().ok_or_else(|| {
             syn::Error::new_spanned(field, "tuple fields cannot declare clap arguments")
         })?;
         let raw_field = field_ident.unraw().to_string();
-        let (long, short) = self.resolve_spellings(explicit_id.as_deref(), &raw_field);
+        let (long, short) = self.resolve_spellings(explicit_id.as_deref(), &raw_field, rename_all);
         let value_name = self.resolve_value_name(explicit_id.as_deref(), &raw_field);
         let is_positional = long.is_none() && short.is_none();
         let is_vec = is_vec_field(&field.ty);
         let num_args = self.num_args;
         let takes_value = self.resolve_takes_value(is_positional, &field.ty);
-        let value_optional =
-            takes_value && (self.has_default_missing_value || num_args.is_some_and(|r| r.min == 0));
+        let value_optional = takes_value
+            && (self.has_default_missing_value
+                || num_args.map_or_else(|| is_nested_option(&field.ty), |range| range.min == 0));
         let multiple = is_vec || num_args.is_some_and(|r| r.max > 1) || self.action_appends;
         let variadic = is_positional && (is_vec || num_args.is_some_and(|r| r.max > 1));
         let positional = is_positional.then_some(ClapPositionalDecl {
@@ -304,18 +309,23 @@ impl ClapArgBuilder {
             value_optional,
             multiple,
             hide_in_help: self.hide,
-            required: self.resolve_required(takes_value),
+            required: self.resolve_required(takes_value, &field.ty),
             is_skipped: self.skipped,
         })
     }
 
     /// Resolves the long and short spellings from the field's clap id.
+    ///
+    /// A bare `long`/`short` follows the container's `rename_all` casing, as
+    /// `clap_derive` does. An assigned id is already a literal name and is not
+    /// re-cased.
     fn resolve_spellings(
         &self,
         explicit_id: Option<&str>,
         raw_field: &str,
+        rename_all: ClapRenameAll,
     ) -> (Option<String>, Option<char>) {
-        let derived = explicit_id.map_or_else(|| raw_field.to_kebab_case(), str::to_owned);
+        let derived = explicit_id.map_or_else(|| rename_all.apply(raw_field), str::to_owned);
         let long = match &self.long {
             None => None,
             Some(NameChoice::Explicit(value)) => Some(value.clone()),
@@ -330,6 +340,10 @@ impl ClapArgBuilder {
     }
 
     /// Resolves the value placeholder from the declaration or clap's casing.
+    ///
+    /// `clap_derive` renders an unset value name as the field ident in
+    /// `SCREAMING_SNAKE_CASE` regardless of the container's `rename_all`, so
+    /// the placeholder is intentionally independent of that casing rule.
     fn resolve_value_name(&self, explicit_id: Option<&str>, raw_field: &str) -> String {
         self.value_name.clone().unwrap_or_else(|| {
             explicit_id.map_or_else(|| raw_field.to_shouty_snake_case(), str::to_owned)
@@ -351,11 +365,27 @@ impl ClapArgBuilder {
     }
 
     /// Resolves clap's requiredness from explicit and inferred signals.
-    const fn resolve_required(&self, takes_value: bool) -> Option<bool> {
-        match self.required {
-            Some(required) => Some(required),
-            None if self.has_default || !takes_value => Some(false),
-            None => None,
+    ///
+    /// `clap_derive` marks a plain value-taking argument required when it has
+    /// no clap default; `Option` and `Vec` shapes are never required. The
+    /// configuration loader's Serde defaults do not relax a clap declaration,
+    /// so a declared argument must not fall back to those when it is missing a
+    /// value.
+    fn resolve_required(&self, takes_value: bool, ty: &Type) -> bool {
+        if let Some(required) = self.required {
+            return required;
         }
+        if self.has_default || !takes_value {
+            return false;
+        }
+        !(is_vec_field(ty) || option_inner(ty).is_some())
     }
+}
+
+/// Reports whether a type is `Option<Option<T>>`.
+///
+/// `clap_derive` infers `num_args(0..=1)` for this shape, so a bare flag is a
+/// valid spelling even though the type is not a plain boolean.
+fn is_nested_option(ty: &Type) -> bool {
+    option_inner(ty).is_some_and(|inner| option_inner(inner).is_some())
 }

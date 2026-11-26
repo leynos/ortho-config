@@ -35,8 +35,11 @@ its own `ABOUT_ID` was `splitters-cli-validate-about`.
 
 - Documentation must describe the command line that executes, not an internal
   parser the caller never invokes.
-- The configuration root case must keep describing the generated parser,
-  because `OrthoConfig::load_from_iter` really does parse that surface.
+- A type with no clap declaration must keep describing the generated parser,
+  because `OrthoConfig::load_from_iter` really does parse that surface. A type
+  that declares `#[arg(...)]` also derives a clap trait, so its explicit
+  declaration denotes a real command line; a dual-surface type is documented
+  from the declaration, and the hidden loader remains flag-based.
 - `OrthoConfigSubcommandDocs` accepts payloads deriving `clap::Args`, which do
   not implement `clap::CommandFactory`; a fix cannot require that trait
   everywhere.
@@ -65,9 +68,12 @@ from that declaration. Fields without one keep the generated parser's long and
 short flags. This is the accepted option.
 
 The rule is decided per field at expansion time, so it works for `Args`
-payloads, for configuration roots, and for mixed structs without requiring a
-new trait bound. Non-literal clap values that cannot be read statically fall
-back to the generated surface rather than rejecting valid clap code.
+payloads and mixed structs without requiring a new trait bound. A field cannot
+carry `#[arg(...)]` unless a clap derive has registered the helper attribute,
+so an explicit declaration always denotes a real clap command line. A
+configuration root with no declaration is unaffected and keeps the generated
+surface. Non-literal clap values that cannot be read statically fall back to
+the generated surface rather than rejecting valid clap code.
 
 ### Option C: Keep the generated surface and add an opt-out
 
@@ -96,13 +102,21 @@ The documentation IR distinguishes two surfaces per field:
 - A field with an explicit clap argument declaration is documented from it.
   The parser records long and short spellings, the value name, positional index,
   `num_args`, `trailing_var_arg`, `last`, value consumption, visibility, and
-  explicit requiredness. Inferred requiredness follows clap: a declared default
-  or a value-less switch makes the argument non-required. `CliMetadata.long` and
+  requiredness. Bare `long` and `short` spellings follow the container's
+  `#[command(rename_all = "...")]` casing; literal spellings and an assigned
+  `id` stay verbatim. Requiredness follows clap: a declared default or a
+  value-less switch makes the argument non-required, while a value-taking
+  argument with no clap default is required even when Serde supplies a
+  `#[serde(default)]` for configuration loading. `CliMetadata.long` and
   `CliMetadata.short` are absent for a positional operand, and
   `CliMetadata.positional: Option<PositionalMetadata>` carries the one-based
   index and the variadic, trailing-var-arg, and `--`-only flags.
 - A field without such a declaration keeps the generated long and short flags,
-  because the configuration loader's hidden parser is the surface it exposes.
+  because the configuration loader's hidden parser is the surface it exposes. A
+  configuration root that also declares clap arguments has two surfaces; the
+  documentation describes the declared clap command line, and
+  `OrthoConfig::load_from_iter` continues to accept the hidden parser's
+  generated flag form for that root.
 
 `ORTHO_DOCS_IR_VERSION` becomes "2.1". A flag-only command surface serializes
 exactly as before apart from the version string, because `positional` is
@@ -132,10 +146,14 @@ The generated selector no longer rebuilds identifiers. It calls
 retain the provided fallback.
 
 The roff renderer orders positional operands by index in SYNOPSIS and renders
-their value names. The PowerShell MAML renderer maps a positional's one-based
-clap index to MAML's zero-based `position` attribute and displays the value
-name. Agent context continues to list a positional as an input without a long
-flag; ordering positionals by index remains roadmap 12.2.3.
+their value names. An operand that consumes the rest of the command line
+(`trailing_var_arg`) or is reachable only after `--` (`last`) follows the named
+flags, because a flag placed after it would be parsed as operand data; a `last`
+operand is also preceded by an emitted `--` delimiter. The PowerShell MAML
+renderer maps a positional's one-based clap index to MAML's zero-based
+`position` attribute and displays the value name. Agent context continues to
+list a positional as an input without a long flag; ordering positionals by
+index remains roadmap 12.2.3.
 
 ## Goals and non-goals
 
@@ -147,7 +165,8 @@ flag; ordering positionals by index remains roadmap 12.2.3.
 - Non-goals:
   - Make every configuration field positionally invocable.
   - Replace the generated parser with the user's clap declaration.
-  - Model struct-level clap casing rules such as `rename_all`.
+  - Model struct-level clap features beyond argument-name casing, such as
+    `rename_all_env` or generated help headings.
   - Deliver the standalone docs-only derive from roadmap 12.3.1.
   - Order positional inputs in agent context by index (roadmap 12.2.3).
 
@@ -166,6 +185,16 @@ flag; ordering positionals by index remains roadmap 12.2.3.
 - The `about_id` uses the declared base only when no parent path is supplied.
   A caller that mounts the struct somewhere else receives the mounted path,
   matching `LocalizeCmd` rather than the standalone constant.
+- A configuration root that both derives a clap trait and is loaded through
+  `OrthoConfig::load_from_iter` exposes two parsers. Documentation describes
+  the declared clap command line; the hidden loader keeps its generated flag
+  form, so a root should not rely on a clap-only positional when it is also
+  loaded from an argument iterator.
+- Duplicate environment names and file keys are validated in the standalone
+  namespace. The mounted namespace appends a runtime command name, so a
+  projected default can coincide with a verbatim `env(name = ...)` or
+  `file(key_path = ...)` override only for the mount that supplies that name;
+  the derive cannot see the mount at expansion time.
 - Positional operands are listed in agent context but not yet ordered by
   index. Consumers can read the order from `CliMetadata.positional`.
 

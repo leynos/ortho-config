@@ -15,6 +15,7 @@ mod builder;
 mod tests;
 mod value_syntax;
 
+use super::ClapRenameAll;
 use super::clap_attrs::{clap_field_is_flattened, clap_field_is_subcommand, is_clap_attribute};
 use builder::ClapArgBuilder;
 
@@ -41,8 +42,8 @@ pub(crate) struct ClapArgDecl {
     pub(crate) multiple: bool,
     /// Whether clap hides the argument from help output.
     pub(crate) hide_in_help: bool,
-    /// Explicit clap requiredness, when the declaration states one.
-    pub(crate) required: Option<bool>,
+    /// Resolved clap requiredness.
+    pub(crate) required: bool,
     /// Whether clap skips the field entirely.
     pub(crate) is_skipped: bool,
 }
@@ -62,10 +63,15 @@ pub(crate) struct ClapPositionalDecl {
 
 /// Parses one field's clap argument declaration.
 ///
-/// Returns `None` when the field declares no clap argument, or when it is a
-/// subcommand selector or flattened container whose arguments this derive
-/// cannot map to individual source fields.
-pub(crate) fn parse_clap_arg_decl(field: &syn::Field) -> syn::Result<Option<ClapArgDecl>> {
+/// `rename_all` is the container's clap casing rule, applied to a bare `long`
+/// or `short` that clap derives from the field name. Returns `None` when the
+/// field declares no clap argument, or when it is a subcommand selector or
+/// flattened container whose arguments this derive cannot map to individual
+/// source fields.
+pub(crate) fn parse_clap_arg_decl(
+    field: &syn::Field,
+    rename_all: ClapRenameAll,
+) -> syn::Result<Option<ClapArgDecl>> {
     if clap_field_is_subcommand(field)? || clap_field_is_flattened(field)? {
         return Ok(None);
     }
@@ -81,5 +87,5 @@ pub(crate) fn parse_clap_arg_decl(field: &syn::Field) -> syn::Result<Option<Clap
     if builder.should_ignore() {
         return Ok(None);
     }
-    builder.finish(field).map(Some)
+    builder.finish(field, rename_all).map(Some)
 }

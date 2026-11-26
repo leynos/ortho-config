@@ -10,10 +10,12 @@ use cargo_orthohelp::ir::{
 };
 use cargo_orthohelp::roff::{RoffConfig, generate_to_string};
 use cargo_orthohelp::schema::{
-    CliMetadata, DefaultValue, EnvMetadata, ORTHO_DOCS_IR_VERSION, PositionalMetadata, SourceKind,
-    ValueType,
+    CliMetadata, DefaultValue, EnvMetadata, ORTHO_DOCS_IR_VERSION, SourceKind, ValueType,
 };
 use rstest::{fixture, rstest};
+
+#[path = "roff_positional_tests.rs"]
+mod positional_tests;
 
 #[fixture]
 fn default_headings() -> LocalizedHeadings {
@@ -302,76 +304,5 @@ fn golden_subcommand_split_see_also(
     assert!(
         output.contains("app-bar (1)"),
         "SEE ALSO should reference the bar subcommand man page: {output}"
-    );
-}
-
-/// Builds a field carrying a value name, optionally as a positional operand.
-fn test_field(
-    name: &str,
-    value_name: &str,
-    positional_index: Option<u16>,
-    required: bool,
-) -> LocalizedFieldMetadata {
-    LocalizedFieldMetadata {
-        name: name.to_owned(),
-        help: format!("{name} field."),
-        long_help: None,
-        value: Some(ValueType::String),
-        default: None,
-        required,
-        deprecated: None,
-        cli: Some(CliMetadata {
-            long: positional_index.is_none().then(|| name.to_owned()),
-            short: None,
-            value_name: Some(value_name.to_owned()),
-            multiple: false,
-            takes_value: true,
-            value_optional: false,
-            possible_values: vec![],
-            hide_in_help: false,
-            positional: positional_index.map(|index| PositionalMetadata {
-                index,
-                variadic: false,
-                var_arg: false,
-                last: false,
-            }),
-        }),
-        env: None,
-        file: None,
-        examples: vec![],
-        links: vec![],
-        notes: vec![],
-    }
-}
-
-/// Test that a positional operand renders its value name and leads the synopsis.
-#[rstest]
-fn golden_positional_operand_ordering(mut minimal_metadata: LocalizedDocMetadata) {
-    minimal_metadata
-        .fields
-        .push(test_field("proposal", "PROPOSAL", Some(1), true));
-    minimal_metadata
-        .fields
-        .push(test_field("check", "COMMAND", None, false));
-
-    let output = generate_to_string(&minimal_metadata, &RoffConfig::default());
-    let synopsis = output
-        .split(".SH DESCRIPTION")
-        .next()
-        .expect("synopsis should precede the description");
-
-    let positional_at = synopsis
-        .find("PROPOSAL")
-        .expect("the positional should appear in the synopsis");
-    let flag_at = synopsis
-        .find("\\-\\-check")
-        .expect("the named flag should appear in the synopsis");
-    assert!(
-        positional_at < flag_at,
-        "the positional should lead the synopsis: {synopsis}"
-    );
-    assert!(
-        !synopsis.contains("\\-\\-proposal"),
-        "the positional must not advertise a long flag: {synopsis}"
     );
 }

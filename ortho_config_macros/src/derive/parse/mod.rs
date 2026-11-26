@@ -16,6 +16,7 @@ mod behaviour_attrs;
 mod clap_arg;
 mod clap_attrs;
 mod clap_defaults;
+mod clap_rename;
 mod discovery_attrs;
 mod doc_attrs;
 mod doc_attrs_common;
@@ -37,10 +38,11 @@ pub(crate) use behaviour_attrs::parse_behaviour_meta;
 pub(crate) use clap_arg::{ClapArgDecl, ClapPositionalDecl, parse_clap_arg_decl};
 pub(crate) use clap_attrs::{
     clap_arg_id_from_attribute, clap_arg_id_or_field_name, clap_command_name, clap_field_env,
-    clap_field_is_flattened, clap_field_is_subcommand, clap_variant_name,
+    clap_field_is_flattened, clap_field_is_subcommand, clap_rename_all, clap_variant_name,
     reject_subcommand_ortho_config_attrs,
 };
 pub(crate) use clap_defaults::{ClapDefaultValue, ClapInferredDefault, clap_default_value};
+pub(crate) use clap_rename::ClapRenameAll;
 pub(crate) use discovery_attrs::{DiscoveryAttrs, MergeStrategy, parse_prefix};
 use doc_attrs::apply_field_doc_attr;
 pub(crate) use doc_types::{
@@ -96,6 +98,11 @@ pub(crate) struct StructAttrs {
     /// `--profile` flag, the `<PREFIX>PROFILE` selector, the profile merge
     /// layer, and `profiles.supported = true` in agent context.
     pub profiles: bool,
+    /// Container-level casing clap applies to derived argument names.
+    ///
+    /// Parsed from `#[command(rename_all = "...")]`; fields with literal
+    /// `long`/`short` spellings or an assigned `id` keep those verbatim.
+    pub clap_rename_all: ClapRenameAll,
     /// Documentation metadata copied into generated API documentation.
     pub doc: DocStructAttrs,
     /// Overrides the generated crate path for dependency aliasing.

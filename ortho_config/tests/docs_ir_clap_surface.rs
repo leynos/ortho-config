@@ -43,6 +43,36 @@ struct PurgeArgs {
     force: bool,
 }
 
+/// Arguments whose container casing changes the derived long flag.
+#[derive(Debug, Clone, Default, Parser, Serialize, Deserialize, OrthoConfig)]
+#[command(rename_all = "snake_case")]
+#[ortho_config(prefix = "SPLITTERS")]
+struct SnakeCaseArgs {
+    /// Output file path.
+    #[arg(long)]
+    output_file: String,
+}
+
+/// A clap-required argument that also carries a Serde default.
+#[derive(Debug, Clone, Default, Parser, Serialize, Deserialize, OrthoConfig)]
+#[ortho_config(prefix = "SPLITTERS")]
+struct HostArgs {
+    /// Host to contact.
+    #[arg(long)]
+    #[serde(default)]
+    host: String,
+}
+
+/// A skipped CLI field whose configuration default keeps it non-required.
+#[derive(Debug, Clone, Default, Parser, Serialize, Deserialize, OrthoConfig)]
+#[ortho_config(prefix = "SPLITTERS")]
+struct SkippedArgs {
+    /// Internal value supplied by configuration.
+    #[arg(skip)]
+    #[ortho_config(default = String::from("fallback"))]
+    internal: String,
+}
+
 /// Returns one field's metadata by name.
 fn field<'a>(metadata: &'a DocMetadata, name: &str) -> Result<&'a FieldMetadata> {
     metadata
@@ -269,6 +299,47 @@ fn a_subcommand_path_projects_environment_and_file_metadata() -> Result<()> {
             .map(|file| file.key_path.as_str())
             == Some("cmds.validate.check"),
         "a mounted path should project the file key"
+    );
+    Ok(())
+}
+
+#[test]
+fn container_casing_reaches_derived_flags() -> Result<()> {
+    let metadata = SnakeCaseArgs::get_doc_metadata();
+    let field = field(&metadata, "output_file")?;
+    let cli = field
+        .cli
+        .as_ref()
+        .ok_or_else(|| anyhow!("output_file should have CLI metadata"))?;
+    ensure!(
+        cli.long.as_deref() == Some("output_file"),
+        "rename_all = \"snake_case\" should keep the underscore, got {:?}",
+        cli.long
+    );
+    Ok(())
+}
+
+#[test]
+fn a_serde_default_does_not_relax_clap_requiredness() -> Result<()> {
+    let metadata = HostArgs::get_doc_metadata();
+    ensure!(
+        field(&metadata, "host")?.required,
+        "a value-taking clap argument with no clap default must stay required"
+    );
+    Ok(())
+}
+
+#[test]
+fn a_skipped_clap_field_keeps_configuration_requiredness() -> Result<()> {
+    let metadata = SkippedArgs::get_doc_metadata();
+    let internal = field(&metadata, "internal")?;
+    ensure!(
+        internal.cli.is_none(),
+        "a skipped clap field should have no CLI metadata"
+    );
+    ensure!(
+        !internal.required,
+        "a skipped clap field should fall back to configuration requiredness"
     );
     Ok(())
 }

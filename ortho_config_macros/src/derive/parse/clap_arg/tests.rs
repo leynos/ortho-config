@@ -1,6 +1,7 @@
 //! Unit tests for clap declaration parsing.
 
 use super::{ClapArgDecl, ClapPositionalDecl, parse_clap_arg_decl};
+use crate::derive::parse::ClapRenameAll;
 
 /// Parses a field written as a test token stream.
 fn parse_field(tokens: &proc_macro2::TokenStream) -> syn::Field {
@@ -20,8 +21,13 @@ fn parse_field(tokens: &proc_macro2::TokenStream) -> syn::Field {
 
 /// Parses the one clap declaration declared by a test field.
 fn declaration(tokens: &proc_macro2::TokenStream) -> ClapArgDecl {
+    declaration_with(tokens, ClapRenameAll::default())
+}
+
+/// Parses one clap declaration under an explicit container casing rule.
+fn declaration_with(tokens: &proc_macro2::TokenStream, rename_all: ClapRenameAll) -> ClapArgDecl {
     let field = parse_field(tokens);
-    parse_clap_arg_decl(&field)
+    parse_clap_arg_decl(&field, rename_all)
         .expect("declaration should parse")
         .expect("declaration should be present")
 }
@@ -135,11 +141,7 @@ fn bool_flags_are_switches_but_optional_bools_take_values() {
         !flag_decl.takes_value,
         "a bare bool is a clap switch with no value"
     );
-    assert_eq!(
-        flag_decl.required,
-        Some(false),
-        "a switch is never required"
-    );
+    assert!(!flag_decl.required, "a switch is never required");
 
     let optional_decl = declaration(&quote::quote! {
         #[arg(long)]
@@ -196,7 +198,7 @@ fn skip_and_flatten_are_not_documented_as_arguments() {
         common: CommonArgs
     });
     assert!(
-        parse_clap_arg_decl(&flattened)
+        parse_clap_arg_decl(&flattened, ClapRenameAll::default())
             .expect("flatten should parse")
             .is_none(),
         "a flattened container is not one clap argument"
@@ -220,6 +222,128 @@ fn explicit_index_and_trailing_settings_are_recorded() {
         "trailing_var_arg should be recorded independently"
     );
     assert!(positional.last, "last should be recorded independently");
+}
+
+#[test]
+fn container_casing_rewrites_only_derived_spellings() {
+    let cased = declaration_with(
+        &quote::quote! {
+            #[arg(long, short)]
+            output_file: String
+        },
+        ClapRenameAll::Snake,
+    );
+    assert_eq!(
+        cased.long.as_deref(),
+        Some("output_file"),
+        "snake_case casing should reach a derived long flag"
+    );
+    assert_eq!(
+        cased.short,
+        Some('o'),
+        "snake_case casing should also reach a derived short flag"
+    );
+    assert_eq!(
+        cased.value_name, "OUTPUT_FILE",
+        "clap keeps the value name in upper snake case regardless of casing"
+    );
+
+    let literal = declaration_with(
+        &quote::quote! {
+            #[arg(long = "output-file")]
+            output_file: String
+        },
+        ClapRenameAll::Snake,
+    );
+    assert_eq!(
+        literal.long.as_deref(),
+        Some("output-file"),
+        "a literal long spelling must stay verbatim"
+    );
+
+    let assigned = declaration_with(
+        &quote::quote! {
+            #[arg(id = "out_file", long)]
+            output_file: String
+        },
+        ClapRenameAll::Snake,
+    );
+    assert_eq!(
+        assigned.long.as_deref(),
+        Some("out_file"),
+        "an assigned id is a literal name and must not be re-cased"
+    );
+}
+
+#[test]
+fn requiredness_follows_clap_not_serde_defaults() {
+    let required = declaration(&quote::quote! {
+        #[arg(long)]
+        host: String
+    });
+    assert!(
+        required.required,
+        "a value-taking clap argument with no clap default is required"
+    );
+
+    let optional = declaration(&quote::quote! {
+        #[arg(long)]
+        host: Option<String>
+    });
+    assert!(!optional.required, "an Option argument is never required");
+
+    let collection = declaration(&quote::quote! {
+        #[arg(long)]
+        hosts: Vec<String>
+    });
+    assert!(!collection.required, "a Vec argument is never required");
+
+    let with_default = declaration(&quote::quote! {
+        #[arg(long, default_value = "localhost")]
+        host: String
+    });
+    assert!(
+        !with_default.required,
+        "a clap default makes the argument optional"
+    );
+}
+
+#[test]
+fn nested_option_accepts_a_bare_flag() {
+    let decl = declaration(&quote::quote! {
+        #[arg(long)]
+        colour: Option<Option<String>>
+    });
+    assert!(
+        decl.takes_value,
+        "Option<Option<T>> still accepts a value when present"
+    );
+    assert!(
+        decl.value_optional,
+        "clap infers num_args(0..=1) for Option<Option<T>>"
+    );
+    assert!(!decl.required, "Option<Option<T>> is never required");
+}
+
+#[test]
+fn unreadable_range_bounds_do_not_claim_an_optional_value() {
+    let literal = declaration(&quote::quote! {
+        #[arg(long, num_args = 0..=1)]
+        colour: String
+    });
+    assert!(
+        literal.value_optional,
+        "a literal 0..=1 range makes the value optional"
+    );
+
+    let lower_bound = declaration(&quote::quote! {
+        #[arg(long, num_args = MIN..=1)]
+        colour: String
+    });
+    assert!(
+        !lower_bound.value_optional,
+        "a non-literal lower bound must not be assumed to admit zero values"
+    );
 }
 
 #[test]

@@ -2,6 +2,7 @@
 
 mod behaviour_attrs;
 mod clap_attrs;
+mod clap_command;
 mod clap_field_markers;
 mod discovery_validation;
 mod lit;

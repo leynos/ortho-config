@@ -825,8 +825,10 @@ A generated `OrthoConfigDocs` implementation documents the command line each
 field actually exposes. A field with an explicit clap `#[arg(...)]` or
 `#[clap(...)]` declaration is described from that declaration: positional
 operands carry `CliMetadata.positional`, use clap's value name, and omit long
-and short flags; a clap boolean flag is a switch. A field without a clap
-declaration keeps the generated parser's long and short flags. The
+and short flags; a clap boolean flag is a switch; bare `long` and `short`
+spellings follow `#[command(rename_all = "...")]`; and requiredness follows
+clap, so a Serde default does not relax it. A field without a clap declaration
+keeps the generated parser's long and short flags. The
 `OrthoConfigSubcommandDocs` selector must not rebuild identifiers itself; it
 calls `OrthoConfigDocs::get_doc_metadata_for_subcommand`, which owns the
 declaration-specific identifier path and the `<PREFIX>_CMDS_<NAME>_` /
