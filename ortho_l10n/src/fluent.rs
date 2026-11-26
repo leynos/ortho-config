@@ -123,11 +123,13 @@ impl FluentLocalizerBuilder {
     /// Sets whether `Fluent` isolates interpolated values with Unicode control
     /// characters.
     ///
-    /// `Fluent` wraps every interpolated value in U+2068 FIRST STRONG ISOLATE
-    /// and U+2069 POP DIRECTIONAL ISOLATE so bidirectional algorithms keep
-    /// right-to-left substitutions in the surrounding left-to-right text. Those
-    /// characters are invisible in many terminals but are ordinary characters
-    /// to `grep`, snapshot tests, and log pipelines.
+    /// When a pattern interleaves text with placeables, `Fluent` wraps each
+    /// interpolated value in U+2068 FIRST STRONG ISOLATE and U+2069 POP
+    /// DIRECTIONAL ISOLATE so bidirectional algorithms keep right-to-left
+    /// substitutions in the surrounding left-to-right text. A pattern that is a
+    /// single placeable is not isolated. Those characters are invisible in many
+    /// terminals but are ordinary characters to `grep`, snapshot tests, and log
+    /// pipelines.
     ///
     /// Leaving this unset preserves each bundle's own setting: resource-built
     /// bundles keep `Fluent`'s `true` default, and a supplied prebuilt bundle

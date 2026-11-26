@@ -1343,8 +1343,11 @@ users still receive a useful error.
 Fluent isolates interpolated values with two invisible characters: U+2068 FIRST
 STRONG ISOLATE and U+2069 POP DIRECTIONAL ISOLATE. A localized missing-argument
 error therefore carries a mark on each side of the interpolated value, where
-unlocalized copy has none. The marks keep right-to-left substitutions in the
-intended order inside left-to-right copy, but they also cause trouble:
+unlocalized copy has none. Isolation applies when a message interleaves text
+with placeables; a pattern that is a single placeable, such as
+`name = { $name }`, carries no marks. The marks keep right-to-left
+substitutions in the intended order inside left-to-right copy, but they also
+cause trouble:
 
 - some terminals, fonts, and log viewers draw them as boxes or question marks;
 - they defeat `grep`, exact string comparison, and snapshot assertions on
@@ -1353,8 +1356,10 @@ intended order inside left-to-right copy, but they also cause trouble:
 
 `FluentLocalizerBuilder::with_use_isolating(false)` removes the marks from both
 the consumer catalogue and the embedded defaults, so the built-in clap error
-copy loses them too. Leaving the setting unset keeps Fluent's `true` default
-and therefore today's output:
+copy loses them too. Leaving the setting unset changes nothing: catalogues
+built from resource strings keep Fluent's `true` default, and a prebuilt
+consumer bundle keeps whatever it chose—including a bundle that turned
+isolation off. The example below opts out explicitly:
 
 <!-- tested-example: guide-localization-isolation -->
 ```rust

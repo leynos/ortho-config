@@ -987,10 +987,12 @@ configuration can use the runtime directly. See
   consumer bundles so applications can perform all localization wiring
   alongside existing configuration discovery.
 
-- **Bidirectional isolation:** `Fluent` wraps every interpolated value in
-  U+2068 FIRST STRONG ISOLATE and U+2069 POP DIRECTIONAL ISOLATE while
-  `use_isolating` is `true`, which protects right-to-left substitutions inside
-  left-to-right copy. The marks are invisible, but they defeat `grep`, exact
+- **Bidirectional isolation:** while `use_isolating` is `true`, `Fluent` wraps
+  each interpolated value in U+2068 FIRST STRONG ISOLATE and U+2069 POP
+  DIRECTIONAL ISOLATE when the pattern interleaves text with placeables, which
+  protects right-to-left substitutions inside left-to-right copy. A pattern
+  that is a single placeable is not isolated, because there is no surrounding
+  text to protect. The marks are invisible, but they defeat `grep`, exact
   string comparison, and snapshot assertions taken from diagnostics, and some
   terminals and log viewers render them as replacement glyphs.
   `FluentLocalizerBuilder::with_use_isolating` stores an `Option<bool>`: `None`
