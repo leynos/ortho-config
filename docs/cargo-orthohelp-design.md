@@ -1000,8 +1000,8 @@ documentation-oriented metadata into the compact contract described in
 - preserve schema versioning separately from `DocMetadata.ir_version`, which
   remains the compatibility marker for human documentation IR;
 - include populated command trees rather than only top-level fields;
-- drop localized long prose while allowing a concise en-US command summary
-  for command selection;
+- drop localized long prose while allowing a concise command summary selected
+  from an ordered locale candidate list (§6.3.1.1);
 - include canonical flags, value types, enum values, defaults, and required
   inputs;
 - include command semantics such as interaction mode, mutation boundaries,
@@ -1022,12 +1022,12 @@ writing artefacts, and reporting diagnostics.
 
 Within `cargo-orthohelp`'s binary entrypoint, the private `GenerationContext`
 only groups borrowed, run-scoped inputs for output dispatch: package selection,
-bridge IR, output directory, and the optional cached en-US localizer. It may be
-used by format-generation helpers in `main.rs`; it is not a reusable library
+bridge IR, output directory, and the optional cached summary localizer. It may
+be used by format-generation helpers in `main.rs`; it is not a reusable library
 context or an owner of those values.
 
 For the first `--format agent-context` implementation, the adapter emits an
-optional `AgentCommand.summary` from the short en-US command description. It
+optional `AgentCommand.summary` from the short chosen command description. It
 does not emit Fluent identifiers, long help text, roff fragments, or PowerShell
 help structures. The adapter emits a positional input only when
 `CliMetadata.positional` is `Some`, ordering emitted positional inputs by
@@ -1038,6 +1038,62 @@ as exactly one file at `<out>/agent-context.json` and is also emitted as one
 compact JSON document to stdout, followed by a newline. `--format all` includes
 the same agent-context document beside IR, man pages, and PowerShell artefacts
 and emits that JSON to stdout.
+
+#### 6.3.1.1 Summary locale selection
+
+Agent context remains one document at the output root, but its command
+summaries come from one Fluent catalogue selected in this order:
+
+1. the first parseable value of `--locale`;
+2. otherwise, when no `--locale` value is given, the first parseable locale
+   declared in `[package.metadata.ortho_config] locales`, whether or not
+   `--all-locales` was given;
+3. `en-US`, the historical fallback;
+4. a locale discovered under `locales/` that shares the language subtag of an
+   earlier candidate, in candidate order and then sorted discovery order;
+5. the embedded `en-US` defaults.
+
+A candidate counts only when the package ships at least one `.ftl` resource for
+it and the localizer builds; an unreadable or malformed catalogue is reported
+and the next candidate is tried. Because `en-US` is always a preference, a
+discovered `en-GB` catalogue can supply summaries only after the absent `en-US`
+candidate is skipped. Discovery matches the language subtag, so `zh-Hans`
+matches a `zh` candidate and `ca-valencia` matches a `ca` candidate; a name
+carrying a script or variant subtag stays eligible, and only a name that does
+not parse as a language identifier is skipped. `unic-langid` accepts `_` as a
+separator, so `en_backup` and `en-backup` parse as the same locale. The
+catalogue is then read from the directory the author created, falling back to a
+case-insensitive match, so `en-GB` finds `locales/en-gb` on a case-sensitive
+filesystem. For summary selection, an unparsable `--locale` value is reported
+and skipped in favour of the next explicit value; metadata supplies the
+preference only when no `--locale` is given. The general locale resolver is
+stricter: localized IR, man-page, and PowerShell generation reject an invalid
+`--locale` with `InvalidLocale`, even when a valid value follows, so a typo is
+not harmless to a `--format all` run. Once a localizer is selected, each
+summary is looked up in that one catalogue; an absent identifier or a blank
+resolution omits that command's summary rather than consulting another
+catalogue.
+
+The chosen locale and its source are emitted at `info` as
+`agent-context summary locale selected` with `locale` and `source` fields
+(`requested`, `metadata`, `en-US`, `same-language`, or `embedded-defaults`). A
+choice that differs from the first preference also emits a warning naming the
+first preference, the tried candidates, and the chosen locale; reaching the
+embedded defaults emits a warning that lists the candidates. When no localizer
+builds at all, the warning reports that summaries are omitted. Agent-context
+schema version 1 is unchanged: the choice is diagnostic output, not a document
+field, so consumers see no new keys and no locale-scoped layout.
+
+The selected localizer is reused for localized IR, man-page, and PowerShell
+output only when a requested locale is exactly the same identifier *and* the
+localizer was built from package resources. An embedded-defaults fallback is
+therefore never reused: it would bypass the requested locale's missing or
+malformed catalogue and silently emit human documentation from library
+defaults. This keeps the previous failure a malformed catalogue produced. The
+selection policy lives in `cargo-orthohelp/src/summary_locale/`; the general
+locale resolver keeps its `--locale` and `--all-locales` contract unchanged.
+The decision and its trade-offs are recorded in
+[ADR-0027](adrs/adr-0027-agent-context-summary-locale-selection.md).
 
 `AgentInput.default` is a best-effort display string, not a normative or
 machine-parseable value. The generator normalizes unstable Rust token spacing

@@ -19,6 +19,8 @@
 //!   generation.
 //! - [`steps_agent_context`] — `when`/`then` steps for agent-context JSON
 //!   generation.
+//! - [`steps_agent_context_locale`] — `when`/`then` steps for the agent-context
+//!   summary locale choice.
 //! - [`steps_renderer`] — `when`/`then` steps for declared renderer metadata,
 //!   as reported in agent-context JSON.
 //! - [`steps_ir_renderer`] — `then` steps for declared renderer metadata in
@@ -46,6 +48,7 @@ mod roff_steps;
 mod scenarios;
 pub mod steps;
 mod steps_agent_context;
+mod steps_agent_context_locale;
 mod steps_cache;
 mod steps_cmd;
 mod steps_ir;

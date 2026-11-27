@@ -9,6 +9,8 @@ mod bridge;
 mod bridge_observability;
 mod cache;
 mod cli;
+#[cfg(test)]
+mod cli_test_support;
 mod error;
 mod fs_helpers;
 mod generation;
@@ -24,6 +26,7 @@ pub mod powershell;
 pub mod roff;
 mod root_type;
 pub mod schema;
+mod summary_locale;
 #[cfg(test)]
 mod test_support;
 use crate::bridge::BridgeConfig;
@@ -176,12 +179,12 @@ fn run(cli: Cli, format_was_explicit: bool) -> Result<(), OrthohelpError> {
     let should_generate_localized_docs =
         should_generate_ir || should_generate_man || should_generate_ps;
 
-    let en_us_localizer = build_agent_context_localizer_if_requested(&args, &selection);
+    let summary_localizer = build_agent_context_localizer_if_requested(&args, &selection);
     let generation_context = GenerationContext {
         selection: &selection,
         doc_metadata: &doc_metadata,
         out_dir: &out_dir,
-        en_us_localizer: en_us_localizer.as_ref(),
+        summary_localizer: summary_localizer.as_ref(),
     };
     generate_agent_context_if_requested(&args, &generation_context)?;
 

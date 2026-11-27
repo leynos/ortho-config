@@ -57,27 +57,31 @@ The planned exit classes are the public contract downstream tools must rely on:
 
 ## Quick start
 
-1. **Declare metadata in your application crate `Cargo.toml`:**
-   Use the canonical example in
-   [Cargo metadata defaults](#cargo-metadata-defaults).
+### Declare metadata in your application crate `Cargo.toml`
 
-2. **Generate localized IR JSON:**
+Use the canonical example in
+[Cargo metadata defaults](#cargo-metadata-defaults).
 
-   ```bash
-   cargo orthohelp --package my_app --locale en-US --out-dir target/orthohelp
-   ```
+### Generate localized IR JSON
 
-   This writes localized IR to `target/orthohelp/ir/en-US.json`.
+<!-- tested-example: orthohelp-readme-quick-start-ir -->
+```bash
+cargo orthohelp --package my_app --locale en-US --out-dir target/orthohelp
+```
 
-3. **Generate man pages or PowerShell help when needed:**
+This writes localized IR to `target/orthohelp/ir/en-US.json`.
 
-   ```bash
-   cargo orthohelp --package my_app --locale en-US --format man --out-dir target/docs
-   cargo orthohelp --package my_app --locale en-US --format ps --out-dir target/docs
-   ```
+### Generate man pages or PowerShell help when needed
+
+<!-- tested-example: orthohelp-readme-quick-start-man-ps -->
+```bash
+cargo orthohelp --package my_app --locale en-US --format man --out-dir target/docs
+cargo orthohelp --package my_app --locale en-US --format ps --out-dir target/docs
+```
 
 ## Usage
 
+<!-- tested-example: orthohelp-readme-usage -->
 ```bash
 cargo orthohelp \
   [--package <pkg>] [--bin <name> | --lib] \
@@ -105,6 +109,7 @@ Boolean PowerShell options take explicit values and are not bare switches. Use
 
 Generate IR for two locales and reuse the bridge cache:
 
+<!-- tested-example: orthohelp-readme-ir-two-locales -->
 ```bash
 cargo orthohelp \
   --package my_app \
@@ -116,6 +121,7 @@ cargo orthohelp \
 
 Generate section 5 man pages and split subcommands:
 
+<!-- tested-example: orthohelp-readme-man-section -->
 ```bash
 cargo orthohelp \
   --package my_app \
@@ -128,6 +134,7 @@ cargo orthohelp \
 
 Generate PowerShell module help with explicit module name:
 
+<!-- tested-example: orthohelp-readme-powershell -->
 ```bash
 cargo orthohelp \
   --package my_app \
@@ -141,18 +148,39 @@ cargo orthohelp \
 
 Generate every output format in one run:
 
+<!-- tested-example: orthohelp-readme-all-formats -->
 ```bash
 cargo orthohelp --package my_app --all-locales --format all --out-dir target/docs
 ```
 
 Generate compact agent-context JSON:
 
+<!-- tested-example: orthohelp-readme-agent-context -->
 ```bash
 cargo orthohelp \
   --package my_app \
   --format agent-context \
   --out-dir target/orthohelp
 ```
+
+Agent-context summaries follow the requested locale when the package ships a
+catalogue for it. A package that writes British English only can keep a single
+`locales/en-GB/messages.ftl` and still get summaries:
+
+<!-- tested-example: orthohelp-agent-context-en-gb -->
+```bash
+cargo orthohelp \
+  --package my_app \
+  --locale en-GB \
+  --format agent-context \
+  --out-dir target/orthohelp
+```
+
+The summary locale is chosen in this order: the first parseable `--locale`, or,
+when no `--locale` is given, the first parseable locale declared in package
+metadata; then `en-US`, another discovered locale matching the language of an
+earlier candidate, and finally the embedded `en-US` defaults. Run with
+`RUST_LOG=info` to see which locale supplied the summaries.
 
 ## Output layout
 
@@ -174,6 +202,7 @@ For `--out-dir target/docs`:
 
 `cargo-orthohelp` reads defaults from `package.metadata.ortho_config`:
 
+<!-- tested-example: orthohelp-readme-cargo-metadata -->
 ```toml
 [package.metadata.ortho_config]
 root_type = "my_app::AppConfig"

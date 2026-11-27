@@ -99,6 +99,16 @@ const EXPECTED_EXAMPLE_IDS: &[&str] = &[
     "migration-l10n-dependency",
     "migration-l10n-runtime",
     "migration-profile-precedence",
+    "orthohelp-agent-context-en-gb",
+    "orthohelp-readme-agent-context",
+    "orthohelp-readme-cargo-metadata",
+    "orthohelp-readme-all-formats",
+    "orthohelp-readme-ir-two-locales",
+    "orthohelp-readme-man-section",
+    "orthohelp-readme-powershell",
+    "orthohelp-readme-quick-start-ir",
+    "orthohelp-readme-quick-start-man-ps",
+    "orthohelp-readme-usage",
     "readme-binstall",
     "readme-cargo-derive-dependencies",
     "readme-cargo-derive-subcommand",
@@ -304,6 +314,19 @@ fn yaml_example_uses_yaml_1_2_string_semantics() -> Result<()> {
             .get("port")
             .and_then(ortho_config::serde_json::Value::as_u64)
             == Some(8080)
+    );
+    Ok(())
+}
+
+#[test]
+fn documented_en_gb_agent_context_command_matches_cli_contract() -> Result<()> {
+    let example = documented_example("orthohelp-agent-context-en-gb")?;
+    ensure!(example.language == "bash");
+    ensure!(
+        example.body
+            == "cargo orthohelp \\\n  --package my_app \\\n  --locale en-GB \\\n  --format agent-context \\\n  --out-dir target/orthohelp\n",
+        "agent-context en-GB command contract drifted: {:?}",
+        example.body,
     );
     Ok(())
 }

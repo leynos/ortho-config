@@ -519,3 +519,28 @@ Upgrading code that consumes the metadata:
 
 The wire contract stays additive: `profile_field` is omitted when undeclared,
 and documentation IR stays at 2.0.
+
+## 16. Agent-context summaries follow the requested locale
+
+Nothing is required. `cargo-orthohelp` now resolves `AgentCommand.summary` from
+the first parseable `--locale` value, skipping an invalid one in favour of the
+next explicit value, or from the first parseable locale declared in
+`[package.metadata.ortho_config] locales` when no `--locale` is given. This
+skipping applies to summary selection only; localized generation still rejects
+an invalid `--locale` with an error. If that catalogue is absent or cannot be
+built, the generator falls back to `en-US`, then to a discovered locale
+matching an earlier candidate's language, and finally to the embedded `en-US`
+defaults. A package that ships only `locales/en-GB/messages.ftl` now gains
+summaries under `--locale en-GB` without duplicating or relabelling its
+catalogue.
+
+A run that relied on the previous `en-US`-only behaviour can change in two
+ways. When the first requested or metadata locale is not `en-US` and the
+package ships a catalogue for it, summaries carry that locale's text. The
+same-language fallback applies only after the first preference and `en-US` both
+fail: `--locale en-US` against a package that ships only
+`locales/en-GB/messages.ftl` now gains British-English summaries, while a
+package that also ships `en-US` keeps its `en-US` summaries. The agent-context
+document stays single, is still written at the output root, and keeps schema
+version 1. Run with `RUST_LOG=info` to see the chosen locale and its source;
+the selection is diagnostic stderr output rather than a new JSON field.

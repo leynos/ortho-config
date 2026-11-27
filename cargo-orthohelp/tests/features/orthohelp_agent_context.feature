@@ -18,6 +18,12 @@ Feature: cargo-orthohelp agent-context generation
     When I run cargo-orthohelp with format agent-context for the nested fixture
     Then stdout contains nested agent-context command paths for the fixture
 
+  Scenario: Agent context summaries follow the requested locale
+    Given a temporary output directory
+    And the orthohelp cache is empty
+    When I run cargo-orthohelp with format agent-context for the fixture in locale fr-FR
+    Then the agent-context root summary is the French fixture summary
+
   Scenario: agent context reports declared behaviour metadata
     Given a temporary output directory
     And the orthohelp cache is empty

@@ -19,6 +19,9 @@ mod orthohelp_workflow;
 #[path = "../../ortho_config/tests/documentation_examples/process_runner_state_support.rs"]
 mod process_runner;
 
+#[path = "../../ortho_config/tests/documentation_examples/mod.rs"]
+mod documentation_examples;
+
 /// Bridge-cache entry lookup shared by the cache lanes.
 #[path = "documented_command/cache_entries.rs"]
 mod cache_entries;
@@ -268,6 +271,55 @@ fn documented_policy_denial_keeps_the_report_and_exits_one() -> Result<()> {
             .join(Artefact::AgentContext.file_name())
             .exists(),
         "a denied policy-only run should still skip generation"
+    );
+    Ok(())
+}
+
+/// The documented en-GB agent-context command runs against the fixture.
+///
+/// The README example names a hypothetical `my_app`. This test substitutes the
+/// fixture package, drops the example's illustrative `--out-dir` so the harness
+/// can supply a private one, and asserts the generated root summary comes from
+/// the fixture's `en-GB` catalogue.
+#[test]
+fn documented_en_gb_agent_context_command_selects_the_en_gb_catalogue() -> Result<()> {
+    let example = documentation_examples::documented_example("orthohelp-agent-context-en-gb")?;
+    ensure!(example.language == "bash");
+    let documented = example.body.replace("\\\n", " ");
+    let tokens = documented.split_whitespace().collect::<Vec<_>>();
+    ensure!(
+        tokens.first() == Some(&"cargo") && tokens.get(1) == Some(&"orthohelp"),
+        "the documented command should invoke cargo orthohelp, got {tokens:?}"
+    );
+
+    let mut args = Vec::new();
+    let mut index = 2;
+    while let Some(token) = tokens.get(index) {
+        match *token {
+            "--out-dir" => index += 2,
+            "my_app" => {
+                args.push("orthohelp_fixture");
+                index += 1;
+            }
+            other => {
+                args.push(other);
+                index += 1;
+            }
+        }
+    }
+
+    let run = run_orthohelp(&args, &[])?;
+    run.ensure_success("documented en-GB agent-context command")?;
+    let payload: Value = serde_json::from_str(&run.read_artefact(Artefact::AgentContext)?)?;
+    let summary = payload
+        .get("commands")
+        .and_then(Value::as_array)
+        .and_then(|commands| commands.first())
+        .and_then(|command| command.get("summary"))
+        .and_then(Value::as_str);
+    ensure!(
+        summary == Some("British fixture configuration."),
+        "the documented en-GB run should use the en-GB catalogue, got {summary:?}"
     );
     Ok(())
 }
