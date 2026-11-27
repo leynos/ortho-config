@@ -59,9 +59,11 @@ pub fn summary_locale_preferences(
 ///
 /// The names are sorted before matching, so the result is deterministic even
 /// when a caller supplies an unsorted slice. Each preferred candidate
-/// contributes matching discovered locales in preferred order; a name carrying
-/// a variant subtag is rejected because such names are usually backup or
-/// scratch directories, while a script subtag such as `zh-Hans` stays eligible.
+/// contributes every parseable discovered locale sharing its language subtag,
+/// in preferred order. A script (`zh-Hans`) or variant (`ca-valencia`,
+/// `en-GB-oxendict`) subtag does not disqualify a name: the requirement is to
+/// use any available same-language catalogue. Names that do not parse as a
+/// language identifier are skipped.
 pub fn plan_same_language_candidates(
     preferred: &[SummaryLocaleCandidate],
     discovered: &[String],
@@ -74,9 +76,6 @@ pub fn plan_same_language_candidates(
             let Ok(locale) = locale::parse_locale(value) else {
                 continue;
             };
-            if !has_no_variant(&locale) {
-                continue;
-            }
             let shares_language = locale.language == candidate.locale.language;
             if shares_language && !contains_locale(preferred, &locale) {
                 push_unique_candidate(
@@ -148,11 +147,6 @@ fn contains_locale(candidates: &[SummaryLocaleCandidate], locale: &LanguageIdent
     candidates
         .iter()
         .any(|candidate| &candidate.locale == locale)
-}
-
-/// Reports whether a discovered locale has no variant subtag.
-fn has_no_variant(locale: &LanguageIdentifier) -> bool {
-    matches!(locale.variants().len(), 0)
 }
 
 /// The fixed `en-US` identifier used as the historical summary fallback.

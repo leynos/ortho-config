@@ -1058,19 +1058,19 @@ it and the localizer builds; an unreadable or malformed catalogue is reported
 and the next candidate is tried. Because `en-US` is always a preference, a
 discovered `en-GB` catalogue can supply summaries only after the absent `en-US`
 candidate is skipped. Discovery matches the language subtag, so `zh-Hans`
-matches a `zh` candidate, and rejects a name carrying a variant subtag, such as
-`en-backup`, because such names are usually backup or scratch directories. The
-catalogue is then read from the directory the author created, falling back to a
-case-insensitive match, so `en-GB` finds `locales/en-gb` on a case-sensitive
-filesystem. For summary selection, an unparsable `--locale` value is reported
-and skipped in favour of the next explicit value; metadata supplies the
-preference only when no `--locale` is given. The general locale resolver is
-stricter: localized IR, man-page, and PowerShell generation reject an invalid
-`--locale` with `InvalidLocale`, even when a valid value follows, so a typo is
-not harmless to a `--format all` run. Once a localizer is selected, each
-summary is looked up in that one catalogue; an absent identifier or a blank
-resolution omits that command's summary rather than consulting another
-catalogue.
+matches a `zh` candidate and `ca-valencia` matches a `ca` candidate; a name
+carrying a script or variant subtag stays eligible, and only a name that does
+not parse as a language identifier is skipped. The catalogue is then read from
+the directory the author created, falling back to a case-insensitive match, so
+`en-GB` finds `locales/en-gb` on a case-sensitive filesystem. For summary
+selection, an unparsable `--locale` value is reported and skipped in favour of
+the next explicit value; metadata supplies the preference only when no
+`--locale` is given. The general locale resolver is stricter: localized IR,
+man-page, and PowerShell generation reject an invalid `--locale` with
+`InvalidLocale`, even when a valid value follows, so a typo is not harmless to a
+`--format all` run. Once a localizer is selected, each summary is looked up in
+that one catalogue; an absent identifier or a blank resolution omits that
+command's summary rather than consulting another catalogue.
 
 The chosen locale and its source are emitted at `info` as
 `agent-context summary locale selected` with `locale` and `source` fields

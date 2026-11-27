@@ -165,10 +165,14 @@ fn fallbacks_for(
     vec!["en-AU:same-language", "en-GB:same-language"],
     "fallbacks should be sorted, same-language only, and exclude the preference itself"
 )]
-#[case::variant_directories_rejected(
+#[case::variant_directories_accepted(
     &["en-GB", "en_backup", "en-backup", "en-Latn"],
-    vec!["en-GB:same-language", "en-Latn:same-language"],
-    "script-bearing locales stay eligible, while variant directories are rejected"
+    vec![
+        "en-GB:same-language",
+        "en-Latn:same-language",
+        "en-backup:same-language",
+    ],
+    "script- and variant-bearing locales stay eligible, and duplicate spellings collapse"
 )]
 fn same_language_fallbacks_follow_discovery_rules(
     package_root: PackageRoot,
@@ -207,9 +211,9 @@ fn same_language_fallbacks_do_not_repeat_a_requested_locale(package_root: Packag
     &["fr-FR", "en-GB", "en-AU", "en-GB"],
     vec!["en-AU:same-language", "en-GB:same-language"]
 )]
-#[case::variants_rejected_and_scripts_kept(
+#[case::variants_and_scripts_kept(
     &["en-backup", "zh-Hans", "en-GB"],
-    vec!["en-GB:same-language"]
+    vec!["en-GB:same-language", "en-backup:same-language"]
 )]
 #[case::preferences_excluded(&["en-US", "en-GB"], vec!["en-GB:same-language"])]
 fn pure_planner_orders_and_filters_discovered_names(

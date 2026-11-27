@@ -1634,10 +1634,11 @@ behaviour, and the Fluent adapter remains in `locale.rs`.
   `SummarySelection`.
 - `plan.rs` holds the pure policy. `summary_locale_preferences` orders the
   first parseable requested or metadata locale before `en-US`;
-  `plan_same_language_candidates` matches discovered names by language and
-  rejects variant-bearing directories. `same_language_summary_locales` is the
-  only fallible function there: it returns the discovery error rather than
-  converting it into absence.
+  `plan_same_language_candidates` matches any parseable discovered name by
+  language, so script- and variant-bearing locales (`zh-Hans`, `ca-valencia`)
+  are eligible and only an unparsable name is skipped.
+  `same_language_summary_locales` is the only fallible function there: it
+  returns the discovery error rather than converting it into absence.
 - `mod.rs` runs the resource loop and returns the typed outcome without
   logging. `diagnostics.rs` turns that outcome into the `info`, `warn`, and
   `debug` events emitted by `build_agent_context_localizer_if_requested` in

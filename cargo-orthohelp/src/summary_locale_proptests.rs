@@ -102,7 +102,7 @@ proptest! {
     }
 
     #[test]
-    fn fallbacks_are_variant_free_unique_sorted_and_same_language(
+    fn fallbacks_are_unique_sorted_and_same_language(
         preferred_tag in locale_tag(),
         discovered in locale_tags(),
     ) {
@@ -146,11 +146,6 @@ proptest! {
                 &candidate.locale.language,
                 &preferred_locale.language,
                 "a fallback must share the preferred language",
-            );
-            prop_assert!(
-                matches!(candidate.locale.variants().len(), 0),
-                "a variant-bearing directory is not a locale fallback: {}",
-                candidate.locale,
             );
             prop_assert_ne!(
                 &candidate.locale,

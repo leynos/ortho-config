@@ -233,8 +233,9 @@ fn invalid_metadata_locale_is_skipped_and_reported(package_root: PackageRoot) {
     );
 }
 
+/// A variant-bearing sibling sorts after a regional catalogue.
 #[rstest]
-fn non_locale_sibling_directories_are_not_summary_candidates(package_root: PackageRoot) {
+fn variant_sibling_does_not_displace_a_regional_catalogue(package_root: PackageRoot) {
     package_root.add_catalogue("en-GB", "demo-about = British English summary.\n");
     package_root.add_catalogue("en-backup", "demo-about = Backup directory summary.\n");
     package_root.add_catalogue("en_backup", "demo-about = Underscore backup summary.\n");
@@ -243,6 +244,17 @@ fn non_locale_sibling_directories_are_not_summary_candidates(package_root: Packa
     let selected = select(&args, &package_root.path, None);
 
     assert_selection(selected, "en-GB", "British English summary.");
+}
+
+/// A same-language catalogue with a variant subtag is a valid fallback.
+#[rstest]
+fn variant_bearing_catalogue_supplies_a_same_language_summary(package_root: PackageRoot) {
+    package_root.add_catalogue("en-GB-oxendict", "demo-about = Oxford spelling summary.\n");
+    let args = args_for(&["en"]);
+
+    let selected = select(&args, &package_root.path, None);
+
+    assert_selection(selected, "en-GB-oxendict", "Oxford spelling summary.");
 }
 
 #[rstest]

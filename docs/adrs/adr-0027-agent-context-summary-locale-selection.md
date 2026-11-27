@@ -110,10 +110,16 @@ omits that command's summary without trying another catalogue.
 
 Discovery reuses the sorted `locales/` enumeration used by `--all-locales`.
 Matching compares the `unic-langid` language subtag, so `en-GB` matches an
-`en-US` candidate, `fr-FR` matches `fr-CA`, and `zh-Hans` matches `zh`. A
-discovered name carrying a variant subtag, such as `en-backup`, is rejected
-because it is usually a backup or scratch directory rather than a locale.
-Locales already present as preferences are excluded, and a discovery failure is
+`en-US` candidate, `fr-FR` matches `fr-CA`, and `zh-Hans` matches `zh`. Every
+parseable discovered name sharing the language is eligible, including names
+that carry a script or variant subtag such as `zh-Hans`, `ca-valencia`, or
+`en-GB-oxendict`; the requirement is to use any available same-language
+catalogue, and variant subtags are legitimate BCP 47 locales. A directory name
+that does not parse as a language identifier is skipped. A package that keeps
+scratch catalogues under `locales/` must name them so they do not parse, or
+accept that a variant-looking name such as `en-backup` is a candidate; the
+selection warning names the chosen locale, so the choice is visible. Locales
+already present as preferences are excluded, and a discovery failure is
 reported and treated as no fallbacks. Because `en-US` precedes same-language
 discovery, a package whose metadata requests only `en-US` and which ships
 `locales/en-GB/messages.ftl` but no `locales/en-US` directory resolves its
@@ -176,9 +182,13 @@ file within the repository's length limit.
 
 ## Known risks and limitations
 
-- A same-language fallback can choose a regional variant the caller did not
-  name, such as `en-GB` for an `en-US` request. The warning makes the choice
-  visible, and the alternative is no summary at all.
+- A same-language fallback can choose a regional or variant locale the caller
+  did not name, such as `en-GB` or `en-GB-oxendict` for an `en-US` request. The
+  warning makes the choice visible, and the alternative is no summary at all.
+- A scratch catalogue whose directory name happens to parse as a variant
+  locale, such as `en-backup`, is a candidate when nothing better resolves. The
+  resource check still requires `.ftl` files, and the selection warning names
+  the chosen locale.
 - `en-US` outranks same-language discovery. A package that ships both `en-US`
   and `fr-FR`, invoked with `--locale fr-CA`, receives English summaries rather
   than French ones. The documented preference order favours the historical
