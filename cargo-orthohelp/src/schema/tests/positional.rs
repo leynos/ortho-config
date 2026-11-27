@@ -47,12 +47,7 @@ fn positional_metadata_round_trips_and_is_omitted_when_absent() {
         long: None,
         short: None,
         value_name: Some("PROPOSAL".to_owned()),
-        positional: Some(ortho_docs::PositionalMetadata {
-            index: 1,
-            variadic: true,
-            var_arg: false,
-            last: false,
-        }),
+        positional: Some(ortho_docs::PositionalMetadata::new(1).with_variadic(true)),
         ..sample_cli_metadata()
     };
     let encoded = serde_json::to_value(&positional).expect("serialize positional metadata");

@@ -12,10 +12,10 @@ use syn::meta::ParseNestedMeta;
 use syn::spanned::Spanned;
 use syn::{Expr, Lit, Type};
 
-use super::super::{ClapRenameAll, discard_unknown, option_inner};
+use super::super::{ClapRenameAll, discard_unknown};
 use super::value_syntax::{
-    ValueRange, action_name, argument, is_bare_bool, is_default_value_key, is_vec_field,
-    parse_bool, parse_lit_str, parse_usize, parse_value_range, single_char,
+    ValueRange, action_name, argument, clap_option_inner, is_bare_bool, is_default_value_key,
+    is_vec_field, parse_bool, parse_lit_str, parse_usize, parse_value_range, single_char,
 };
 use super::{ClapArgDecl, ClapPositionalDecl};
 
@@ -291,8 +291,8 @@ impl ClapArgBuilder {
         let value_optional = takes_value
             && (self.has_default_missing_value
                 || num_args.map_or_else(|| is_nested_option(&field.ty), |range| range.min == 0));
-        let multiple = is_vec || num_args.is_some_and(|r| r.max > 1) || self.action_appends;
-        let variadic = is_positional && (is_vec || num_args.is_some_and(|r| r.max > 1));
+        let multiple = self.action_appends || num_args.map_or(is_vec, |range| range.max > 1);
+        let variadic = is_positional && num_args.map_or(is_vec, |range| range.max > 1);
         let positional = is_positional.then_some(ClapPositionalDecl {
             index: self.index,
             variadic,
@@ -378,7 +378,7 @@ impl ClapArgBuilder {
         if self.has_default || !takes_value {
             return false;
         }
-        !(is_vec_field(ty) || option_inner(ty).is_some())
+        !(is_vec_field(ty) || clap_option_inner(ty).is_some())
     }
 }
 
@@ -387,5 +387,5 @@ impl ClapArgBuilder {
 /// `clap_derive` infers `num_args(0..=1)` for this shape, so a bare flag is a
 /// valid spelling even though the type is not a plain boolean.
 fn is_nested_option(ty: &Type) -> bool {
-    option_inner(ty).is_some_and(|inner| option_inner(inner).is_some())
+    clap_option_inner(ty).is_some_and(|inner| clap_option_inner(inner).is_some())
 }

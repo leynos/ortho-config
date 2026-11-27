@@ -71,12 +71,12 @@ fn clap_tokens(
             let var_arg = positional.var_arg;
             let last = positional.last;
             quote! {
-                Some(#krate::docs::PositionalMetadata {
-                    index: #index,
-                    variadic: #variadic,
-                    var_arg: #var_arg,
-                    last: #last,
-                })
+                Some(
+                    #krate::docs::PositionalMetadata::new(#index)
+                        .with_variadic(#variadic)
+                        .with_var_arg(#var_arg)
+                        .with_last(#last),
+                )
             }
         },
     );

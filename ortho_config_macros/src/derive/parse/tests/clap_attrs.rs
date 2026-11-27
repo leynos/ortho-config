@@ -342,6 +342,10 @@ fn clap_variant_name_cases() -> Result<()> {
             quote! { enum Commands { #[command(name("take-leave"))] TakeLeave(TakeLeaveArgs), } },
             "take-leave",
         ),
+        (
+            quote! { enum Commands { #[command(name("take-leave",))] TakeLeave(TakeLeaveArgs), } },
+            "take-leave",
+        ),
     ];
 
     for (tokens, expected_name) in cases {

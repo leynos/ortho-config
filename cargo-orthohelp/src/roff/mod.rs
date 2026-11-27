@@ -6,6 +6,7 @@
 mod entry;
 pub mod escape;
 mod sections;
+mod synopsis;
 mod types;
 mod writer;
 
@@ -118,7 +119,7 @@ fn append_standard_sections(
     ));
 
     // SYNOPSIS section
-    content.push_str(&sections::synopsis_section(
+    content.push_str(&synopsis::synopsis_section(
         headings,
         display_name,
         metadata.synopsis.as_deref(),

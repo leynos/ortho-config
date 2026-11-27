@@ -107,13 +107,7 @@ fn ensure_positional(field: &FieldMetadata, index: u16, value_name: &str) -> Res
         cli.value_name
     );
     ensure!(
-        cli.positional
-            == Some(PositionalMetadata {
-                index,
-                variadic: false,
-                var_arg: false,
-                last: false,
-            }),
+        cli.positional == Some(PositionalMetadata::new(index)),
         "{} should be positional at index {index}, got {:?}",
         field.name,
         cli.positional

@@ -105,6 +105,7 @@ pub struct CliMetadata {
 /// reachable only after `--`. Keeping them separate preserves every
 /// combination the underlying parser can declare.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct PositionalMetadata {
     /// One-based positional index assigned by clap.
     pub index: u16,
@@ -114,6 +115,43 @@ pub struct PositionalMetadata {
     pub var_arg: bool,
     /// Whether the operand is reachable only through `--`.
     pub last: bool,
+}
+
+impl PositionalMetadata {
+    /// Builds metadata for an ordinary positional at `index`.
+    ///
+    /// The independent clap settings default to `false`; apply the `with_*`
+    /// builders for a variadic, trailing-var-arg, or `--`-only operand.
+    #[must_use]
+    pub const fn new(index: u16) -> Self {
+        Self {
+            index,
+            variadic: false,
+            var_arg: false,
+            last: false,
+        }
+    }
+
+    /// Marks the operand as accepting more than one value.
+    #[must_use]
+    pub const fn with_variadic(mut self, variadic: bool) -> Self {
+        self.variadic = variadic;
+        self
+    }
+
+    /// Marks the operand as consuming trailing arguments without `--`.
+    #[must_use]
+    pub const fn with_var_arg(mut self, var_arg: bool) -> Self {
+        self.var_arg = var_arg;
+        self
+    }
+
+    /// Marks the operand as reachable only through `--`.
+    #[must_use]
+    pub const fn with_last(mut self, last: bool) -> Self {
+        self.last = last;
+        self
+    }
 }
 
 /// Environment variable documentation metadata.

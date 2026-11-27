@@ -78,11 +78,10 @@ fn test_field(
             value_optional: false,
             possible_values: vec![],
             hide_in_help: false,
-            positional: position.map(|placement| PositionalMetadata {
-                index: placement.index,
-                variadic: false,
-                var_arg: placement.var_arg,
-                last: placement.last,
+            positional: position.map(|placement| {
+                PositionalMetadata::new(placement.index)
+                    .with_var_arg(placement.var_arg)
+                    .with_last(placement.last)
             }),
         }),
         env: None,
@@ -176,6 +175,35 @@ fn golden_last_operand_follows_flags_and_delimiter(mut minimal_metadata: Localiz
     assert!(
         delimiter_at < tail_at,
         "a `last` operand must follow the `--` delimiter: {synopsis}"
+    );
+}
+
+/// Test that an optional `last` operand keeps the delimiter optional too.
+///
+/// Emitting a bare `--` before a bracketed operand would claim the delimiter
+/// is required even though a valid invocation may omit both.
+#[rstest]
+fn golden_optional_last_operand_groups_the_delimiter(mut minimal_metadata: LocalizedDocMetadata) {
+    minimal_metadata
+        .fields
+        .push(test_field("mode", "MODE", false, None));
+    minimal_metadata
+        .fields
+        .push(test_field("tail", "TAIL", false, Some(Position::last(1))));
+
+    let output = generate_to_string(&minimal_metadata, &RoffConfig::default());
+    let synopsis = output
+        .split(".SH DESCRIPTION")
+        .next()
+        .expect("synopsis should precede the description");
+
+    assert!(
+        synopsis.contains("[\\-\\- \\fITAIL\\fR]"),
+        "the optional delimiter and operand should share one group: {synopsis}"
+    );
+    assert!(
+        !synopsis.contains("\\-\\-\n"),
+        "an optional `last` operand must not advertise a mandatory delimiter: {synopsis}"
     );
 }
 

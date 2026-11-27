@@ -7,13 +7,12 @@
 use syn::meta::ParseNestedMeta;
 use syn::{Expr, Lit, RangeLimits, Token, Type};
 
-use super::super::{option_inner, vec_inner};
-
 /// Reads a key's argument from either `= expr` or `(expr)`.
 ///
 /// clap accepts both spellings for ordinary methods: `#[arg(num_args = 2)]`
-/// and `#[arg(num_args(2))]`. Magic keys such as `long` use the first form,
-/// but reading both keeps the parser aligned with clap's own grammar.
+/// and `#[arg(num_args(2))]`. The method form also accepts a trailing comma.
+/// Magic keys such as `long` use the first form, but reading both keeps the
+/// parser aligned with clap's own grammar.
 pub(super) fn argument(meta: &ParseNestedMeta) -> syn::Result<Option<Expr>> {
     if meta.input.peek(Token![=]) {
         return Ok(Some(meta.value()?.parse::<Expr>()?));
@@ -21,7 +20,11 @@ pub(super) fn argument(meta: &ParseNestedMeta) -> syn::Result<Option<Expr>> {
     if meta.input.peek(syn::token::Paren) {
         let content;
         syn::parenthesized!(content in meta.input);
-        return Ok(Some(content.parse::<Expr>()?));
+        let arguments = syn::punctuated::Punctuated::<Expr, Token![,]>::parse_terminated(&content)?;
+        if arguments.len() != 1 {
+            return Ok(None);
+        }
+        return Ok(arguments.into_iter().next());
     }
     Ok(None)
 }
@@ -38,10 +41,13 @@ pub(super) struct ValueRange {
 /// Reports whether a clap key declares a default value.
 pub(super) fn is_default_value_key(meta: &ParseNestedMeta) -> bool {
     meta.path.is_ident("default_value")
-        || meta.path.is_ident("default_value_t")
         || meta.path.is_ident("default_value_os")
+        || meta.path.is_ident("default_value_t")
+        || meta.path.is_ident("default_value_os_t")
         || meta.path.is_ident("default_values")
+        || meta.path.is_ident("default_values_os")
         || meta.path.is_ident("default_values_t")
+        || meta.path.is_ident("default_values_os_t")
 }
 
 /// Parses a bare boolean or an explicit literal value.
@@ -181,8 +187,40 @@ pub(super) fn is_bare_bool(ty: &Type) -> bool {
     matches!(ty, Type::Path(path) if path.qself.is_none() && path.path.is_ident("bool"))
 }
 
+/// Returns the inner type of an unqualified single-segment `name<T>`.
+///
+/// `clap_derive` recognises `Option`, `Vec`, and friends only when the path
+/// has one segment and no leading `::`; `std::vec::Vec<T>` is a scalar to
+/// clap. Mirroring that rule keeps the documented surface aligned with what
+/// the application's parser accepts.
+fn single_segment_argument<'a>(ty: &'a Type, name: &str) -> Option<&'a Type> {
+    let Type::Path(path) = ty else {
+        return None;
+    };
+    if path.qself.is_some() || path.path.leading_colon.is_some() {
+        return None;
+    }
+    let mut segments = path.path.segments.iter();
+    let segment = segments.next()?;
+    if segments.next().is_some() || segment.ident != name {
+        return None;
+    }
+    let syn::PathArguments::AngleBracketed(arguments) = &segment.arguments else {
+        return None;
+    };
+    match arguments.args.first() {
+        Some(syn::GenericArgument::Type(inner)) => Some(inner),
+        _ => None,
+    }
+}
+
+/// Returns the inner type of an unqualified `Option<T>`.
+pub(super) fn clap_option_inner(ty: &Type) -> Option<&Type> {
+    single_segment_argument(ty, "Option")
+}
+
 /// Reports whether a type is a vector, including an optional vector.
 pub(super) fn is_vec_field(ty: &Type) -> bool {
-    let inner = option_inner(ty).unwrap_or(ty);
-    vec_inner(inner).is_some()
+    let inner = clap_option_inner(ty).unwrap_or(ty);
+    single_segment_argument(inner, "Vec").is_some()
 }

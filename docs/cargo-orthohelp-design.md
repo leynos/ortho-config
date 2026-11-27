@@ -1535,12 +1535,14 @@ installs the executable in a different location.
   to use mounted command paths rather than dotted ones, so it is a major bump
   for consumers keyed on the old identifier values. Version 2.1 adds the
   optional `CliMetadata.positional` block, omitted for flag-only surfaces, so
-  existing readers see the same JSON apart from the version string. The optional
-  `profiles` metadata rides version 2.0. `1.2` added optional `behaviour`
-  metadata and `1.1` added Windows metadata, both additive minor bumps.
-  Additive optional fields bump the minor version; future breaking schema
-  changes bump the major version. All these versions are unreleased: `v0.9.1`
-  still carries `"1.1"`.
+  existing readers accept the same JSON shape; corrected clap metadata can
+  still change values on fields with explicit declarations, because a boolean
+  switch no longer advertises an optional value and requiredness follows clap.
+  The optional `profiles` metadata rides version 2.0. `1.2` added optional
+  `behaviour` metadata and `1.1` added Windows metadata, both additive minor
+  bumps. Additive optional fields bump the minor version; future breaking
+  schema changes bump the major version. All these versions are unreleased:
+  `v0.9.1` still carries `"1.1"`.
 - Tooling: `cargo-orthohelp` tracks the IR major.
 - Runtime: `clap` v4.x unchanged; PowerShell targets 5.1+ and 7+.
 

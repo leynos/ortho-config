@@ -21,6 +21,13 @@ fn clap_command_name_accepts_both_attribute_forms() -> Result<()> {
                 struct Demo;
             },
         ),
+        (
+            "name(\"deploy\",)",
+            parse_quote! {
+                #[command(name("deploy",))]
+                struct Demo;
+            },
+        ),
     ];
 
     for (form, input) in cases {

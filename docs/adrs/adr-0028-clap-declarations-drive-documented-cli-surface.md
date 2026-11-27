@@ -118,10 +118,13 @@ The documentation IR distinguishes two surfaces per field:
   `OrthoConfig::load_from_iter` continues to accept the hidden parser's
   generated flag form for that root.
 
-`ORTHO_DOCS_IR_VERSION` becomes "2.1". A flag-only command surface serializes
-exactly as before apart from the version string, because `positional` is
-`#[serde(default, skip_serializing_if = "Option::is_none")]`. Readers that
-predate the field ignore it.
+`ORTHO_DOCS_IR_VERSION` becomes "2.1". Omitting `positional` preserves the
+existing object shape, because it is
+`#[serde(default, skip_serializing_if = "Option::is_none")]`, and readers that
+predate the field ignore it. Version 2.1 is nevertheless a behavioural
+correction rather than a byte-identical output: a clap boolean flag is now a
+switch instead of an optional-value flag, and requiredness follows clap, so
+values on existing clap-declared fields can change.
 
 `OrthoConfigDocs` gains a provided method
 `get_doc_metadata_for_subcommand(parent_path, name)`. The generated override
@@ -191,10 +194,11 @@ index remains roadmap 12.2.3.
   form, so a root should not rely on a clap-only positional when it is also
   loaded from an argument iterator.
 - Duplicate environment names and file keys are validated in the standalone
-  namespace. The mounted namespace appends a runtime command name, so a
-  projected default can coincide with a verbatim `env(name = ...)` or
-  `file(key_path = ...)` override only for the mount that supplies that name;
-  the derive cannot see the mount at expansion time.
+  namespace and, when the struct declares `#[command(name = "...")]`, in the
+  mounted namespace as well. Without a declared name the mount is supplied at
+  runtime, so the mounted check cannot run at expansion time; a projected
+  default can then coincide with a verbatim `env(name = ...)` or
+  `file(key_path = ...)` override only for the mount that supplies that name.
 - Positional operands are listed in agent context but not yet ordered by
   index. Consumers can read the order from `CliMetadata.positional`.
 

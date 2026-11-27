@@ -1,0 +1,11 @@
+error: duplicate env identifier 'APP_CMDS_RUN_TOKEN'
+  --> tests/ui/projected_env_collision.rs:18:5
+   |
+18 |     override_token: Option<String>,
+   |     ^^^^^^^^^^^^^^
+
+error: first defined here
+  --> tests/ui/projected_env_collision.rs:16:5
+   |
+16 |     token: Option<String>,
+   |     ^^^^^

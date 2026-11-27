@@ -110,9 +110,10 @@ pub(crate) fn clap_arg_id_or_field_name(field: &syn::Field) -> syn::Result<Strin
 
 /// Reads a clap key's argument from either `= expr` or `(expr)`.
 ///
-/// clap accepts both spellings. The parenthesized form always consumes its
-/// group, then reports the content only when it parses as an expression, so an
-/// exotic value is ignored rather than turned into a derive error.
+/// clap accepts both spellings, and its method-call form accepts a trailing
+/// comma. The parenthesized form always consumes its group, then reports the
+/// content only when it parses as exactly one expression, so an unrelated
+/// multi-argument method is ignored rather than turned into a derive error.
 fn clap_argument(meta: &syn::meta::ParseNestedMeta<'_>) -> syn::Result<Option<syn::Expr>> {
     if meta.input.peek(syn::Token![=]) {
         return Ok(Some(meta.value()?.parse()?));
@@ -120,8 +121,12 @@ fn clap_argument(meta: &syn::meta::ParseNestedMeta<'_>) -> syn::Result<Option<sy
     if meta.input.peek(syn::token::Paren) {
         let content;
         syn::parenthesized!(content in meta.input);
-        let tokens: proc_macro2::TokenStream = content.parse()?;
-        return Ok(syn::parse2(tokens).ok());
+        let arguments =
+            syn::punctuated::Punctuated::<syn::Expr, syn::Token![,]>::parse_terminated(&content)?;
+        if arguments.len() != 1 {
+            return Ok(None);
+        }
+        return Ok(arguments.into_iter().next());
     }
     Ok(None)
 }

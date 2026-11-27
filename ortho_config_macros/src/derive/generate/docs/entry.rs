@@ -138,6 +138,7 @@ impl DocTokens {
             serde_rename_all: args.serde_rename_all,
             cli_fields: args.cli_fields,
             localization_ids: args.localization_ids,
+            clap_command_name: args.clap_command_name,
             krate,
         })?;
         let subcommands = build_subcommands_metadata(args)?;

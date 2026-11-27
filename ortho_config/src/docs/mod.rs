@@ -56,17 +56,16 @@ pub trait OrthoConfigDocs {
     ///
     /// Environment-variable and file-key metadata are projected into the
     /// `<PREFIX>_CMDS_<NAME>_` and `cmds.<name>` namespaces the subcommand
-    /// merge reads. Handwritten implementations fall back to the existing
-    /// metadata with only the application name replaced.
+    /// merge reads. A handwritten implementation reaches
+    /// `get_doc_metadata_for_path(parent_path plus name)`, so one that
+    /// overrides that method receives the root-level subcommand path; one
+    /// without a path override still falls back to the existing metadata with
+    /// only the application name replaced.
     #[must_use]
     fn get_doc_metadata_for_subcommand(parent_path: &[String], name: &str) -> DocMetadata {
-        let mut metadata = if parent_path.is_empty() {
-            Self::get_doc_metadata()
-        } else {
-            let mut command_path = parent_path.to_vec();
-            command_path.push(name.to_owned());
-            Self::get_doc_metadata_for_path(&command_path)
-        };
+        let mut command_path = parent_path.to_vec();
+        command_path.push(name.to_owned());
+        let mut metadata = Self::get_doc_metadata_for_path(&command_path);
         name.clone_into(&mut metadata.app_name);
         metadata
     }

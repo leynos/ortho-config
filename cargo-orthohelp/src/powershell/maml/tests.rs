@@ -205,12 +205,7 @@ fn render_help_positions_positional_operands(mut minimal_doc: LocalizedDocMetada
             value_optional: false,
             possible_values: vec![],
             hide_in_help: false,
-            positional: Some(PositionalMetadata {
-                index: 1,
-                variadic: false,
-                var_arg: false,
-                last: false,
-            }),
+            positional: Some(PositionalMetadata::new(1)),
         }),
         env: None,
         file: None,
