@@ -406,9 +406,11 @@ def test_the_host_pass_is_still_the_one_lint_runs(jobs: dict[str, dict[str, obje
         str(step.get("run"))
         for job in jobs.values()
         for step in (job.get("steps") or [])
-        if isinstance(step, dict) and str(step.get("run", "")).strip() == "make lint"
+        if isinstance(step, dict)
+        and str(step.get("run", "")).strip() == "make lint"
+        and not is_disabled(step)
     ]
-    assert lint_steps, "no step runs `make lint`"
+    assert lint_steps, "no enabled step runs `make lint`"
     makefile = MAKEFILE_PATH.read_text(encoding="utf-8")
     host_recipe = " ".join(recipe_lines(makefile, "lint-whitaker"))
     assert "$(WHITAKER) --all" in host_recipe, host_recipe

@@ -29,6 +29,7 @@ import re
 import shlex
 import signal
 import subprocess  # noqa: S404 - the gate is an external command, the subject.
+import time
 import typing as typ
 
 #: The repository root, from this file's location under `scripts/`.
@@ -61,6 +62,11 @@ INVOCATION_DEADLINE_SECONDS: typ.Final[int] = 1800
 #: killed. A compiler that ignores the first signal still releases its locks
 #: when it dies.
 TERMINATION_GRACE_SECONDS: typ.Final[int] = 30
+
+#: How often the group is tested while the grace period runs. Short enough
+#: that a cooperative launcher is noticed promptly, long enough to cost
+#: nothing.
+GROUP_POLL_SECONDS: typ.Final[float] = 0.5
 
 #: A diagnostic such as `has a cognitive complexity of 12 (limit 9)`.
 COMPLEXITY_DIAGNOSTIC: typ.Final[re.Pattern[str]] = re.compile(
@@ -223,19 +229,70 @@ def run_gate(
         )
     except OSError as error:
         raise GateVerificationError(f"could not run {whitaker!r}: {error}") from error
+    # `start_new_session` makes the launcher the leader of its own group, so
+    # its pid is the group id. Keeping it means the group can still be
+    # signalled after the launcher itself has exited.
+    group = None if os.name == "nt" else process.pid
     try:
         stdout, stderr = process.communicate(timeout=INVOCATION_DEADLINE_SECONDS)
     except subprocess.TimeoutExpired as expired:
-        terminate_group(process)
-        process.communicate()
+        terminate_group(process, group)
+        drain(process)
         raise GateVerificationError(
             f"the {target} probe did not finish within "
             f"{INVOCATION_DEADLINE_SECONDS}s"
         ) from expired
+    except KeyboardInterrupt:
+        # Ctrl+C interrupts this process, not the session the probe leads.
+        terminate_group(process, group)
+        drain(process)
+        raise
     return subprocess.CompletedProcess(argv, process.returncode, stdout, stderr)
 
 
-def terminate_group(process: subprocess.Popen[str]) -> None:
+def _signal_group(group: int, number: int) -> None:
+    """Send *number* to *group*, ignoring a group that has already gone.
+
+    Parameters
+    ----------
+    group : int
+        The process group to signal.
+    number : int
+        The signal number to send.
+    """
+    try:
+        os.killpg(group, number)
+    except ProcessLookupError:
+        return
+
+
+def _group_alive(group: int) -> bool:
+    """Report whether any member of *group* is still running.
+
+    Signal zero tests for existence without changing anything, and it covers
+    the case `process.wait` cannot: the launcher may have exited while a
+    descendant it started still runs.
+
+    Parameters
+    ----------
+    group : int
+        The process group to test.
+
+    Returns
+    -------
+    bool
+        Whether the group still has a member.
+    """
+    try:
+        os.killpg(group, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+def terminate_group(process: subprocess.Popen[str], group: int | None) -> None:
     """Stop one probe process and every descendant it started.
 
     `subprocess` signals only the process it spawned. A launcher such as
@@ -243,27 +300,52 @@ def terminate_group(process: subprocess.Popen[str]) -> None:
     build locks after this script reported failure, which on a shared host is
     worse than the failure. The probe is therefore started in a session of its
     own, and the whole session is signalled here: politely first, then
-    forcibly if it does not go. On Windows the session concept does not exist,
-    and the launcher is simply killed.
+    forcibly once the grace period has passed with members still alive. The
+    grace period is measured against the group rather than the launcher,
+    because the launcher exiting does not mean its descendants have. On
+    Windows the session concept does not exist, and the launcher is simply
+    killed.
 
     Parameters
     ----------
     process : subprocess.Popen
-        The probe that outlived its deadline.
+        The probe to stop.
+    group : int or None
+        The process group to signal, or ``None`` on Windows.
     """
-    if os.name == "nt":
+    if group is None:
         process.kill()
         return
-    try:
-        os.killpg(os.getpgid(process.pid), signal.SIGTERM)
-        process.wait(timeout=TERMINATION_GRACE_SECONDS)
-    except ProcessLookupError:
-        return
-    except subprocess.TimeoutExpired:
-        try:
-            os.killpg(os.getpgid(process.pid), signal.SIGKILL)
-        except ProcessLookupError:
+    _signal_group(group, signal.SIGTERM)
+    deadline = time.monotonic() + TERMINATION_GRACE_SECONDS
+    while time.monotonic() < deadline:
+        if not _group_alive(group):
             return
+        time.sleep(GROUP_POLL_SECONDS)
+    _signal_group(group, signal.SIGKILL)
+
+
+def drain(process: subprocess.Popen[str]) -> None:
+    """Reap *process* and read what its pipes still hold, for a bounded time.
+
+    A descendant that outlived the group may still hold the pipe open, and an
+    unbounded read would wait for it indefinitely. The read is therefore
+    bounded, and a pipe that stays open is abandoned rather than blocking the
+    failure report.
+
+    Parameters
+    ----------
+    process : subprocess.Popen
+        The probe whose pipes are drained.
+    """
+    for attempt in range(2):
+        try:
+            process.communicate(timeout=TERMINATION_GRACE_SECONDS)
+        except subprocess.TimeoutExpired:
+            if attempt == 0:
+                process.kill()
+            continue
+        return
 
 
 def gate_environment() -> dict[str, str]:
