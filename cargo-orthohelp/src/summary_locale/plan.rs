@@ -62,8 +62,10 @@ pub fn summary_locale_preferences(
 /// contributes every parseable discovered locale sharing its language subtag,
 /// in preferred order. A script (`zh-Hans`) or variant (`ca-valencia`,
 /// `en-GB-oxendict`) subtag does not disqualify a name: the requirement is to
-/// use any available same-language catalogue. Names that do not parse as a
-/// language identifier are skipped.
+/// use any available same-language catalogue. `unic-langid` accepts `_` as a
+/// separator, so `en_backup` and `en-backup` denote the same locale and
+/// collapse to one candidate. Only a name that cannot parse as a language
+/// identifier is skipped.
 pub fn plan_same_language_candidates(
     preferred: &[SummaryLocaleCandidate],
     discovered: &[String],

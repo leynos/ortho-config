@@ -1636,7 +1636,8 @@ behaviour, and the Fluent adapter remains in `locale.rs`.
   first parseable requested or metadata locale before `en-US`;
   `plan_same_language_candidates` matches any parseable discovered name by
   language, so script- and variant-bearing locales (`zh-Hans`, `ca-valencia`)
-  are eligible and only an unparsable name is skipped.
+  are eligible and only an unparsable name is skipped. `unic-langid` accepts
+  `_` as a separator, so `en_backup` and `en-backup` collapse to one candidate.
   `same_language_summary_locales` is the only fallible function there: it
   returns the discovery error rather than converting it into absence.
 - `mod.rs` runs the resource loop and returns the typed outcome without
