@@ -40,6 +40,7 @@ import json
 import os
 import pathlib
 import shlex
+import shutil
 import subprocess  # noqa: S404 - the installer and rustup are the subject.
 import typing as typ
 
@@ -107,6 +108,12 @@ def installer_beside(launcher: str) -> pathlib.Path | None:
     `PATH` installer unconditionally would check, and provision, a different
     installation from the one the gate lints with.
 
+    The launcher is resolved with `shutil.which` first, because the sibling
+    path has to be absolute: a launcher given as `./whitaker`, or found on
+    `PATH`, would otherwise yield a bare `whitaker-installer` that the child
+    process resolves against its own `PATH` rather than against the directory
+    the launcher lives in.
+
     Parameters
     ----------
     launcher : str
@@ -117,10 +124,11 @@ def installer_beside(launcher: str) -> pathlib.Path | None:
     pathlib.Path or None
         The installer beside the launcher, or ``None`` when there is none.
     """
+    program = shutil.which(split_launcher(launcher)[0])
+    if program is None:
+        return None
     suffix = ".exe" if os.name == "nt" else ""
-    candidate = pathlib.Path(split_launcher(launcher)[0]).with_name(
-        f"{DEFAULT_INSTALLER}{suffix}"
-    )
+    candidate = pathlib.Path(program).with_name(f"{DEFAULT_INSTALLER}{suffix}")
     if candidate.is_file() and os.access(candidate, os.X_OK):
         return candidate
     return None

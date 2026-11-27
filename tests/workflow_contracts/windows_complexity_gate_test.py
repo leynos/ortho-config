@@ -86,17 +86,23 @@ def makefile() -> str:
 
 @pytest.fixture(scope="module")
 def jobs() -> dict[str, dict[str, object]]:
-    """Return every job declared by any workflow, by name.
+    """Return every job that can run, by name.
+
+    A job the workflow disables would contribute its steps to every collector
+    below while never running them, and GitHub reports a skipped job as a
+    successful check. Excluding it here means a disabled gate job leaves no
+    job running the pass, which fails the execution contract.
 
     Returns
     -------
     dict
-        Job name to job mapping.
+        Job name to job mapping, disabled jobs omitted.
     """
     return {
         name: job
         for document in read_workflows(WORKFLOWS).values()
         for name, job in workflow_jobs(document).items()
+        if not is_disabled(job)
     }
 
 
@@ -117,23 +123,32 @@ def gate_recipe(makefile: str) -> list[str]:
     return recipe_lines(makefile, LINT_TARGET)
 
 
-def is_disabled(step: dict[str, object]) -> bool:
-    """Report whether a step can never run.
+#: The conditions GitHub evaluates to a constant false, as written. A YAML
+#: ``if:`` is an expression, so ``0``, ``false``, ``null`` and the empty string
+#: all skip the work; the braced and bare spellings are both accepted for the
+#: ones that can appear either way.
+DISABLED_CONDITIONS: typ.Final[frozenset[str]] = frozenset(
+    {"false", "0", "null", '""', "''", "${{ false }}", "${{ 0 }}"}
+)
 
-    A step carrying ``if: false`` is accepted by ``workflow_reading`` like any
-    other, so a job could satisfy every assertion below while running no gate
-    at all. Only the literal forms GitHub treats as a constant false are
-    matched here; anything else is a real condition and is left alone.
+
+def is_disabled(entry: dict[str, object]) -> bool:
+    """Report whether a step or job can never run.
+
+    A step or job carrying ``if: false`` is accepted by ``workflow_reading``
+    like any other, so one could satisfy every assertion below while running
+    no gate at all. An absent condition is not a disabled one: that is the
+    ordinary case, and it stays enabled.
 
     Parameters
     ----------
-    step : dict
-        A parsed workflow step.
+    entry : dict
+        A parsed workflow step or job.
 
     Returns
     -------
     bool
-        Whether the step is unconditionally skipped.
+        Whether it is unconditionally skipped.
 
     Examples
     --------
@@ -141,16 +156,19 @@ def is_disabled(step: dict[str, object]) -> bool:
     False
     >>> is_disabled({"run": "make lint", "if": False})
     True
+    >>> is_disabled({"run": "make lint", "if": 0})
+    True
     >>> is_disabled({"run": "make lint", "if": "${{ false }}"})
     True
     >>> is_disabled({"run": "make lint", "if": "${{ matrix.platform == 'linux' }}"})
     False
     """
-    condition = step.get("if")
-    return condition is False or str(condition).strip().lower() in {
-        "false",
-        "${{ false }}",
-    }
+    condition = entry.get("if")
+    if condition is None:
+        return False
+    if isinstance(condition, bool):
+        return not condition
+    return str(condition).strip().lower() in DISABLED_CONDITIONS
 
 
 def _run_steps(job: dict[str, object]) -> list[str]:

@@ -163,6 +163,12 @@ records the fixture's deliberate non-membership.
   different toolchain from the one the installer would build next; channels
   whose toolchain `rustup` does not already have are reported and skipped,
   since installing one would download a compiler.
+- 2026-11-27: A fifth round added three more, all accepted: the CI contract
+  now ignores a disabled job as well as a disabled step, and treats every
+  constant falsy condition GitHub recognises (including `0`) as disabled; the
+  installer lookup resolves the launcher with `shutil.which`, so a relative or
+  `PATH` launcher yields an absolute sibling path rather than a bare name the
+  child would resolve against its own `PATH`.
 - 2026-11-27: Two further review rounds added four more findings, all
   accepted. A launcher override may name a command with arguments, so the probe
   splits it with `shlex` without a shell. Toolchains are resolved to the
