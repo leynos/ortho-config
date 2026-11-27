@@ -99,6 +99,34 @@ def split_launcher(launcher: str) -> list[str]:
     return shlex.split(launcher, posix=os.name != "nt")
 
 
+def launcher_program(launcher: str) -> pathlib.Path | None:
+    """Return the executable a launcher command runs, as an absolute path.
+
+    A launcher may carry arguments: `env /opt/suite/bin/whitaker` wraps the
+    executable this helper has to search beside, and resolving `env` instead
+    would look in the wrong directory. So the program is the last word that
+    `shutil.which` resolves, which handles a wrapper, a bare name, a relative
+    path and a program followed by options. An argument that happens to name
+    an executable is the price of not parsing the command, and the first word
+    is the fallback when no word resolves.
+
+    Parameters
+    ----------
+    launcher : str
+        The launcher as the caller configured it.
+
+    Returns
+    -------
+    pathlib.Path or None
+        The absolute path of the program, or ``None`` when nothing resolves.
+    """
+    for word in reversed(split_launcher(launcher)):
+        resolved = shutil.which(word)
+        if resolved:
+            return pathlib.Path(resolved).resolve()
+    return None
+
+
 def installer_beside(launcher: str) -> pathlib.Path | None:
     """Return the installer staged beside *launcher*, when one is there.
 
@@ -108,11 +136,10 @@ def installer_beside(launcher: str) -> pathlib.Path | None:
     `PATH` installer unconditionally would check, and provision, a different
     installation from the one the gate lints with.
 
-    The launcher is resolved with `shutil.which` first, because the sibling
-    path has to be absolute: a launcher given as `./whitaker`, or found on
-    `PATH`, would otherwise yield a bare `whitaker-installer` that the child
-    process resolves against its own `PATH` rather than against the directory
-    the launcher lives in.
+    The path is absolute because the sibling has to survive being handed to a
+    child process: a launcher given as `./whitaker` would otherwise yield a
+    bare `whitaker-installer`, which that child resolves against its own
+    `PATH` rather than against the directory the launcher lives in.
 
     Parameters
     ----------
@@ -124,11 +151,11 @@ def installer_beside(launcher: str) -> pathlib.Path | None:
     pathlib.Path or None
         The installer beside the launcher, or ``None`` when there is none.
     """
-    program = shutil.which(split_launcher(launcher)[0])
+    program = launcher_program(launcher)
     if program is None:
         return None
     suffix = ".exe" if os.name == "nt" else ""
-    candidate = pathlib.Path(program).with_name(f"{DEFAULT_INSTALLER}{suffix}")
+    candidate = program.with_name(f"{DEFAULT_INSTALLER}{suffix}")
     if candidate.is_file() and os.access(candidate, os.X_OK):
         return candidate
     return None

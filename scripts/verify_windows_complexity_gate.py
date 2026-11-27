@@ -27,6 +27,7 @@ import os
 import pathlib
 import re
 import shlex
+import signal
 import subprocess  # noqa: S404 - the gate is an external command, the subject.
 import typing as typ
 
@@ -55,6 +56,11 @@ STRICT_RUSTFLAGS: typ.Final[str] = "-D warnings"
 #: beyond the standard library, so the only slow part is the first build of
 #: the target's `std`, which the job's own ceiling already accommodates.
 INVOCATION_DEADLINE_SECONDS: typ.Final[int] = 1800
+
+#: How long a terminated probe's process group has to exit before it is
+#: killed. A compiler that ignores the first signal still releases its locks
+#: when it dies.
+TERMINATION_GRACE_SECONDS: typ.Final[int] = 30
 
 #: A diagnostic such as `has a cognitive complexity of 12 (limit 9)`.
 COMPLEXITY_DIAGNOSTIC: typ.Final[re.Pattern[str]] = re.compile(
@@ -205,22 +211,59 @@ def run_gate(
     GateVerificationError
         If the invocation outlives its deadline or cannot be started.
     """
+    argv = gate_command(whitaker=whitaker, target=target, over_limit=over_limit)
     try:
-        return subprocess.run(  # noqa: S603 - a fixed argv, no shell.
-            gate_command(whitaker=whitaker, target=target, over_limit=over_limit),
-            check=False,
-            capture_output=True,
+        process = subprocess.Popen(  # noqa: S603 - a fixed argv, no shell.
+            argv,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
             env=gate_environment(),
-            timeout=INVOCATION_DEADLINE_SECONDS,
+            start_new_session=True,
         )
+    except OSError as error:
+        raise GateVerificationError(f"could not run {whitaker!r}: {error}") from error
+    try:
+        stdout, stderr = process.communicate(timeout=INVOCATION_DEADLINE_SECONDS)
     except subprocess.TimeoutExpired as expired:
+        terminate_group(process)
+        process.communicate()
         raise GateVerificationError(
             f"the {target} probe did not finish within "
             f"{INVOCATION_DEADLINE_SECONDS}s"
         ) from expired
-    except OSError as error:
-        raise GateVerificationError(f"could not run {whitaker!r}: {error}") from error
+    return subprocess.CompletedProcess(argv, process.returncode, stdout, stderr)
+
+
+def terminate_group(process: subprocess.Popen[str]) -> None:
+    """Stop one probe process and every descendant it started.
+
+    `subprocess` signals only the process it spawned. A launcher such as
+    `cargo dylint` starts compilers of its own, and those would keep their
+    build locks after this script reported failure, which on a shared host is
+    worse than the failure. The probe is therefore started in a session of its
+    own, and the whole session is signalled here: politely first, then
+    forcibly if it does not go. On Windows the session concept does not exist,
+    and the launcher is simply killed.
+
+    Parameters
+    ----------
+    process : subprocess.Popen
+        The probe that outlived its deadline.
+    """
+    if os.name == "nt":
+        process.kill()
+        return
+    try:
+        os.killpg(os.getpgid(process.pid), signal.SIGTERM)
+        process.wait(timeout=TERMINATION_GRACE_SECONDS)
+    except ProcessLookupError:
+        return
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+        except ProcessLookupError:
+            return
 
 
 def gate_environment() -> dict[str, str]:

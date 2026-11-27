@@ -128,7 +128,16 @@ def gate_recipe(makefile: str) -> list[str]:
 #: all skip the work; the braced and bare spellings are both accepted for the
 #: ones that can appear either way.
 DISABLED_CONDITIONS: typ.Final[frozenset[str]] = frozenset(
-    {"false", "0", "null", '""', "''", "${{ false }}", "${{ 0 }}"}
+    {
+        "false",
+        "0",
+        "null",
+        '""',
+        "''",
+        "${{ false }}",
+        "${{ 0 }}",
+        "${{ null }}",
+    }
 )
 
 
@@ -159,6 +168,8 @@ def is_disabled(entry: dict[str, object]) -> bool:
     >>> is_disabled({"run": "make lint", "if": 0})
     True
     >>> is_disabled({"run": "make lint", "if": "${{ false }}"})
+    True
+    >>> is_disabled({"run": "make lint", "if": "${{ null }}"})
     True
     >>> is_disabled({"run": "make lint", "if": "${{ matrix.platform == 'linux' }}"})
     False
