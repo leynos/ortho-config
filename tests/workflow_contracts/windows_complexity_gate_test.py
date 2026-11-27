@@ -28,7 +28,7 @@ import typing as typ
 
 import pytest
 from makefile_support import recipe_lines
-from workflow_legs import legs, step_runs_on
+from workflow_legs import is_linux, legs, runs_on_linux, step_runs_on
 from workflow_reading import read_workflows, workflow_jobs
 
 REPOSITORY_ROOT: typ.Final[pathlib.Path] = pathlib.Path(__file__).resolve().parents[2]
@@ -91,7 +91,11 @@ def makefile() -> str:
 
 @pytest.fixture(scope="module")
 def jobs() -> dict[str, dict[str, object]]:
-    """Return every job that can run, by name.
+    """Return every job that can run, keyed by workflow and job name.
+
+    The key carries the workflow because two workflows may declare a job of
+    the same name: keying on the name alone would keep only the later one and
+    silently stop inspecting the other.
 
     A job the workflow disables would contribute its steps to every collector
     below while never running them, and GitHub reports a skipped job as a
@@ -101,11 +105,11 @@ def jobs() -> dict[str, dict[str, object]]:
     Returns
     -------
     dict
-        Job name to job mapping, disabled jobs omitted.
+        ``"<workflow>:<job>"`` to job mapping, disabled jobs omitted.
     """
     return {
-        name: job
-        for document in read_workflows(WORKFLOWS).values()
+        f"{file_name}:{name}": job
+        for file_name, document in read_workflows(WORKFLOWS).items()
         for name, job in workflow_jobs(document).items()
         if not is_disabled(job)
     }
@@ -247,6 +251,39 @@ def _runs(
         Whether the step runs on that leg.
     """
     return not is_disabled(step) and step_runs_on(step, cell)
+
+
+#: A ``matrix.<key>`` reference inside a ``runs-on`` expression.
+MATRIX_REFERENCE: typ.Final[re.Pattern[str]] = re.compile(r"matrix\.([A-Za-z_][\w-]*)")
+
+
+def _leg_is_linux(leg: object) -> bool:
+    """Report whether every runner a leg's `runs-on` can choose is Linux.
+
+    `workflow_legs.runs_on_linux` answers whether *any* alternative is Linux,
+    which is right for asking whether a job may run there and wrong for
+    asking whether it can only run there. The matrix arms an expression names
+    are the runners it chooses between, so each is checked; a `runs-on` with
+    no matrix reference is a single label and is checked as one.
+
+    Quoted literals in the expression are deliberately not consulted: a
+    condition such as `github.event_name == 'pull_request'` contributes one,
+    and it names no runner at all.
+
+    Parameters
+    ----------
+    leg : workflow_legs.Leg
+        The leg to judge.
+
+    Returns
+    -------
+    bool
+        Whether the leg can only land on Linux.
+    """
+    keys = MATRIX_REFERENCE.findall(str(leg.job.get("runs-on", "")))
+    if keys:
+        return all(is_linux(leg.cell[key]) for key in keys if key in leg.cell)
+    return runs_on_linux(leg)
 
 
 def test_the_makefile_states_the_windows_target(makefile: str) -> None:
@@ -397,28 +434,39 @@ def test_the_self_test_target_runs_the_verifier(makefile: str) -> None:
 def test_continuous_integration_runs_the_gate_and_its_self_test(
     jobs: dict[str, dict[str, object]],
 ) -> None:
-    """A Linux job runs the pass and the self-test.
+    """Every leg that runs the pass also provisions, and runs the self-test.
 
     Linux is the point: the suite is installed there, and the pass is what
     makes Windows-only code visible to it. A job on a Windows runner would be
     the Windows Whitaker lane the issue records as not required.
+
+    The check walks the legs rather than the job's joined text, because a step
+    guarded to one leg is invisible in that text: a job could lint on a leg
+    where it never provisions the target's ``rust-std`` and never runs the
+    self-test, and still satisfy a body-level assertion.
     """
-    runners = {
-        str(job.get("runs-on")): name
-        for name, job in jobs.items()
-        if f"make {LINT_TARGET}" in " ".join(_run_steps(job))
-    }
-    assert runners, f"no job runs `make {LINT_TARGET}`"
-    (runner, job_name), = runners.items()
-    assert "ubuntu" in runner or "linux" in runner, (
-        f"{job_name} runs the Windows-target pass on {runner!r}, not Linux"
-    )
-    body = " ".join(_run_steps(jobs[job_name]))
-    assert f"make {LINT_TARGET}" in body, body
-    assert f"make {SELF_TEST_TARGET}" in body, body
-    assert f"make {INSTALL_TARGET}" in body, (
-        f"{job_name} never provisions the target's standard library"
-    )
+    liable = False
+    for job_name, job in jobs.items():
+        steps = _step_dicts(job)
+        for leg in legs(WORKFLOW_LABEL, job_name, job):
+            if not any(
+                f"make {LINT_TARGET}" in str(step.get("run", ""))
+                and _runs(step, leg.cell)
+                for step in steps
+            ):
+                continue
+            liable = True
+            where = leg.cell or "its only leg"
+            for target in (INSTALL_TARGET, SELF_TEST_TARGET):
+                assert any(
+                    f"make {target}" in str(step.get("run", ""))
+                    and _runs(step, leg.cell)
+                    for step in steps
+                ), f"{job_name} runs the pass on {where} without `make {target}`"
+            assert _leg_is_linux(leg), (
+                f"{job_name} runs the Windows-target pass on {leg.cell or leg.job.get('runs-on')!r}, not Linux"
+            )
+    assert liable, f"no job runs `make {LINT_TARGET}`"
 
 
 def test_the_host_pass_is_still_the_one_lint_runs(jobs: dict[str, dict[str, object]]) -> None:

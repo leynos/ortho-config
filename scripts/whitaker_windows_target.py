@@ -161,7 +161,10 @@ def launcher_program(launcher: str) -> pathlib.Path | None:
     for word in reversed(split_launcher(launcher)):
         resolved = shutil.which(word)
         if resolved:
-            return pathlib.Path(resolved).resolve()
+            # Absolute, but not resolved through symlinks: the wrapper finds
+            # its installer beside the path it was invoked as, which is where
+            # `BASH_SOURCE[0]` points, not where a symlink leads.
+            return pathlib.Path(os.path.abspath(resolved))
     return None
 
 
@@ -289,13 +292,16 @@ def parse_staged_channels(listing: str) -> list[str]:
         ) from error
 
 
-def candidate_channels(configured: str, staged: typ.Iterable[str]) -> list[str]:
+def candidate_channels(
+    configured: str | None, staged: typ.Iterable[str]
+) -> list[str]:
     """Return every channel a suite could run on, without duplicates.
 
     Parameters
     ----------
-    configured : str
-        The channel the installer would build for now.
+    configured : str or None
+        The channel the installer would build for now, or ``None`` when it
+        could not report one.
     staged : iterable of str
         The channels whose suite is already staged.
 
@@ -310,8 +316,13 @@ def candidate_channels(configured: str, staged: typ.Iterable[str]) -> list[str]:
     ['nightly-a', 'nightly-b']
     >>> candidate_channels("nightly-b", [])
     ['nightly-b']
+    >>> candidate_channels(None, ["nightly-a"])
+    ['nightly-a']
     """
-    return sorted({configured, *staged})
+    channels = {*staged}
+    if configured is not None:
+        channels.add(configured)
+    return sorted(channels)
 
 
 def _run(
@@ -360,8 +371,15 @@ def _run(
         raise ToolchainLookupError(f"{argv[0]} failed: {error}") from error
 
 
-def configured_channel(installer: str) -> str:
+def configured_channel(installer: str) -> str | None:
     """Return the channel Whitaker's installer would build its suite for.
+
+    A dry run verifies that its configured toolchain is installed before it
+    prints anything, so an upgrade that advanced the configuration without
+    staging the new suite makes it fail. That is precisely the state the
+    staged channels exist to survive, so a failed dry run yields ``None``
+    rather than aborting the survey. A launch failure — no installer at all —
+    still raises, because then nothing can be discovered.
 
     Parameters
     ----------
@@ -370,13 +388,21 @@ def configured_channel(installer: str) -> str:
 
     Returns
     -------
-    str
-        The toolchain channel the next install would stage.
+    str or None
+        The channel the next install would stage, or ``None`` when the
+        installer cannot report one.
     """
     completed = _run(
-        [installer, "install", "--dry-run"], deadline=QUERY_DEADLINE_SECONDS
+        [installer, "install", "--dry-run"],
+        deadline=QUERY_DEADLINE_SECONDS,
+        check=False,
     )
-    return parse_toolchain(completed.stdout + completed.stderr)
+    if completed.returncode != 0:
+        return None
+    try:
+        return parse_toolchain(completed.stdout + completed.stderr)
+    except ToolchainLookupError:
+        return None
 
 
 def staged_channels(installer: str) -> list[str]:
@@ -527,6 +553,8 @@ def survey(
         If no candidate channel has an installed toolchain, because then
         there is nothing to provision and nothing that could run the suite.
     """
+    # Staged channels are read first, so a configured channel the installer
+    # cannot verify never prevents the surviving suites from being surveyed.
     channels = candidate_channels(
         configured_channel(installer), staged_channels(installer)
     )
