@@ -148,28 +148,44 @@ fn literal_string(expression: Option<syn::Expr>) -> Option<syn::LitStr> {
     }
 }
 
-/// Reads the container's `#[command(rename_all = "...")]` casing rule.
+/// Visits every literal argument of `key` in the container's command attrs.
 ///
-/// A non-literal or unknown casing is ignored: clap owns the attribute's
-/// grammar, and the derive must not reject a declaration it cannot resolve.
-pub(crate) fn clap_rename_all(attrs: &[syn::Attribute]) -> syn::Result<ClapRenameAll> {
-    let mut rename_all = ClapRenameAll::default();
+/// Unrelated keys are consumed without interpretation, and a key whose value is
+/// not a literal is ignored: clap accepts expressions, so the derive must not
+/// reject an attribute it cannot resolve statically.
+fn for_each_command_literal(
+    attrs: &[syn::Attribute],
+    key: &str,
+    mut visit: impl FnMut(syn::LitStr),
+) -> syn::Result<()> {
     for attr in attrs.iter().filter(|attr| is_clap_command_attribute(attr)) {
         let syn::Meta::List(_) = &attr.meta else {
             continue;
         };
         attr.parse_nested_meta(|meta| {
-            if !meta.path.is_ident("rename_all") {
+            if !meta.path.is_ident(key) {
                 return consume_unknown_meta(&meta);
             }
-            if let Some(value) = literal_string(clap_argument(&meta)?)
-                && let Some(parsed) = ClapRenameAll::parse(&value.value())
-            {
-                rename_all = parsed;
+            if let Some(value) = literal_string(clap_argument(&meta)?) {
+                visit(value);
             }
             Ok(())
         })?;
     }
+    Ok(())
+}
+
+/// Reads the container's `#[command(rename_all = "...")]` casing rule.
+///
+/// An unknown casing is ignored so the derive keeps clap's default rather than
+/// rejecting a declaration clap may interpret differently.
+pub(crate) fn clap_rename_all(attrs: &[syn::Attribute]) -> syn::Result<ClapRenameAll> {
+    let mut rename_all = ClapRenameAll::default();
+    for_each_command_literal(attrs, "rename_all", |value| {
+        if let Some(parsed) = ClapRenameAll::parse(&value.value()) {
+            rename_all = parsed;
+        }
+    })?;
     Ok(rename_all)
 }
 
@@ -177,25 +193,10 @@ pub(crate) fn clap_rename_all(attrs: &[syn::Attribute]) -> syn::Result<ClapRenam
 ///
 /// The subcommand merge names its environment and file namespace from the
 /// payload's `CommandFactory` command name, so documentation metadata uses the
-/// same declaration where the author supplied one. A non-literal value is
-/// ignored rather than rejected: clap accepts expressions, and the derive must
-/// not reject a valid clap attribute it cannot resolve statically.
+/// same declaration where the author supplied one.
 pub(crate) fn clap_command_name(attrs: &[syn::Attribute]) -> syn::Result<Option<String>> {
     let mut name = None;
-    for attr in attrs.iter().filter(|attr| is_clap_command_attribute(attr)) {
-        let syn::Meta::List(_) = &attr.meta else {
-            continue;
-        };
-        attr.parse_nested_meta(|meta| {
-            if !meta.path.is_ident("name") {
-                return consume_unknown_meta(&meta);
-            }
-            if let Some(value) = literal_string(clap_argument(&meta)?) {
-                name = Some(value.value());
-            }
-            Ok(())
-        })?;
-    }
+    for_each_command_literal(attrs, "name", |value| name = Some(value.value()))?;
     Ok(name)
 }
 
