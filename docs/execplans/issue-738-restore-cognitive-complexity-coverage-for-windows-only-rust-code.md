@@ -165,7 +165,7 @@ records the fixture's deliberate non-membership.
   since installing one would download a compiler.
 - 2026-11-27: A fifth round added three more, all accepted: the CI contract
   now ignores a disabled job as well as a disabled step, and treats every
-  constant falsy condition GitHub recognises (including `0`) as disabled; the
+  constant condition GitHub evaluates as false (including `0`) as disabled; the
   installer lookup resolves the launcher with `shutil.which`, so a relative or
   `PATH` launcher yields an absolute sibling path rather than a bare name the
   child would resolve against its own `PATH`.
