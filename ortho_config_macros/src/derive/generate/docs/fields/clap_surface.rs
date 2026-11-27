@@ -8,7 +8,12 @@
 
 use std::collections::HashMap;
 
-use crate::derive::parse::{ClapPositionalDecl, FieldAttrs};
+use syn::ext::IdentExt;
+
+use crate::derive::parse::{
+    ClapArgDecl, ClapPositionalDecl, FieldAttrs, clap_field_is_flattened, clap_field_is_subcommand,
+    inferred_argument_shape, is_clap_attribute, value_name,
+};
 
 /// One field's resolved clap CLI surface.
 #[expect(
@@ -52,52 +57,146 @@ pub(super) struct ResolvedPositional {
     pub(super) last: bool,
 }
 
-/// Resolves every clap-declared field, assigning implicit positional indices.
+/// Resolves every clap argument the source struct describes.
 ///
-/// Fields without a clap declaration are absent from the map, which keeps the
-/// generated `OrthoConfig` surface for them.
+/// A field with a readable declaration is described from it. When any field in
+/// the struct declares a clap argument, the struct necessarily derives a clap
+/// trait, so a field with no declaration is a clap-derived argument as well:
+/// it is a positional operand unless its type is a bare `bool`, which clap
+/// rejects as a positional switch. A struct with no declaration at all is
+/// indistinguishable from a configuration-only type, so its fields stay absent
+/// from the map and keep the generated `OrthoConfig` surface.
 pub(super) fn resolve_clap_args(
     fields: &[syn::Field],
     attrs: &[FieldAttrs],
 ) -> syn::Result<HashMap<String, ResolvedClapArg>> {
     let mut next_index: u16 = 1;
     let mut resolved = HashMap::new();
+    let declares_arguments = declares_clap_arguments(fields)?;
 
     for (field, field_attrs) in fields.iter().zip(attrs) {
-        let Some(decl) = &field_attrs.clap_arg else {
-            continue;
-        };
         let Some(name) = field.ident.as_ref() else {
             continue;
         };
-
-        let positional = if decl.is_skipped {
-            None
-        } else {
-            decl.positional
-                .as_ref()
-                .map(|positional| resolve_positional(field, positional, &mut next_index))
-                .transpose()?
-        };
-
-        resolved.insert(
-            name.to_string(),
-            ResolvedClapArg {
-                long: decl.long.clone(),
-                short: decl.short,
-                value_name: decl.value_name.clone(),
-                positional,
-                takes_value: decl.takes_value,
-                value_optional: decl.value_optional,
-                multiple: decl.multiple,
-                hide_in_help: decl.hide_in_help,
-                required: decl.required,
-                is_skipped: decl.is_skipped,
-            },
-        );
+        if let Some(decl) = &field_attrs.clap_arg {
+            let argument = resolve_declared_argument(field, decl, &mut next_index)?;
+            resolved.insert(name.to_string(), argument);
+            continue;
+        }
+        if let Some(argument) =
+            infer_if_declared_argument(field, name, declares_arguments, &mut next_index)?
+        {
+            resolved.insert(name.to_string(), argument);
+        }
     }
 
     Ok(resolved)
+}
+
+/// Resolves one field from its readable clap declaration.
+fn resolve_declared_argument(
+    field: &syn::Field,
+    decl: &ClapArgDecl,
+    next_index: &mut u16,
+) -> syn::Result<ResolvedClapArg> {
+    let positional = if decl.is_skipped {
+        None
+    } else {
+        decl.positional
+            .as_ref()
+            .map(|positional| resolve_positional(field, positional, next_index))
+            .transpose()?
+    };
+    Ok(ResolvedClapArg {
+        long: decl.long.clone(),
+        short: decl.short,
+        value_name: decl.value_name.clone(),
+        positional,
+        takes_value: decl.takes_value,
+        value_optional: decl.value_optional,
+        multiple: decl.multiple,
+        hide_in_help: decl.hide_in_help,
+        required: decl.required,
+        is_skipped: decl.is_skipped,
+    })
+}
+
+/// Infers an argument only for an undeclared field of a clap command.
+///
+/// A declaration the derive cannot read is left out: synthesising a positional
+/// might contradict a `long` the unreadable tokens hide.
+fn infer_if_declared_argument(
+    field: &syn::Field,
+    name: &syn::Ident,
+    declares_arguments: bool,
+    next_index: &mut u16,
+) -> syn::Result<Option<ResolvedClapArg>> {
+    if !declares_arguments || field.attrs.iter().any(is_clap_attribute) {
+        return Ok(None);
+    }
+    infer_undeclared_argument(field, name, next_index)
+}
+
+/// Reports whether any field declares a clap argument.
+///
+/// A clap helper attribute only compiles when a clap derive registered it, so
+/// one readable or unreadable argument declaration proves the struct is a clap
+/// command. `#[command(subcommand)]` and `#[command(flatten)]` markers register
+/// the same derive in their `#[command(...)]` spelling but do not declare an
+/// argument of their own, so they are not evidence for the per-field rule.
+fn declares_clap_arguments(fields: &[syn::Field]) -> syn::Result<bool> {
+    for field in fields {
+        if field_declares_clap_argument(field)? {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+/// Reports whether one field declares a clap argument rather than a marker.
+fn field_declares_clap_argument(field: &syn::Field) -> syn::Result<bool> {
+    let declares = field.attrs.iter().any(is_clap_attribute);
+    let is_marker = clap_field_is_subcommand(field)? || clap_field_is_flattened(field)?;
+    Ok(declares && !is_marker)
+}
+
+/// Describes a field that clap derives an argument for without a declaration.
+///
+/// The field is a positional operand: clap creates no long or short flag for a
+/// field that names neither. A bare `bool` is left to the generated surface
+/// because clap derives `SetTrue` for it and then rejects a value-less
+/// positional switch, so such a struct cannot be a valid clap command.
+fn infer_undeclared_argument(
+    field: &syn::Field,
+    name: &syn::Ident,
+    next_index: &mut u16,
+) -> syn::Result<Option<ResolvedClapArg>> {
+    if clap_field_is_subcommand(field)? || clap_field_is_flattened(field)? {
+        return Ok(None);
+    }
+    let shape = inferred_argument_shape(&field.ty);
+    if shape.is_bool {
+        return Ok(None);
+    }
+    let raw_field = name.unraw().to_string();
+    let declared = ClapPositionalDecl {
+        index: None,
+        variadic: shape.is_repeated,
+        var_arg: false,
+        last: false,
+    };
+    Ok(Some(ResolvedClapArg {
+        long: None,
+        short: None,
+        value_name: value_name(None, None, &raw_field),
+        positional: Some(resolve_positional(field, &declared, next_index)?),
+        takes_value: true,
+        value_optional: shape.is_value_optional,
+        multiple: shape.is_repeated,
+        hide_in_help: false,
+        required: !shape.is_optional,
+        is_skipped: false,
+    }))
 }
 
 /// Resolves one positional declaration, advancing the implicit index counter.
@@ -128,122 +227,5 @@ fn resolve_positional(
 }
 
 #[cfg(test)]
-mod tests {
-    //! Unit tests for positional index resolution.
-
-    use super::*;
-
-    /// Parses clap declarations for a field list.
-    fn declarations(fields: &proc_macro2::TokenStream) -> (Vec<syn::Field>, Vec<FieldAttrs>) {
-        let input: syn::DeriveInput = syn::parse2(quote::quote! {
-            struct Fixture { #fields }
-        })
-        .expect("test fixture should parse");
-        let syn::Data::Struct(data) = input.data else {
-            panic!("test input must be a struct: {}", input.ident);
-        };
-        let parsed_fields: Vec<_> = data.fields.into_iter().collect();
-        let attrs = parsed_fields
-            .iter()
-            .map(|field| {
-                crate::derive::parse::parse_field_attrs(
-                    field,
-                    crate::derive::parse::ClapRenameAll::default(),
-                )
-            })
-            .collect::<syn::Result<Vec<_>>>()
-            .expect("test field attributes should parse");
-        (parsed_fields, attrs)
-    }
-
-    #[test]
-    fn implicit_indices_follow_declaration_order() {
-        let (fields, attrs) = declarations(&quote::quote! {
-            #[arg(value_name = "SOURCE")]
-            source: String,
-            #[arg(long)]
-            force: bool,
-            #[arg(value_name = "DESTINATION")]
-            destination: String
-        });
-        let resolved = resolve_clap_args(&fields, &attrs).expect("declarations should resolve");
-        let source = resolved.get("source").expect("source resolves");
-        let destination = resolved.get("destination").expect("destination resolves");
-        assert_eq!(
-            source.positional.as_ref().map(|value| value.index),
-            Some(1),
-            "the first implicit positional should receive index 1"
-        );
-        assert_eq!(
-            destination.positional.as_ref().map(|value| value.index),
-            Some(2),
-            "the second implicit positional should receive index 2"
-        );
-        assert!(
-            resolved
-                .get("force")
-                .is_some_and(|value| value.positional.is_none()),
-            "a long flag must not receive a positional index"
-        );
-    }
-
-    #[test]
-    fn explicit_indices_do_not_advance_the_implicit_counter() {
-        let (fields, attrs) = declarations(&quote::quote! {
-            #[arg(value_name = "FIRST")]
-            first: String,
-            #[arg(index = 5, value_name = "FIFTH")]
-            fifth: String,
-            #[arg(value_name = "SECOND")]
-            second: String
-        });
-        let resolved = resolve_clap_args(&fields, &attrs).expect("declarations should resolve");
-        assert_eq!(
-            resolved
-                .get("first")
-                .and_then(|value| value.positional.as_ref())
-                .map(|value| value.index),
-            Some(1),
-            "the first implicit positional should receive index 1"
-        );
-        assert_eq!(
-            resolved
-                .get("fifth")
-                .and_then(|value| value.positional.as_ref())
-                .map(|value| value.index),
-            Some(5),
-            "the explicit positional index should be preserved"
-        );
-        assert_eq!(
-            resolved
-                .get("second")
-                .and_then(|value| value.positional.as_ref())
-                .map(|value| value.index),
-            Some(2),
-            "an explicit index must not advance the implicit counter"
-        );
-    }
-
-    #[test]
-    fn skipped_fields_receive_no_positional_index() {
-        let (fields, attrs) = declarations(&quote::quote! {
-            #[arg(skip)]
-            hidden: String,
-            #[arg(value_name = "INPUT")]
-            input: String
-        });
-        let resolved = resolve_clap_args(&fields, &attrs).expect("declarations should resolve");
-        assert!(
-            resolved.get("hidden").is_some_and(|value| value.is_skipped),
-            "an arg(skip) field should be marked skipped"
-        );
-        assert_eq!(
-            resolved
-                .get("input")
-                .and_then(|value| value.positional.as_ref())
-                .map(|value| value.index),
-            Some(1),
-            "a skipped field must not consume the first positional index"
-        );
-    }
-}
+#[path = "clap_surface_tests.rs"]
+mod tests;

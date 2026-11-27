@@ -48,11 +48,12 @@ pub(super) fn build_input(field: &FieldMetadata) -> Option<ortho_config::AgentIn
     })
 }
 
-/// Builds the ordered input list for one command.
+/// Builds the input list for one command with operands first.
 ///
-/// Positional operands lead in clap index order, followed by named flags in
-/// declaration order. An agent therefore reads operand order directly from the
-/// list rather than reconstructing it from the IR.
+/// Positional operands lead in clap index order; named flags follow. The
+/// caller applies the final deterministic flag ordering, so this function only
+/// separates the two groups. An agent therefore reads operand order directly
+/// from the list rather than reconstructing it from the IR.
 pub(super) fn build_inputs(meta: &crate::schema::DocMetadata) -> Vec<ortho_config::AgentInput> {
     let mut positionals: Vec<(u16, ortho_config::AgentInput)> = Vec::new();
     let mut flags = Vec::new();

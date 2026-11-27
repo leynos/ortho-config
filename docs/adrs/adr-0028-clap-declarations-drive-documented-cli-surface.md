@@ -64,17 +64,20 @@ applies when metadata is built.
 ### Option B: Explicit clap declarations win
 
 A field carrying an `#[arg(...)]` or `#[clap(...)]` declaration is described
-from that declaration. Fields without one keep the generated parser's long and
-short flags. This is the accepted option.
+from that declaration. A clap helper attribute only compiles when a clap derive
+registered it, so one declaration proves the whole struct is a clap command:
+every field without its own declaration is then documented from clap's derived
+argument — a positional operand — rather than from the generated parser. A
+struct with no declaration at all keeps the generated parser's long and short
+flags. This is the accepted option.
 
-The rule is decided per field at expansion time, so it works for `Args`
-payloads and mixed structs without requiring a new trait bound. A field cannot
-carry `#[arg(...)]` unless a clap derive has registered the helper attribute,
-so an explicit declaration always denotes a real clap command line. A
-configuration root with no declaration is unaffected and keeps the generated
-surface. A declaration whose value cannot be read statically — a non-literal
-`value_name`, `id`, or `num_args` expression — is documented without CLI
-metadata rather than falling back to a synthesized flag.
+The rule is decided at expansion time, so it works for `Args` payloads and
+mixed structs without requiring a new trait bound. A bare `bool` without a
+declaration is excluded because clap derives a value-less switch for it and
+then rejects a positional switch; such a struct cannot be a valid clap command,
+so the generated surface remains. A declaration whose value cannot be read
+statically — a non-literal `value_name`, `id`, or `num_args` expression — is
+documented without CLI metadata rather than falling back to a synthesized flag.
 
 ### Option C: Keep the generated surface and add an opt-out
 
@@ -119,12 +122,14 @@ The documentation IR distinguishes two surfaces per field:
   `CliMetadata.short` are absent for a positional operand, and
   `CliMetadata.positional: Option<PositionalMetadata>` carries the one-based
   index and the variadic, trailing-var-arg, and `--`-only flags.
-- A field without such a declaration keeps the generated long and short flags,
-  because the configuration loader's hidden parser is the surface it exposes. A
-  configuration root that also declares clap arguments has two surfaces; the
-  documentation describes the declared clap command line, and
+- In a struct with no clap argument declaration, a field keeps the generated
+  long and short flags, because the configuration loader's hidden parser is the
+  surface it exposes. In a struct with at least one declaration, every field
+  without its own declaration is documented as clap's derived positional
+  operand with the same one-based index. Such a configuration root still has
+  two surfaces: the documentation describes the clap command line, and
   `OrthoConfig::load_from_iter` continues to accept the hidden parser's
-  generated flag form for that root.
+  generated flag form.
 
 `ORTHO_DOCS_IR_VERSION` becomes "2.1". Omitting `positional` preserves the
 existing object shape, because it is
@@ -191,11 +196,14 @@ additive.
 
 ## Known risks and limitations
 
-- A field that relies on clap's default positional treatment but declares no
-  `#[arg(...)]` key at all is indistinguishable from a configuration-only
-  field. It keeps the generated long flag. Authors can declare a value name or
-  index to make the operand explicit; the standalone derive in roadmap 12.3.1
-  removes the ambiguity.
+- A struct that derives a clap trait but declares no clap argument anywhere is
+  indistinguishable from a configuration-only type. Its fields keep the
+  generated long flags even though clap parses them positionally. Declaring any
+  one argument, or an explicit `#[arg(skip)]`, makes the whole surface
+  readable; the standalone derive in roadmap 12.3.1 removes the ambiguity.
+- A bare `bool` field without a declaration is left on the generated surface:
+  clap derives a value-less switch for it and rejects a positional switch, so
+  the struct cannot be a valid clap command.
 - A flattened container is not expanded into descendant field metadata. It
   keeps the generated surface as before, and roadmap 12.3.1 covers the
   expansion.

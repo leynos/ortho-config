@@ -1051,9 +1051,10 @@ and 12 for the intended contracts:
 - unit subcommand variants and named-field subcommand variants are rejected by
   the documentation derive, which excludes both service-style command sets and
   the canonical clap idiom for three-level command trees;
-- positional arguments are unrepresentable: the IR models only long and short
-  flags, so `<url>`-style and `<src> <dst>`-style commands cannot be described
-  or emitted into agent context;
+- a struct that derives a clap trait but declares no clap argument is
+  indistinguishable from a configuration-only type, so its fields are
+  documented as generated flags until any one argument is declared (roadmap
+  12.3.1);
 - `OrthoConfigDocs` cannot be derived independently of `OrthoConfig`, so
   documenting a type also requires making it loadable from configuration
   layers, which excludes most subcommand argument structs;

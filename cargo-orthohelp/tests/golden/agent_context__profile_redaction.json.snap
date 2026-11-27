@@ -15,6 +15,29 @@ expression: snapshot
       "canonical_verb": null,
       "inputs": [
         {
+          "name": "region",
+          "long": null,
+          "value_type": "string",
+          "required": true,
+          "default": "String::from(\"eu-west\")",
+          "enum_values": [],
+          "positional": 1,
+          "value_name": "REGION"
+        },
+        {
+          "name": "mode",
+          "long": null,
+          "value_type": "enum",
+          "required": true,
+          "default": "String::from(\"fast\")",
+          "enum_values": [
+            "fast",
+            "safe"
+          ],
+          "positional": 2,
+          "value_name": "MODE"
+        },
+        {
           "name": "locator",
           "long": "locator",
           "value_type": "enum",
@@ -24,30 +47,11 @@ expression: snapshot
           "value_name": "LOCATOR"
         },
         {
-          "name": "mode",
-          "long": "mode",
-          "value_type": "enum",
-          "required": false,
-          "default": "String::from(\"fast\")",
-          "enum_values": [
-            "fast",
-            "safe"
-          ]
-        },
-        {
           "name": "profile",
           "long": "profile",
           "value_type": "string",
           "required": false,
           "default": null,
-          "enum_values": []
-        },
-        {
-          "name": "region",
-          "long": "region",
-          "value_type": "string",
-          "required": false,
-          "default": "String::from(\"eu-west\")",
           "enum_values": []
         },
         {

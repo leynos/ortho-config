@@ -14,13 +14,13 @@ expression: maml_en
     <command:syntax>
       <command:syntaxItem>
         <maml:name>redaction_fixture</maml:name>
-        <command:parameter required="false" position="named" variableLength="false">
-          <maml:name>--region</maml:name>
-          <command:parameterValue required="false">String</command:parameterValue>
+        <command:parameter required="true" position="1" variableLength="false">
+          <maml:name>REGION</maml:name>
+          <command:parameterValue required="true">String</command:parameterValue>
         </command:parameter>
-        <command:parameter required="false" position="named" variableLength="false">
-          <maml:name>--mode</maml:name>
-          <command:parameterValue required="false">String</command:parameterValue>
+        <command:parameter required="true" position="2" variableLength="false">
+          <maml:name>MODE</maml:name>
+          <command:parameterValue required="true">String</command:parameterValue>
         </command:parameter>
         <command:parameter required="false" position="named" variableLength="false">
           <maml:name>--token</maml:name>
@@ -33,30 +33,26 @@ expression: maml_en
       </command:syntaxItem>
     </command:syntax>
     <command:parameters>
-      <command:parameter required="false" position="named" variableLength="false">
-        <maml:name>--region</maml:name>
+      <command:parameter required="true" position="1" variableLength="false">
+        <maml:name>REGION</maml:name>
         <maml:description>
           <maml:para>Region identifier served by the fixture.</maml:para>
-          <maml:para>Short flag: -r.</maml:para>
-          <maml:para>Long flag: --region.</maml:para>
           <maml:para>Default: String :: from(&quot;eu-west&quot;).</maml:para>
           <maml:para>Environment variable: REDACTION_FIXTURE_REGION.</maml:para>
           <maml:para>Config key: region.</maml:para>
         </maml:description>
-        <command:parameterValue required="false">String</command:parameterValue>
+        <command:parameterValue required="true">String</command:parameterValue>
       </command:parameter>
-      <command:parameter required="false" position="named" variableLength="false">
-        <maml:name>--mode</maml:name>
+      <command:parameter required="true" position="2" variableLength="false">
+        <maml:name>MODE</maml:name>
         <maml:description>
           <maml:para>Public mode advertised by the fixture.</maml:para>
-          <maml:para>Short flag: -m.</maml:para>
-          <maml:para>Long flag: --mode.</maml:para>
           <maml:para>Default: String :: from(&quot;fast&quot;).</maml:para>
           <maml:para>Possible values: fast, safe.</maml:para>
           <maml:para>Environment variable: REDACTION_FIXTURE_MODE.</maml:para>
           <maml:para>Config key: mode.</maml:para>
         </maml:description>
-        <command:parameterValue required="false">String</command:parameterValue>
+        <command:parameterValue required="true">String</command:parameterValue>
       </command:parameter>
       <command:parameter required="false" position="named" variableLength="false">
         <maml:name>--token</maml:name>

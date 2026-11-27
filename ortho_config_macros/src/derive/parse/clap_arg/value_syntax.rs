@@ -181,6 +181,39 @@ pub(super) fn single_char(value: &str) -> Option<char> {
     chars.next().is_none().then_some(character)
 }
 
+/// Type-level facts `clap_derive` infers for a field with no `#[arg]` key.
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "Each flag records an independent clap argument property."
+)]
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct InferredArgumentShape {
+    /// The field is a `bool`, which clap derives as a value-less switch.
+    pub(crate) is_bool: bool,
+    /// The field's argument is not required, because `Option` or `Vec` wraps it.
+    pub(crate) is_optional: bool,
+    /// The field repeats, so its argument accepts several values.
+    pub(crate) is_repeated: bool,
+    /// The value may be omitted for one occurrence.
+    pub(crate) is_value_optional: bool,
+}
+
+/// Mirrors `clap_derive`'s kind inference for an undeclared field.
+///
+/// `clap_derive` classifies a field by its outermost single-segment wrapper:
+/// `Option<T>` and `Vec<T>` are not required, `Vec<T>` repeats, and a bare
+/// `bool` is a value-less switch. `Option<Option<T>>` accepts a bare flag.
+pub(crate) fn inferred_argument_shape(ty: &Type) -> InferredArgumentShape {
+    let optional_inner = clap_option_inner(ty);
+    let repeated = is_vec_field(ty);
+    InferredArgumentShape {
+        is_bool: is_bare_bool(ty),
+        is_optional: optional_inner.is_some() || repeated,
+        is_repeated: repeated,
+        is_value_optional: optional_inner.is_some_and(|inner| clap_option_inner(inner).is_some()),
+    }
+}
+
 /// Reports whether a type is exactly `bool`, the one type clap treats as a
 /// value-less switch by default.
 pub(super) fn is_bare_bool(ty: &Type) -> bool {

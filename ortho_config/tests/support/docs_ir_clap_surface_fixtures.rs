@@ -106,3 +106,20 @@ pub(super) struct UnreadableArgs {
     #[arg(value_name = PROPOSAL_VALUE_NAME)]
     proposal: String,
 }
+
+/// Arguments that mix declared and undeclared fields.
+///
+/// clap parses every field of a struct that declares any argument, so the
+/// undeclared fields are positional operands in declaration order.
+#[derive(Debug, Clone, Default, Parser, Serialize, Deserialize, OrthoConfig)]
+#[ortho_config(prefix = "SPLITTERS")]
+pub(super) struct PartlyDeclaredArgs {
+    /// Undeclared operand clap positions first.
+    source: String,
+    /// Declared operand clap positions second.
+    #[arg(value_name = "SECOND")]
+    second: String,
+    /// Named flag declared between the operands.
+    #[arg(long)]
+    verbose: bool,
+}

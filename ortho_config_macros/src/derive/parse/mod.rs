@@ -36,7 +36,9 @@ mod tests;
 mod type_utils;
 
 pub(crate) use behaviour_attrs::parse_behaviour_meta;
-pub(crate) use clap_arg::{ClapArgDecl, ClapPositionalDecl, parse_clap_arg_decl};
+pub(crate) use clap_arg::{
+    ClapArgDecl, ClapPositionalDecl, inferred_argument_shape, parse_clap_arg_decl, value_name,
+};
 pub(crate) use clap_attrs::{
     clap_arg_id_from_attribute, clap_arg_id_or_field_name, clap_field_env, clap_field_is_flattened,
     clap_field_is_subcommand, is_clap_attribute, reject_subcommand_ortho_config_attrs,

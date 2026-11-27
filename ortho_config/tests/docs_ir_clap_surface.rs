@@ -16,8 +16,8 @@ use ortho_config::docs::{
 mod fixtures;
 
 use fixtures::{
-    Commands, GlobalArgs, HostArgs, PurgeArgs, SkippedArgs, SnakeCaseArgs, UnnamedArgs,
-    UnnamedCommands, UnreadableArgs, ValidateArgs,
+    Commands, GlobalArgs, HostArgs, PartlyDeclaredArgs, PurgeArgs, SkippedArgs, SnakeCaseArgs,
+    UnnamedArgs, UnnamedCommands, UnreadableArgs, ValidateArgs,
 };
 
 /// Returns one field's metadata by name.
@@ -261,6 +261,24 @@ fn an_unreadable_declaration_does_not_advertise_a_generated_flag() -> Result<()>
     ensure!(
         field(&metadata, "proposal")?.cli.is_none(),
         "a clap declaration the derive cannot read must not fall back to an invented flag"
+    );
+    Ok(())
+}
+
+#[test]
+fn an_undeclared_operand_receives_claps_positional_index() -> Result<()> {
+    let metadata = PartlyDeclaredArgs::get_doc_metadata();
+
+    ensure_positional(field(&metadata, "source")?, 1, "SOURCE")?;
+    ensure_positional(field(&metadata, "second")?, 2, "SECOND")?;
+    let verbose = field(&metadata, "verbose")?;
+    let verbose_cli = verbose
+        .cli
+        .as_ref()
+        .ok_or_else(|| anyhow!("verbose should have CLI metadata"))?;
+    ensure!(
+        verbose_cli.long.as_deref() == Some("verbose") && verbose_cli.positional.is_none(),
+        "a declared switch should stay a named flag, got {verbose_cli:?}"
     );
     Ok(())
 }

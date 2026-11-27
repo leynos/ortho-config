@@ -3,17 +3,19 @@
 ## Who should read this
 
 Read this guide before upgrading an application or library from OrthoConfig
-v0.11.0 to v0.12.0. No code changes are required. The release adds one opt-in
-builder method for controlling how `Fluent` isolates interpolated values, and
-the default behaviour is unchanged.
+v0.11.0 to v0.12.0. No Rust API changes are required. The release adds one
+opt-in builder method for controlling how `Fluent` isolates interpolated
+values, and generated documentation now describes the clap command line that
+executes.
 
 ## Impact at a glance
 
-| Priority     | Area                      | What to do                                                               |
-| ------------ | ------------------------- | ------------------------------------------------------------------------ |
-| **Required** | Dependency versions       | Update every OrthoConfig crate requirement to v0.12.0 together.          |
-| **Optional** | `Fluent` isolation marks  | Call `with_use_isolating(false)` in terminals that must not show them.   |
-| **Optional** | Prebuilt consumer bundles | Passing an explicit `true` or `false` now overrides the bundle's choice. |
+| Priority     | Area                      | What to do                                                                                                    |
+| ------------ | ------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| **Required** | Dependency versions       | Update every OrthoConfig crate requirement to v0.12.0 together.                                               |
+| **Optional** | `Fluent` isolation marks  | Call `with_use_isolating(false)` in terminals that must not show them.                                        |
+| **Optional** | Prebuilt consumer bundles | Passing an explicit `true` or `false` now overrides the bundle's choice.                                      |
+| **Optional** | Documentation metadata    | Declare `#[arg(long)]` or `#[arg(skip)]` where a clap-declared struct must keep a named flag or hide a field. |
 
 _Table 1: Application-facing work when moving from v0.11.0 to v0.12.0._
 
@@ -72,3 +74,29 @@ See "Remove Unicode isolation marks from localized output" in the
 for a worked example, and
 [the design document](design.md#412-localization-architecture) for why a
 locale-script default was rejected.
+
+## 3. Review generated documentation for clap-declared structs
+
+Generated documentation metadata now describes the command line that clap
+parses. A clap helper attribute only compiles when a clap derive registered it,
+so a struct that declares at least one `#[arg(...)]` is a clap command
+throughout: every field without its own declaration is documented as the
+positional operand clap derives for it, with clap's one-based index and value
+name. A struct that declares no clap argument keeps the generated `OrthoConfig`
+flag surface.
+
+- Add `#[arg(long)]` or `#[arg(short)]` to a field that must remain a named
+  option in a clap-declared struct.
+- Add `#[arg(skip)]` to a field that must not appear on the command line at
+  all. `#[ortho_config(skip_cli)]` only affects the generated loader parser,
+  which clap does not read.
+- Generated environment suffixes and file keys follow Serde's deserialization
+  key, so `#[serde(rename = "...")]`, `#[serde(rename(deserialize = "..."))]`,
+  and a container `rename_all` rule change the documented names. A
+  serialization-only rename does not.
+- A clap declaration the derive cannot read statically, such as
+  `value_name = SOME_CONST`, is documented without CLI metadata. Use a literal
+  value name when the placeholder must appear.
+
+No Rust API changes are required. Rendered man pages, PowerShell help, and
+agent context change only where the previous metadata disagreed with clap.

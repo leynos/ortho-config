@@ -21,6 +21,9 @@ use super::clap_attrs::{
     clap_field_is_flattened, clap_field_is_subcommand, has_unreadable_clap_arg_id,
     is_clap_attribute,
 };
+pub(crate) use resolvers::value_name;
+pub(crate) use value_syntax::inferred_argument_shape;
+
 use builder::ClapArgBuilder;
 
 /// One clap argument declaration as written on a source field.

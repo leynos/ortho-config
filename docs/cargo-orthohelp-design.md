@@ -330,6 +330,13 @@ follow:
   configuration surface exposed through environment variables or files rather
   than invocation surface, and agent-facing output omits it.
 
+A struct that declares any clap argument is a clap command throughout: the
+derive documents every undeclared field as the positional operand clap derives
+for it. A struct with no clap declaration at all keeps the generated parser's
+flags for every field, because the configuration loader is the only surface it
+exposes. A bare `bool` without a declaration is left on that generated surface,
+because clap rejects a value-less positional switch.
+
 Adding `positional` is an additive optional field: it bumps the IR minor
 version and leaves existing `ir`, `man`, and `ps` output unchanged for command
 surfaces that use only flags.

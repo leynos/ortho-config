@@ -4,7 +4,9 @@
 //! positionals carry an index and no flag spelling, and value names come from
 //! the declaration or clap's casing rule. A field without one keeps the
 //! generated `OrthoConfig` parser's surface, which the configuration loader
-//! itself uses.
+//! itself uses. The exception is a struct that declares any clap argument:
+//! clap then parses every field, so an undeclared field is documented as the
+//! positional operand clap derives for it.
 
 use proc_macro2::TokenStream;
 use quote::quote;
@@ -174,7 +176,8 @@ fn generated_tokens(
 /// Reports whether a field carries a clap declaration the parser could not
 /// model.
 ///
-/// A flattened container also has no field-local declaration, but it keeps the
+/// A flattened container also has no field-local declaration, but it is
+/// excluded here because `clap_field_is_flattened` recognises it; it keeps the
 /// generated surface because the derive cannot expand its descendants.
 fn has_unreadable_declaration(field: &syn::Field) -> syn::Result<bool> {
     let declared = field.attrs.iter().any(is_clap_attribute);

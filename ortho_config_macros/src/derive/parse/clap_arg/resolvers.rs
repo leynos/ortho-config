@@ -71,7 +71,7 @@ pub(super) fn spellings(inputs: SpellingInputs<'_>) -> (Option<String>, Option<c
 /// `clap_derive` renders an unset value name as the field ident in
 /// `SCREAMING_SNAKE_CASE` regardless of the container's `rename_all`, so the
 /// placeholder is intentionally independent of that casing rule.
-pub(super) fn value_name(
+pub(crate) fn value_name(
     explicit_value: Option<&str>,
     explicit_id: Option<&str>,
     raw_field: &str,
