@@ -512,24 +512,6 @@ def verify_command(
     return 0
 
 
-def main(argv: typ.Sequence[str] | None = None) -> int:
-    """Run the verifier and return its status.
-
-    Parameters
-    ----------
-    argv : sequence of str or None
-        Arguments to parse; ``None`` reads ``sys.argv``.
-
-    Returns
-    -------
-    int
-        ``0`` when both directions behaved as specified, ``1`` otherwise.
-    """
-    if argv is None:
-        return app()
-    result = app(list(argv), exit_on_error=False)
-    return result if isinstance(result, int) else 0
-
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    app()

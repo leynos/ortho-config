@@ -705,24 +705,6 @@ app.command(check)
 app.command(install)
 
 
-def main(argv: typ.Sequence[str] | None = None) -> int:
-    """Run one verb and return its status.
-
-    Parameters
-    ----------
-    argv : sequence of str or None
-        Arguments to parse; ``None`` reads ``sys.argv``.
-
-    Returns
-    -------
-    int
-        The selected command's status.
-    """
-    if argv is None:
-        return app()
-    result = app(list(argv), exit_on_error=False)
-    return result if isinstance(result, int) else 0
-
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    app()

@@ -28,7 +28,17 @@ import typing as typ
 
 import pytest
 from makefile_support import recipe_lines
-from workflow_legs import is_linux, legs, runs_on_linux, step_runs_on
+from windows_complexity_gate import (
+    DISABLED_CONDITIONS,
+    _first_running,
+    _is_failure_tolerant,
+    _leg_is_linux,
+    _run_steps,
+    _runs,
+    _step_dicts,
+    is_disabled,
+)
+from workflow_legs import legs
 from workflow_reading import read_workflows, workflow_jobs
 
 REPOSITORY_ROOT: typ.Final[pathlib.Path] = pathlib.Path(__file__).resolve().parents[2]
@@ -132,166 +142,11 @@ def gate_recipe(makefile: str) -> list[str]:
     return recipe_lines(makefile, LINT_TARGET)
 
 
-#: The conditions GitHub evaluates to a constant false, as written. A YAML
-#: ``if:`` is an expression, so ``0``, ``false``, ``null`` and the empty string
-#: all skip the work; the braced and bare spellings are both accepted for the
-#: ones that can appear either way.
-DISABLED_CONDITIONS: typ.Final[frozenset[str]] = frozenset(
-    {
-        "false",
-        "0",
-        "null",
-        '""',
-        "''",
-        "${{ false }}",
-        "${{ 0 }}",
-        "${{ null }}",
-    }
-)
-
-
-def is_disabled(entry: dict[str, object]) -> bool:
-    """Report whether a step or job can never run.
-
-    A step or job carrying ``if: false`` is accepted by ``workflow_reading``
-    like any other, so one could satisfy every assertion below while running
-    no gate at all. An absent condition is not a disabled one: that is the
-    ordinary case, and it stays enabled.
-
-    Parameters
-    ----------
-    entry : dict
-        A parsed workflow step or job.
-
-    Returns
-    -------
-    bool
-        Whether it is unconditionally skipped.
-
-    Examples
-    --------
-    >>> is_disabled({"run": "make lint"})
-    False
-    >>> is_disabled({"run": "make lint", "if": False})
-    True
-    >>> is_disabled({"run": "make lint", "if": 0})
-    True
-    >>> is_disabled({"run": "make lint", "if": "${{ false }}"})
-    True
-    >>> is_disabled({"run": "make lint", "if": "${{ null }}"})
-    True
-    >>> is_disabled({"run": "make lint", "if": "${{ matrix.platform == 'linux' }}"})
-    False
-    """
-    condition = entry.get("if")
-    if condition is None:
-        return False
-    if isinstance(condition, bool):
-        return not condition
-    return str(condition).strip().lower() in DISABLED_CONDITIONS
-
-
-def _run_steps(job: dict[str, object]) -> list[str]:
-    """Return the `run:` bodies of one job's enabled steps.
-
-    Parameters
-    ----------
-    job : dict
-        A parsed workflow job.
-
-    Returns
-    -------
-    list of str
-        Every shell body the job runs, in declaration order.
-    """
-    return [
-        str(step["run"])
-        for step in (job.get("steps") or [])
-        if isinstance(step, dict) and "run" in step and not is_disabled(step)
-    ]
-
-
-def _step_dicts(job: dict[str, object]) -> list[dict[str, object]]:
-    """Return one job's steps that are mappings.
-
-    Parameters
-    ----------
-    job : dict
-        A parsed workflow job.
-
-    Returns
-    -------
-    list of dict
-        The steps, in declaration order.
-    """
-    return [step for step in (job.get("steps") or []) if isinstance(step, dict)]
-
-
-def _runs(
-    step: dict[str, object], cell: dict[str, str]
-) -> bool:
-    """Report whether *step* runs on the leg with matrix *cell*.
-
-    `is_disabled` recognises only constant conditions. A condition that tests
-    the matrix, such as `matrix.platform == 'windows'`, excludes the step from
-    some legs and keeps it on others, and which is which depends on the job's
-    matrix. Evaluating it per leg is what stops a gate job from counting an
-    install that only a leg the pass never reaches would run.
-
-    Parameters
-    ----------
-    step : dict
-        The step to evaluate.
-    cell : dict
-        The matrix values of one leg.
-
-    Returns
-    -------
-    bool
-        Whether the step runs on that leg.
-    """
-    return not is_disabled(step) and step_runs_on(step, cell)
-
-
-#: A ``matrix.<key>`` reference inside a ``runs-on`` expression.
-MATRIX_REFERENCE: typ.Final[re.Pattern[str]] = re.compile(r"matrix\.([A-Za-z_][\w-]*)")
-
-
-def _leg_is_linux(leg: object) -> bool:
-    """Report whether every runner a leg's `runs-on` can choose is Linux.
-
-    `workflow_legs.runs_on_linux` answers whether *any* alternative is Linux,
-    which is right for asking whether a job may run there and wrong for
-    asking whether it can only run there. The matrix arms an expression names
-    are the runners it chooses between, so each is checked; a `runs-on` with
-    no matrix reference is a single label and is checked as one.
-
-    Quoted literals in the expression are deliberately not consulted: a
-    condition such as `github.event_name == 'pull_request'` contributes one,
-    and it names no runner at all.
-
-    Parameters
-    ----------
-    leg : workflow_legs.Leg
-        The leg to judge.
-
-    Returns
-    -------
-    bool
-        Whether the leg can only land on Linux.
-    """
-    keys = MATRIX_REFERENCE.findall(str(leg.job.get("runs-on", "")))
-    if keys:
-        return all(is_linux(leg.cell[key]) for key in keys if key in leg.cell)
-    return runs_on_linux(leg)
-
-
 def test_the_makefile_states_the_windows_target(makefile: str) -> None:
     """The triple is a variable, and it is the one the Windows leg builds.
 
-    A literal repeated in the recipe would let the gate drift to another
-    target without the self-test noticing, because the self-test takes the same
-    variable.
+    A literal in the recipe would let the gate drift to another target, and
+    the self-test, which takes the same variable, would not notice.
     """
     (stated,) = WINDOWS_TARGET_SETTING.findall(makefile) or [None]
     assert stated == WINDOWS_TARGET, (
@@ -354,11 +209,9 @@ def test_the_prerequisite_and_install_targets_share_the_variable(
 ) -> None:
     """Both provisioning targets pass the one triple and the one launcher.
 
-    A literal triple here would provision a different target from the one the
-    pass checks, and the pass would then fail for want of a component nobody
-    installed. The launcher decides which installer is surveyed, so passing it
-    is what keeps a `WHITAKER=` override provisioning the installation the
-    pass will actually use.
+    A literal triple would provision a target the pass does not check, and
+    the launcher decides which installer is surveyed, so passing it keeps a
+    `WHITAKER=` override provisioning the installation the pass uses.
     """
     for target in (PREREQUISITE_TARGET, INSTALL_TARGET):
         lines = recipe_lines(makefile, target)
@@ -390,8 +243,8 @@ def test_the_threshold_and_macro_handling_are_shared_not_repeated(
 def test_the_probe_states_the_same_threshold() -> None:
     """The self-test's crate is scored at the workspace's limit.
 
-    A probe tuned to another limit would pass while the real gate failed, or
-    the reverse, and either reads as evidence when it is not.
+    A probe tuned to another limit would pass while the real gate failed,
+    and either reads as evidence when it is not.
     """
     probe = (PROBE_DIRECTORY / "dylint.toml").read_text(encoding="utf-8")
     workspace = DYLINT_CONFIGURATION.read_text(encoding="utf-8")
@@ -403,7 +256,7 @@ def test_the_probe_states_the_same_threshold() -> None:
 def test_the_probe_carries_both_directions() -> None:
     """The fixture has an in-limit example and a feature-gated over-limit one.
 
-    The feature is what lets one crate demonstrate a pass and a failure; an
+    The feature is what lets one crate demonstrate both directions; an
     ungated over-limit example would fail every default build instead.
     """
     manifest = (PROBE_DIRECTORY / "Cargo.toml").read_text(encoding="utf-8")
@@ -417,12 +270,11 @@ def test_the_probe_carries_both_directions() -> None:
 
 
 def test_the_self_test_target_runs_the_verifier(makefile: str) -> None:
-    """The self-test target invokes the script, at the same triple and launcher.
+    """The self-test invokes the script at the same triple and launcher.
 
-    The script defaults to the same triple, so passing the variable is what
-    keeps a `WINDOWS_TARGET=` override honest. `$(WHITAKER)` is passed for the
-    same reason: a caller who overrides the launcher must not have the
-    self-test validate whichever `whitaker` PATH resolves instead.
+    Passing the variables is what keeps a `WINDOWS_TARGET=` or `WHITAKER=`
+    override honest: the self-test must validate the installation the pass
+    uses, not whichever `whitaker` PATH resolves.
     """
     command = " ".join(recipe_lines(makefile, SELF_TEST_TARGET))
     assert command, f"{SELF_TEST_TARGET} has no recipe"
@@ -449,20 +301,28 @@ def test_continuous_integration_runs_the_gate_and_its_self_test(
     for job_name, job in jobs.items():
         steps = _step_dicts(job)
         for leg in legs(WORKFLOW_LABEL, job_name, job):
-            if not any(
-                f"make {LINT_TARGET}" in str(step.get("run", ""))
-                and _runs(step, leg.cell)
-                for step in steps
-            ):
+            gate = _first_running(steps, LINT_TARGET, leg.cell)
+            if gate is None:
                 continue
             liable = True
             where = leg.cell or "its only leg"
+            assert not _is_failure_tolerant(job), (
+                f"{job_name} marks the whole job continue-on-error, so its "
+                f"`make {LINT_TARGET}` on {where} cannot block a merge"
+            )
             for target in (INSTALL_TARGET, SELF_TEST_TARGET):
-                assert any(
-                    f"make {target}" in str(step.get("run", ""))
-                    and _runs(step, leg.cell)
-                    for step in steps
-                ), f"{job_name} runs the pass on {where} without `make {target}`"
+                index = _first_running(steps, target, leg.cell)
+                assert index is not None, (
+                    f"{job_name} runs the pass on {where} without `make {target}`"
+                )
+                assert not _is_failure_tolerant(steps[index]), (
+                    f"`make {target}` in {job_name} is continue-on-error"
+                )
+            install = _first_running(steps, INSTALL_TARGET, leg.cell)
+            assert install < gate, (
+                f"{job_name} installs the target's rust-std after the pass on "
+                f"{where}; a later step cannot provision an earlier one"
+            )
             assert _leg_is_linux(leg), (
                 f"{job_name} runs the Windows-target pass on {leg.cell or leg.job.get('runs-on')!r}, not Linux"
             )
@@ -474,16 +334,25 @@ def test_the_host_pass_is_still_the_one_lint_runs(jobs: dict[str, dict[str, obje
 
     The Linux leg keeps running `make lint`, which carries the host Whitaker
     pass; the Windows-target pass is added beside it, not in place of it.
+    The step is required on a leg that can only land on Linux, because a step
+    guarded to the Windows leg would leave the host pass unrun while still
+    appearing in the job's text.
     """
-    lint_steps = [
-        str(step.get("run"))
-        for job in jobs.values()
-        for step in (job.get("steps") or [])
-        if isinstance(step, dict)
-        and str(step.get("run", "")).strip() == "make lint"
-        and not is_disabled(step)
-    ]
-    assert lint_steps, "no enabled step runs `make lint`"
+    covered = False
+    for job_name, job in jobs.items():
+        steps = _step_dicts(job)
+        for leg in legs(WORKFLOW_LABEL, job_name, job):
+            if not any(
+                str(step.get("run", "")).strip() == "make lint"
+                and _runs(step, leg.cell)
+                for step in steps
+            ):
+                continue
+            covered = True
+            assert _leg_is_linux(leg), (
+                f"{job_name} runs `make lint` on a leg that can land off Linux"
+            )
+    assert covered, "no enabled step runs `make lint` on any leg"
     makefile = MAKEFILE_PATH.read_text(encoding="utf-8")
     host_recipe = " ".join(recipe_lines(makefile, "lint-whitaker"))
     assert "$(WHITAKER) --all" in host_recipe, host_recipe
