@@ -706,10 +706,19 @@ later progressively add opinion.
 
 ### 11.2. Widen clap-error coverage and preserve clap's rich context
 
-- [x] 11.2.1. Ship en-US translations for the complete clap stable error
+- [ ] 11.2.1. Ship en-US translations for the complete clap stable error
   matrix.
   - Requires 11.1.1.
   - See cli-localization-design.md §6.1 and §6.2.
+  - Unchecked pending a passing final-candidate certificate. The
+    implementation, its documentation and the publication gate are complete and
+    the whole-plan assessment reports no in-scope implementation defect, but
+    the ordinary gates have not all passed on the final candidate: `make test`
+    and standalone `make boundary` hit their own deadline-bounded nested Cargo
+    builds under sustained compile-admission saturation (nested-build work is
+    tracked by #759 and #760), and `Publish dry run` cannot pass until the next
+    release bumps the version and publishes the library and macro crate
+    together (#761). Recheck this box once PR #588 carries that certificate.
   - [x] Add Fluent strings for `NoEquals`, `ValueValidation`, `TooManyValues`,
     `TooFewValues`, `WrongNumberOfValues`, `ArgumentConflict`,
     `InvalidUtf8`, `Io`, and `Format` (alongside the four existing

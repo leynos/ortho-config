@@ -76,7 +76,6 @@ See "Remove Unicode isolation marks from localized output" in the
 for a worked example, and
 [the design document](design.md#412-localization-architecture) for why a
 locale-script default was rejected.
-||||||| parent of 2ad3d66a (Re-version the clap notes and renumber the gate ADR)
 
 ## 3. Re-check an override for missing-input help
 

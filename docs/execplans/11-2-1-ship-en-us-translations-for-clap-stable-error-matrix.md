@@ -964,7 +964,7 @@ stopping and reporting.
         whole `clap_error_coverage` target passes (56 tests), so the stricter
         nested rule rejects none of that crate's real transcriptions.
       - Documentation follows the behaviour: design §6.1.1 records both
-        refusals, and ADR-0026's negative-control paragraph names both controls.
+        refusals, and ADR-0027's negative-control paragraph names both controls.
 
 - [x] (2026-11-20) Certifying that repair took two structural corrections,
       and the standalone `make boundary` certificate was attempted but
@@ -1032,7 +1032,7 @@ stopping and reporting.
       - The resolved `clap_builder` 4.6.7 inventory still counts 17 and the
         `clap_error_coverage` target passes 59 tests, so the stricter rules
         reject none of that crate's real source.
-      - Design §6.1.1 and ADR-0026's negative-control paragraph record both
+      - Design §6.1.1 and ADR-0027's negative-control paragraph record both
         refusals.
 
 - [x] (2026-11-20) The `2522013d` repair carries a full local certificate.
@@ -2484,9 +2484,9 @@ closed: successive assessment rounds have each found a shape the preceding
 round had certified, so the next round may find another. The users' guide
 enumerates the matrix, names the override identifiers, and documents the
 display-only and missing-input behaviour; the developers' guide owns the gate's
-troubleshooting procedure and its variant-intake steps; the roadmap records
-11.2.1 as done with its finding and validation notes; and ADR-0026 records the
-mechanism.
+troubleshooting procedure and its variant-intake steps; the roadmap keeps
+11.2.1 unchecked until the final candidate carries a full certificate, with its
+finding and validation notes; and ADR-0027 records the mechanism.
 
 The gate is not claimed to have reached its final shape. Twelve whole-plan
 assessment rounds have each removed a way for the count to describe a build the
