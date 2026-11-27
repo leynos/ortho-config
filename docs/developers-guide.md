@@ -1655,7 +1655,8 @@ identifier, so a canonical `en-GB` finds `locales/en-gb` or `locales/en_GB`.
 `cli_test_support.rs` is test-only (`#[cfg(test)] mod cli_test_support;`). It
 builds shared `Args` and `PackageSelection` values, owns temporary package
 roots, and provides the thread-scoped tracing capture used by the warning
-tests. It has no production callers and needs no public API entry.
+tests, recording each event's level and structured fields. It has no production
+callers and needs no public API entry.
 
 Represent positional inputs by leaving `AgentInput.long` absent. The adapter
 detects a positional input from existing CLI metadata when

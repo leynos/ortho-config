@@ -120,14 +120,29 @@ impl PackageRoot {
     }
 }
 
-/// One captured `tracing` event, reduced to its recorded fields.
-#[derive(Debug, Default)]
+/// One captured `tracing` event, reduced to its level and recorded fields.
+#[derive(Debug)]
 pub(crate) struct CapturedEvent {
+    /// The event's metadata level.
+    level: tracing::Level,
     /// Recorded fields, including `message` and any structured fields.
     fields: std::collections::BTreeMap<String, String>,
 }
 
 impl CapturedEvent {
+    /// Builds an empty capture for an event emitted at `level`.
+    fn new(level: tracing::Level) -> Self {
+        Self {
+            level,
+            fields: std::collections::BTreeMap::new(),
+        }
+    }
+
+    /// Returns the event's level.
+    pub(crate) fn level(&self) -> tracing::Level {
+        self.level
+    }
+
     /// Reads a field, or the empty string when the event did not record it.
     pub(crate) fn field(&self, name: &str) -> &str {
         self.fields.get(name).map_or("", String::as_str)
@@ -193,7 +208,7 @@ fn capture_sink() -> &'static std::sync::Arc<CaptureSink> {
                 return;
             }
             drop(active);
-            let mut captured = CapturedEvent::default();
+            let mut captured = CapturedEvent::new(*event.metadata().level());
             event.record(&mut Visitor(&mut captured.fields));
             self.0
                 .events

@@ -144,6 +144,11 @@ fn discovery_failure_is_reported_and_selection_continues(package_root: PackageRo
         .iter()
         .find(|event| event.message_contains("locale discovery failed"));
     let warning = found.expect("the discovery failure should warn");
+    assert_eq!(
+        warning.level(),
+        tracing::Level::WARN,
+        "the discovery failure should be reported at warn level",
+    );
     assert!(
         !warning.field("error").is_empty(),
         "the warning should carry the discovery error",
@@ -174,10 +179,13 @@ fn empty_locale_directory_is_skipped_and_reported(package_root: PackageRoot) {
     let events = cli_test_support::capture_events(|| {
         let _selected = select_at_boundary(&args, &package_root, None);
     });
-    assert!(
-        events
-            .iter()
-            .any(|event| event.message_contains("no Fluent resources; skipping")),
-        "the empty directory should produce the debug skip event",
+    let found = events
+        .iter()
+        .find(|event| event.message_contains("no Fluent resources; skipping"));
+    let skip = found.expect("the empty directory should produce the debug skip event");
+    assert_eq!(
+        skip.level(),
+        tracing::Level::DEBUG,
+        "the empty directory skip should be reported at debug level",
     );
 }
