@@ -80,6 +80,8 @@ impl EffectiveCommandSurface {
     ///             required: false,
     ///             default: None,
     ///             enum_values: Vec::new(),
+    ///             positional: None,
+    ///             value_name: None,
     ///         }],
     ///         output_modes: Vec::new(),
     ///         interaction_mode: ortho_config::InteractionMode::default(),

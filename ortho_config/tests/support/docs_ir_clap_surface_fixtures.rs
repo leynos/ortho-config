@@ -94,3 +94,15 @@ pub(super) struct GlobalArgs {
     #[arg(value_name = "INPUT")]
     input: String,
 }
+
+/// The value name is a constant, so the derive cannot read it statically.
+pub(super) const PROPOSAL_VALUE_NAME: &str = "PROPOSAL-LITERAL";
+
+/// Arguments whose clap declaration is valid but not statically readable.
+#[derive(Debug, Clone, Default, Parser, Serialize, Deserialize, OrthoConfig)]
+#[ortho_config(prefix = "SPLITTERS")]
+pub(super) struct UnreadableArgs {
+    /// Proposal identifier with a non-literal clap value name.
+    #[arg(value_name = PROPOSAL_VALUE_NAME)]
+    proposal: String,
+}

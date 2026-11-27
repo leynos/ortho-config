@@ -11,6 +11,7 @@ use quote::quote;
 
 use crate::derive::build::CliFieldMetadata;
 use crate::derive::generate::docs::{option_char_tokens, option_string_tokens};
+use crate::derive::parse::{clap_field_is_flattened, is_clap_attribute};
 
 use super::clap_surface::ResolvedClapArg;
 use super::shapes::FieldContext;
@@ -29,6 +30,14 @@ pub(super) fn build_cli_tokens(
             return Ok(quote! { None });
         }
         return Ok(clap_tokens(decl, context, krate));
+    }
+    // A declaration the derive could not model must not be replaced by the
+    // generated parser's flags: clap owns that argument, so advertising a
+    // synthesized flag would describe an invocation the parser rejects. The
+    // field is documented without CLI surface until the declaration is
+    // readable (a literal value, or the standalone derive in roadmap 12.3.1).
+    if has_unreadable_declaration(context.field)? {
+        return Ok(quote! { None });
     }
     if context.attrs.cli.is_skipped() {
         return Ok(quote! { None });
@@ -160,4 +169,14 @@ fn generated_tokens(
             positional: None,
         })
     }
+}
+
+/// Reports whether a field carries a clap declaration the parser could not
+/// model.
+///
+/// A flattened container also has no field-local declaration, but it keeps the
+/// generated surface because the derive cannot expand its descendants.
+fn has_unreadable_declaration(field: &syn::Field) -> syn::Result<bool> {
+    let declared = field.attrs.iter().any(is_clap_attribute);
+    Ok(declared && !clap_field_is_flattened(field)?)
 }

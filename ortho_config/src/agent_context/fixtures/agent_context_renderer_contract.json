@@ -20,6 +20,16 @@
           "enum_values": [
             "json"
           ]
+        },
+        {
+          "name": "target",
+          "long": null,
+          "value_type": "string",
+          "required": true,
+          "default": null,
+          "enum_values": [],
+          "positional": 1,
+          "value_name": "TARGET"
         }
       ],
       "output_modes": [

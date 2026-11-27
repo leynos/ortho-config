@@ -986,10 +986,16 @@ change.
 
 `AgentCommand.summary` is intentionally omitted when absent, as are the optional
 `ProfilesDeclaration` fields (`selection` and `list_command`) added by roadmap
-9.1.1 and `AgentCommand.output` together with every undeclared member inside a
-present block. Other optional schema v1 fields serialize as explicit `null`
-when absent. This asymmetry is part of the wire contract; changing it is
-breaking.
+9.1.1, `AgentCommand.output` together with every undeclared member inside a
+present block, and `AgentInput.positional` and `AgentInput.value_name`. Other
+optional schema v1 fields serialize as explicit `null` when absent. This
+asymmetry is part of the wire contract; changing it is breaking.
+
+`AgentInput.positional` is the one-based index clap assigns to a positional
+operand, and `AgentInput.value_name` is the CLI value placeholder. The adapter
+orders operands ahead of named flags by `positional`, so a consumer can
+reconstruct argument order from the context alone. Both fields are additive and
+omitted when absent, so the schema version stays `1`.
 
 `AgentInput.default` is a best-effort human-readable display. It is useful for
 selection and review, but it is not normative, executable, or
@@ -1016,6 +1022,10 @@ Schema v1 history:
   optional fields `selection` and `list_command` follow the omitted-when-absent
   rule, and the unsupported case remains byte-identical to
   `{ "supported": false }`.
+- `1` (extended by issue 717): `AgentInput.positional` and
+  `AgentInput.value_name` describe positional operands and their placeholders.
+  Both are optional and omitted when absent, so a flag-only command keeps its
+  previous byte encoding.
 
 ## 9. Current gaps to resolve
 

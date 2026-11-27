@@ -19,7 +19,7 @@ use crate::derive::build::CliFieldMetadata;
 use crate::derive::generate::localization::ArgIdsModel;
 use crate::derive::generate::localization::suffix::MessageSuffix;
 use crate::derive::parse::{
-    FieldAttrs, ProfileFieldLabel, SerdeRenameAll, serde_serialized_field_key,
+    FieldAttrs, ProfileFieldLabel, SerdeRenameAll, serde_deserialized_field_key,
 };
 
 use self::clap_surface::{ResolvedClapArg, resolve_clap_args};
@@ -259,10 +259,11 @@ impl<'a> FieldMetaBuilder<'a> {
     /// so diagnostics can point back to the source fields.
     fn build_env_tokens(&mut self, context: &FieldContext<'_>) -> syn::Result<TokenStream> {
         let explicit = context.attrs.doc.env_name.as_deref();
-        let env_name = explicit.map_or_else(
-            || default_env_name(self.prefix, context.field_name),
-            str::to_owned,
-        );
+        // The loader deserializes the environment layer, so the generated name
+        // must follow Serde's *deserialization* key, including renames.
+        let serde_key = serde_deserialized_field_key(context.field, self.serde_rename_all)?;
+        let env_name =
+            explicit.map_or_else(|| default_env_name(self.prefix, &serde_key), str::to_owned);
         validate_env_name(context.name, &env_name)?;
         ensure_unique("env", context.name, &env_name, &mut self.env_seen)?;
         let lit = syn::LitStr::new(&env_name, proc_macro2::Span::call_site());
@@ -276,7 +277,7 @@ impl<'a> FieldMetaBuilder<'a> {
         }
 
         let suffix = syn::LitStr::new(
-            &default_env_name(None, context.field_name),
+            &default_env_name(None, &serde_key),
             proc_macro2::Span::call_site(),
         );
         Ok(quote! {
@@ -290,14 +291,15 @@ impl<'a> FieldMetaBuilder<'a> {
 
     /// Resolves and validates the file key path before tokenizing it.
     ///
-    /// An explicit documentation key takes precedence over Serde's serialized
-    /// field key, including the struct-level rename rule. Duplicate resolved
+    /// An explicit documentation key takes precedence over Serde's
+    /// deserialization key, including the struct-level rename rule, because the
+    /// loader deserializes file content. Duplicate resolved
     /// paths are rejected to keep file-source metadata unambiguous.
     fn build_file_tokens(&mut self, context: &FieldContext<'_>) -> syn::Result<TokenStream> {
         let explicit = context.attrs.doc.file_key_path.as_deref();
         let key_path = match explicit {
             Some(key) => key.to_owned(),
-            None => serde_serialized_field_key(context.field, self.serde_rename_all)?,
+            None => serde_deserialized_field_key(context.field, self.serde_rename_all)?,
         };
         validate_file_key(context.name, &key_path)?;
         ensure_unique("file", context.name, &key_path, &mut self.file_seen)?;

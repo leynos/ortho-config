@@ -324,10 +324,11 @@ follow:
   first unnamed operand `1`; they render `value_name` rather than a flag
   spelling.
 - The agent-context contract emits a positional input only when `positional`
-  is `Some`, ordering emitted positional inputs by the positional metadata's
-  `index`. A field with CLI metadata, no flag spelling, and no `positional`
-  entry is configuration surface exposed through environment variables or files
-  rather than invocation surface, and agent-facing output omits it.
+  is `Some`, ordering operands ahead of named flags by the positional metadata's
+  `index` and carrying both `positional` and `value_name` on the input. A
+  field with CLI metadata, no flag spelling, and no `positional` entry is
+  configuration surface exposed through environment variables or files rather
+  than invocation surface, and agent-facing output omits it.
 
 Adding `positional` is an additive optional field: it bumps the IR minor
 version and leaves existing `ir`, `man`, and `ps` output unchanged for command
@@ -1056,14 +1057,15 @@ For the first `--format agent-context` implementation, the adapter emits an
 optional `AgentCommand.summary` from the short chosen command description. It
 does not emit Fluent identifiers, long help text, roff fragments, or PowerShell
 help structures. The adapter emits a positional input only when
-`CliMetadata.positional` is `Some`, ordering emitted positional inputs by
-`CliMetadata.positional.index` and leaving `AgentInput.long` absent. A field
-with CLI metadata but no flag spelling or `positional` metadata is
-non-invocable configuration surface and is not emitted. The output is written
-as exactly one file at `<out>/agent-context.json` and is also emitted as one
-compact JSON document to stdout, followed by a newline. `--format all` includes
-the same agent-context document beside IR, man pages, and PowerShell artefacts
-and emits that JSON to stdout.
+`CliMetadata.positional` is `Some`, ordering operands ahead of named flags by
+`CliMetadata.positional.index` and leaving `AgentInput.long` absent while
+carrying `AgentInput.positional` and `AgentInput.value_name`. A field with CLI
+metadata but no flag spelling or `positional` metadata is non-invocable
+configuration surface and is not emitted. The output is written as exactly one
+file at `<out>/agent-context.json` and is also emitted as one compact JSON
+document to stdout, followed by a newline. `--format all` includes the same
+agent-context document beside IR, man pages, and PowerShell artefacts and emits
+that JSON to stdout.
 
 #### 6.3.1.1 Summary locale selection
 
@@ -1459,8 +1461,9 @@ MAML mapping:
   - Switches map to `SwitchParameter`.
   - Values map to `String`, `Int32`, `Double`, and so on inferred from
     `ValueType`.
-  - Required or position heuristics: position only when unambiguous; otherwise
-    named.
+  - `position` is the one-based `CliMetadata.positional.index` clap assigns,
+    and syntax items are ordered by that index; an argument without positional
+    metadata is named.
 - Field descriptions come from `help_id` or `long_help_id`.
 - Enum allowed values are appended to the description.
 - Environment or file exposure is documented in Notes per parameter.

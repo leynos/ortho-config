@@ -134,15 +134,21 @@ fn any_agent_input() -> impl Strategy<Value = AgentInput> {
         any::<bool>(),
         option::of(summary()),
         vec(summary(), 0..4),
+        option::of(1u16..=8),
+        option::of(summary()),
     )
         .prop_map(
-            |(name, long, value_type, required, default, enum_values)| AgentInput {
-                name,
-                long,
-                value_type,
-                required,
-                default,
-                enum_values,
+            |(name, long, value_type, required, default, enum_values, positional, value_name)| {
+                AgentInput {
+                    name,
+                    long,
+                    value_type,
+                    required,
+                    default,
+                    enum_values,
+                    positional,
+                    value_name,
+                }
             },
         )
 }

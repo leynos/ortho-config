@@ -17,7 +17,7 @@ mod fixtures;
 
 use fixtures::{
     Commands, GlobalArgs, HostArgs, PurgeArgs, SkippedArgs, SnakeCaseArgs, UnnamedArgs,
-    UnnamedCommands, ValidateArgs,
+    UnnamedCommands, UnreadableArgs, ValidateArgs,
 };
 
 /// Returns one field's metadata by name.
@@ -252,6 +252,16 @@ fn an_inherited_global_field_has_no_cli_metadata() -> Result<()> {
         "a from_global field owns no field-local CLI metadata"
     );
     ensure_positional(field(&metadata, "input")?, 1, "INPUT")?;
+    Ok(())
+}
+
+#[test]
+fn an_unreadable_declaration_does_not_advertise_a_generated_flag() -> Result<()> {
+    let metadata = UnreadableArgs::get_doc_metadata();
+    ensure!(
+        field(&metadata, "proposal")?.cli.is_none(),
+        "a clap declaration the derive cannot read must not fall back to an invented flag"
+    );
     Ok(())
 }
 

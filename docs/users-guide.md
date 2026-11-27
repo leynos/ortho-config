@@ -720,7 +720,9 @@ Subcommand settings live under a `cmds` namespace so they cannot collide with
 global settings. For the `serve` command above, a file supplies them in a
 `[cmds.serve]` table and the environment supplies them as
 `ACME_SERVE_CMDS_SERVE_PORT`: the struct prefix, then `CMDS_`, the command
-name, and the field.
+name, and the field. The field segment is Serde's deserialization key after
+`#[serde(rename = "...")]`, `#[serde(rename(deserialize = "..."))]`, or a
+container `rename_all` rule, so a serialization-only rename does not change it.
 
 For an enum with many variants, derive `SelectedSubcommandMerge` on the enum
 and call `load_globals_and_merge_selected_subcommand`. The generated match
@@ -2096,11 +2098,14 @@ a literal spelling or an assigned `id` stays verbatim. A clap boolean flag is a
 switch rather than an optional-value flag. By default, `Option<T>` and `Vec<T>`
 are not required, while a value-taking scalar with no optional wrapper and no
 clap default is required even when Serde supplies a `#[serde(default)]`. An
-explicit `required` setting overrides that inference. Fields without a clap
-declaration keep the long and short flags generated for the OrthoConfig parser.
-A configuration root that also declares clap arguments has two parsers: the
-metadata describes the declared clap command line, while `load_from_iter`
-continues to accept the generated flag form.
+explicit `required` setting overrides that inference. A declaration the derive
+cannot read statically — a non-literal `value_name`, `id`, or `num_args`
+expression — is documented without CLI metadata rather than with a synthesized
+flag that clap would reject. Fields without a clap declaration keep the long
+and short flags generated for the OrthoConfig parser. A configuration root that
+also declares clap arguments has two parsers: the metadata describes the
+declared clap command line, while `load_from_iter` continues to accept the
+generated flag form.
 
 Subcommand metadata is scoped to the names the subcommand merge reads. A field
 documented through `OrthoConfigSubcommandDocs`, or through a mounted command
@@ -2108,9 +2113,19 @@ path, reports environment variables as `<PREFIX>_CMDS_<NAME>_<FIELD>` and file
 keys as `cmds.<name>.<key>`. `<NAME>` is the payload's clap command name when
 it implements `CommandFactory` (its `#[command(name = "...")]` or clap's
 package-name default); an `Args`-only documentation payload keeps the command
-label. The subcommand's `about_id` and field help identifiers agree with its
-`ABOUT_ID` and `ARG_IDS` when the argument type declares a `localization_base`;
-with a parent path they follow the mount path that `LocalizeCmd` resolves.
+label. Generated environment suffixes and file keys follow Serde's
+_deserialization_ name, including `#[serde(rename = "...")]`,
+`#[serde(rename(deserialize = "..."))]`, and the container `rename_all` rule,
+because the loader deserializes those layers; a serialization-only rename does
+not move the input name. The subcommand's `about_id` and field help identifiers
+agree with its `ABOUT_ID` and `ARG_IDS` when the argument type declares a
+`localization_base`; with a parent path they follow the mount path that
+`LocalizeCmd` resolves.
+
+Agent context lists a positional operand as an input without a long flag,
+orders operands first by their one-based index, and carries both the index and
+the value name. Those fields are omitted when absent, so existing consumers see
+no new keys on a flag-only command.
 
 Or use `cargo-orthohelp` to emit intermediate representation (IR), Unix man
 pages, PowerShell help, compact agent context, or all formats. The

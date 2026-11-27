@@ -72,8 +72,9 @@ payloads and mixed structs without requiring a new trait bound. A field cannot
 carry `#[arg(...)]` unless a clap derive has registered the helper attribute,
 so an explicit declaration always denotes a real clap command line. A
 configuration root with no declaration is unaffected and keeps the generated
-surface. Non-literal clap values that cannot be read statically fall back to
-the generated surface rather than rejecting valid clap code.
+surface. A declaration whose value cannot be read statically — a non-literal
+`value_name`, `id`, or `num_args` expression — is documented without CLI
+metadata rather than falling back to a synthesized flag.
 
 ### Option C: Keep the generated surface and add an opt-out
 
@@ -102,7 +103,12 @@ The documentation IR distinguishes two surfaces per field:
 - A field with an explicit clap argument declaration is documented from it.
   The parser records long and short spellings, the value name, positional index,
   `num_args`, `trailing_var_arg`, `last`, value consumption, visibility, and
-  requiredness. Bare `long` and `short` spellings follow the container's
+  requiredness. A declaration the derive cannot read statically is documented
+  without CLI metadata: clap owns that argument, so advertising the generated
+  parser's flag in its place would describe an invocation the parser rejects.
+  The field keeps its environment and file metadata until a readable
+  declaration or the standalone derive in roadmap 12.3.1 supplies the surface.
+  Bare `long` and `short` spellings follow the container's
   `#[command(rename_all = "...")]` casing; literal spellings and an assigned
   `id` stay verbatim. Requiredness follows clap's inference: a declared default
   or a value-less switch makes the argument non-required, and clap treats
@@ -146,7 +152,11 @@ declared `#[command(name = "...")]`, or clap's package-name default. A docs-only
 `Args` payload has no command of its own and keeps the selector's command
 label. Explicit `env(name = ...)` and `file(key_path = ...)` documentation
 overrides remain verbatim, because they are absolute declarations rather than
-generated names.
+generated names. The generated `<FIELD>` suffix and `<key>` use Serde's
+*deserialization* name — a field-level `#[serde(rename = "...")]` or
+`#[serde(rename(deserialize = "..."))]`, plus the container `rename_all` rule —
+because the loader deserializes those layers. A serialization-only rename does
+not move the input name.
 
 The generated selector no longer rebuilds identifiers. It calls
 `get_doc_metadata_for_subcommand`, so handwritten `OrthoConfigDocs` payloads
@@ -158,9 +168,12 @@ their value names. An operand that consumes the rest of the command line
 flags, because a flag placed after it would be parsed as operand data; a `last`
 operand is also preceded by an emitted `--` delimiter. The PowerShell MAML
 `position` attribute is one-based, matching clap's positional index, so the
-renderer emits the index unchanged and displays the value name. Agent context
-continues to list a positional as an input without a long flag; ordering
-positionals by index remains roadmap 12.2.3.
+renderer emits the index unchanged, displays the value name, and orders syntax
+items by index rather than declaration order. Agent context lists a positional
+as an input without a long flag, orders operands first by their one-based
+index, and carries both the index and the value name. Those additions are
+optional wire fields, omitted when absent, so the schema v1 contract remains
+additive.
 
 ## Goals and non-goals
 
@@ -175,7 +188,6 @@ positionals by index remains roadmap 12.2.3.
   - Model struct-level clap features beyond argument-name casing, such as
     `rename_all_env` or generated help headings.
   - Deliver the standalone docs-only derive from roadmap 12.3.1.
-  - Order positional inputs in agent context by index (roadmap 12.2.3).
 
 ## Known risks and limitations
 
@@ -188,7 +200,8 @@ positionals by index remains roadmap 12.2.3.
   keeps the generated surface as before, and roadmap 12.3.1 covers the
   expansion.
 - A clap key whose value is a non-literal expression is not modelled. That
-  field keeps the generated surface rather than risking a wrong claim.
+  field is documented without CLI metadata rather than with a synthesized flag
+  that clap would reject.
 - The `about_id` uses the declared base only when no parent path is supplied.
   A caller that mounts the struct somewhere else receives the mounted path,
   matching `LocalizeCmd` rather than the standalone constant.
@@ -203,8 +216,9 @@ positionals by index remains roadmap 12.2.3.
   so a projected default can coincide with a verbatim `env(name = ...)` or
   `file(key_path = ...)` override only for that mount; the derive cannot
   compare the mounted names at expansion time.
-- Positional operands are listed in agent context but not yet ordered by
-  index. Consumers can read the order from `CliMetadata.positional`.
+- Agent-context ordering follows `CliMetadata.positional.index`. A field the
+  derive did not classify as a positional keeps its generated flag and is
+  ordered with the named flags.
 
 ## References
 

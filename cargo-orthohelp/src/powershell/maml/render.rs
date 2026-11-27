@@ -68,12 +68,24 @@ fn render_syntax(writer: &mut XmlWriter, command: &CommandSpec<'_>) {
         "<maml:name>{}</maml:name>",
         escape_xml(&command.name)
     ));
+    let mut positionals = Vec::new();
+    let mut others = Vec::new();
     for field in command
         .metadata
         .fields
         .iter()
         .filter(|field| should_render_parameter(field))
     {
+        match field.cli.as_ref().and_then(|cli| cli.positional.as_ref()) {
+            Some(positional) => positionals.push((positional.index, field)),
+            None => others.push(field),
+        }
+    }
+    positionals.sort_by_key(|(index, _)| *index);
+    for (_, field) in positionals {
+        render_syntax_parameter(writer, field);
+    }
+    for field in others {
         render_syntax_parameter(writer, field);
     }
     writer.outdent();

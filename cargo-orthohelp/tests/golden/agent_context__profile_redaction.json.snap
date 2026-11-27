@@ -20,7 +20,8 @@ expression: snapshot
           "value_type": "enum",
           "required": false,
           "default": null,
-          "enum_values": []
+          "enum_values": [],
+          "value_name": "LOCATOR"
         },
         {
           "name": "mode",
@@ -55,7 +56,8 @@ expression: snapshot
           "value_type": "enum",
           "required": false,
           "default": null,
-          "enum_values": []
+          "enum_values": [],
+          "value_name": "TOKEN"
         }
       ],
       "output_modes": [],
@@ -90,7 +92,8 @@ expression: snapshot
           "value_type": "bool",
           "required": false,
           "default": "false",
-          "enum_values": []
+          "enum_values": [],
+          "value_name": "BOOL"
         },
         {
           "name": "profile",
@@ -106,7 +109,8 @@ expression: snapshot
           "value_type": "enum",
           "required": false,
           "default": null,
-          "enum_values": []
+          "enum_values": [],
+          "value_name": "REPLACEMENT"
         }
       ],
       "output_modes": [],
