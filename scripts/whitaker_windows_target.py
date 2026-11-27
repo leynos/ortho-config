@@ -1,3 +1,8 @@
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.14"
+# dependencies = ["cyclopts>=2.9"]
+# ///
 """Keep Whitaker's suite toolchain able to build the Windows target.
 
 Whitaker's lints run inside a compiler driver, so the suite only scores the
@@ -35,7 +40,6 @@ Run via ``make install-whitaker-windows-target`` or
 
 from __future__ import annotations
 
-import argparse
 import json
 import os
 import pathlib
@@ -43,6 +47,8 @@ import shlex
 import shutil
 import subprocess  # noqa: S404 - the installer and rustup are the subject.
 import typing as typ
+
+import cyclopts
 
 #: The line ``whitaker-installer install --dry-run`` prints its toolchain on.
 #: The installer writes its report to standard error, so both streams are read.
@@ -316,6 +322,13 @@ def _run(
 ) -> subprocess.CompletedProcess[str]:
     """Run one local query or install, capturing both streams.
 
+    This is `subprocess` rather than `cuprum`, which the scripting standards
+    otherwise require, because every call here is bounded by a deadline and
+    `cuprum` 0.1.0 — the version the standards pin — has none. The deadlines
+    are what stop a stalled `rustup` or installer from occupying a gate
+    indefinitely. `cuprum` 0.2.0b2 adds a `timeout`, and this should move to
+    it once that release is no longer a beta.
+
     Parameters
     ----------
     argv : list of str
@@ -539,33 +552,133 @@ def survey(
     return satisfied, missing, absent
 
 
-def build_parser() -> argparse.ArgumentParser:
-    """Return the command-line parser for this module.
+def _survey_or_report(
+    installer: str, target: str
+) -> tuple[list[str], list[str], list[str]] | None:
+    """Survey the toolchains, reporting a lookup failure in the gate's words.
+
+    Parameters
+    ----------
+    installer : str
+        The installer executable to query.
+    target : str
+        The target triple the gate needs.
 
     Returns
     -------
-    argparse.ArgumentParser
-        A parser with the ``check`` and ``install`` verbs and the shared
-        ``--target`` and ``--installer`` options.
+    tuple of list of str or None
+        The survey, or ``None`` when it could not be made and the failure has
+        already been printed.
     """
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument(
-        "verb",
-        choices=("check", "install"),
-        help="check that the target is installed, or install it",
-    )
-    parser.add_argument("--target", default=DEFAULT_TARGET)
-    parser.add_argument("--launcher", default=DEFAULT_LAUNCHER)
-    parser.add_argument(
-        "--installer",
-        default=None,
-        help="installer to query; defaults to the one staged beside the launcher",
-    )
-    return parser
+    try:
+        return survey(installer, target)
+    except ToolchainLookupError as error:
+        print(f"whitaker windows target: {error}")
+        return None
+
+
+def _report_absent(absent: typ.Sequence[str]) -> None:
+    """Say which staged channels have no installed toolchain, and skip them.
+
+    Parameters
+    ----------
+    absent : sequence of str
+        The candidate channels ``rustup`` does not have.
+    """
+    for channel in absent:
+        print(
+            f"whitaker windows target: {channel} is staged but its toolchain is "
+            "not installed; skipping it",
+        )
+
+
+def check(*, target: str = DEFAULT_TARGET, launcher: str = DEFAULT_LAUNCHER,
+          installer: str | None = None) -> int:
+    """Report whether the Windows target is installed for the suite's toolchain.
+
+    Parameters
+    ----------
+    target : str
+        The target triple the gate needs.
+    launcher : str
+        The Whitaker launcher whose installer decides which suite is surveyed.
+    installer : str or None
+        An explicit installer; ``None`` uses the one staged beside the launcher.
+
+    Returns
+    -------
+    int
+        ``0`` when every installed candidate has the target, ``1`` otherwise.
+    """
+    survey_result = _survey_or_report(installer or default_installer(launcher), target)
+    if survey_result is None:
+        return 1
+    satisfied, missing, absent = survey_result
+    _report_absent(absent)
+    for channel in satisfied:
+        print(f"whitaker windows target: {target} is installed for {channel}")
+    if missing:
+        print(
+            f"whitaker windows target: {target} is missing from "
+            + ", ".join(missing)
+            + ".\nRun `make install-whitaker-windows-target` to add it.",
+        )
+        return 1
+    return 0
+
+
+def install(*, target: str = DEFAULT_TARGET, launcher: str = DEFAULT_LAUNCHER,
+            installer: str | None = None) -> int:
+    """Install the Windows target for every suite toolchain that lacks it.
+
+    A failure stops the run but keeps whatever was already installed, so a
+    retry surveys the completed ones rather than starting over.
+
+    Parameters
+    ----------
+    target : str
+        The target triple to provision.
+    launcher : str
+        The Whitaker launcher whose installer decides which suite is surveyed.
+    installer : str or None
+        An explicit installer; ``None`` uses the one staged beside the launcher.
+
+    Returns
+    -------
+    int
+        ``0`` when every candidate has the target, ``1`` when one could not be
+        installed or the suite's toolchain could not be determined.
+    """
+    survey_result = _survey_or_report(installer or default_installer(launcher), target)
+    if survey_result is None:
+        return 1
+    satisfied, missing, absent = survey_result
+    _report_absent(absent)
+    try:
+        for channel in missing:
+            install_target(channel, target)
+            print(f"whitaker windows target: {target} installed for {channel}")
+    except ToolchainLookupError as error:
+        print(f"whitaker windows target: {error}")
+        return 1
+    if not missing:
+        print(
+            f"whitaker windows target: {target} is installed for "
+            + ", ".join(satisfied)
+        )
+    return 0
+
+
+app = cyclopts.App(
+    name="whitaker-windows-target",
+    help=__doc__.splitlines()[0],
+)
+app.command(check)
+app.command(install)
 
 
 def main(argv: typ.Sequence[str] | None = None) -> int:
-    """Run one verb and report the outcome in the gate's own words.
+    """Run one verb and return its status.
 
     Parameters
     ----------
@@ -575,52 +688,12 @@ def main(argv: typ.Sequence[str] | None = None) -> int:
     Returns
     -------
     int
-        ``0`` on success, ``1`` when the target is missing (``check`` only) or
-        the suite's toolchain cannot be determined.
+        The selected command's status.
     """
-    arguments = build_parser().parse_args(argv)
-    installer = arguments.installer or default_installer(arguments.launcher)
-    try:
-        satisfied, missing, absent = survey(installer, arguments.target)
-    except ToolchainLookupError as error:
-        print(f"whitaker windows target: {error}")
-        return 1
-    for channel in absent:
-        print(
-            f"whitaker windows target: {channel} is staged but its toolchain is "
-            "not installed; skipping it",
-        )
-    if arguments.verb == "install":
-        # A failure stops the run but keeps whatever was already installed, so
-        # a retry surveys the completed ones rather than starting over.
-        try:
-            for channel in missing:
-                install_target(channel, arguments.target)
-                print(
-                    f"whitaker windows target: {arguments.target} installed for "
-                    f"{channel}"
-                )
-        except ToolchainLookupError as error:
-            print(f"whitaker windows target: {error}")
-            return 1
-        if not missing:
-            print(
-                f"whitaker windows target: {arguments.target} is installed for "
-                + ", ".join(satisfied)
-            )
-        return 0
-    for channel in satisfied:
-        print(
-            f"whitaker windows target: {arguments.target} is installed for {channel}"
-        )
-    if missing:
-        print(
-            f"whitaker windows target: {arguments.target} is missing from "
-            + ", ".join(missing)
-            + ".\nRun `make install-whitaker-windows-target` to add it.",
-        )
-        return 1
-    return 0
+    if argv is None:
+        return app()
+    result = app(list(argv), exit_on_error=False)
+    return result if isinstance(result, int) else 0
 
 
 if __name__ == "__main__":

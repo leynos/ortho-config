@@ -368,11 +368,11 @@ lint-whitaker-windows: check-whitaker-windows-target ## Score the Windows-only c
 # would survey whatever `whitaker-installer` resolves to, which a launcher
 # override need not share.
 install-whitaker-windows-target: ## Install the Windows rust-std for Whitaker's toolchain
-	$(PYTHON) scripts/whitaker_windows_target.py install \
+	$(UV) run --script scripts/whitaker_windows_target.py install \
 		--target $(WINDOWS_TARGET) --launcher $(call shell_quote,$(WHITAKER))
 
 check-whitaker-windows-target: ## Verify Whitaker's toolchain can build the Windows target
-	$(PYTHON) scripts/whitaker_windows_target.py check \
+	$(UV) run --script scripts/whitaker_windows_target.py check \
 		--target $(WINDOWS_TARGET) --launcher $(call shell_quote,$(WHITAKER))
 
 # The gate is only worth its runtime if it can still fail. This runs the same
@@ -384,7 +384,7 @@ check-whitaker-windows-target: ## Verify Whitaker's toolchain can build the Wind
 # installation would have the self-test validate whichever `whitaker` PATH
 # resolves, which may be a different one.
 check-windows-complexity-gate: check-whitaker-windows-target ## Prove the Windows complexity gate passes and fails as specified
-	$(PYTHON) scripts/verify_windows_complexity_gate.py \
+	$(UV) run --script scripts/verify_windows_complexity_gate.py \
 		--whitaker $(call shell_quote,$(WHITAKER)) --target $(WINDOWS_TARGET)
 
 # The inventory is discovered inside the recipe and handed over NUL-separated.

@@ -1,3 +1,8 @@
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.14"
+# dependencies = ["cyclopts>=2.9"]
+# ///
 """Prove the Windows-target complexity gate passes and fails as specified.
 
 ``make lint-whitaker-windows`` is only evidence if it can still report
@@ -22,7 +27,6 @@ Run via ``make check-windows-complexity-gate``.
 
 from __future__ import annotations
 
-import argparse
 import os
 import pathlib
 import re
@@ -31,6 +35,8 @@ import signal
 import subprocess  # noqa: S404 - the gate is an external command, the subject.
 import time
 import typing as typ
+
+import cyclopts
 
 #: The repository root, from this file's location under `scripts/`.
 REPOSITORY_ROOT: typ.Final[pathlib.Path] = pathlib.Path(__file__).resolve().parents[1]
@@ -227,6 +233,14 @@ def run_gate(
     cold start pays for the target's dependency graph once, and the second
     invocation reuses it. A hung compiler therefore fails here rather than
     occupying a runner until the job's own ceiling.
+
+    This is `subprocess` rather than `cuprum`, which the scripting standards
+    otherwise require, because the two properties this probe needs are the
+    two `cuprum` does not offer at the version the standards pin (0.1.0): a
+    wall-clock deadline, and a process group that can be signalled as a unit
+    so a launcher's compilers cannot outlive it and hold their build locks.
+    `cuprum` 0.2.0b2 adds both, and this should move to it once that release
+    is no longer a beta.
 
     Parameters
     ----------
@@ -464,22 +478,42 @@ def verify(*, whitaker: str, target: str) -> list[str]:
     ]
 
 
-def build_parser() -> argparse.ArgumentParser:
-    """Return the command-line parser for this module.
+app = cyclopts.App(
+    name="verify-windows-complexity-gate",
+    help=__doc__.splitlines()[0],
+)
+
+
+@app.default
+def verify_command(
+    *, whitaker: str = "whitaker", target: str = "x86_64-pc-windows-msvc"
+) -> int:
+    """Verify both directions and report the evidence.
+
+    Parameters
+    ----------
+    whitaker : str
+        The Whitaker launcher to run.
+    target : str
+        The target triple to check at.
 
     Returns
     -------
-    argparse.ArgumentParser
-        A parser accepting the launcher and the target triple.
+    int
+        ``0`` when both directions behaved as specified, ``1`` otherwise.
     """
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--whitaker", default="whitaker")
-    parser.add_argument("--target", default="x86_64-pc-windows-msvc")
-    return parser
+    try:
+        lines = verify(whitaker=whitaker, target=target)
+    except GateVerificationError as error:
+        print(f"windows complexity gate: {error}")
+        return 1
+    for line in lines:
+        print(f"windows complexity gate: {line}")
+    return 0
 
 
 def main(argv: typ.Sequence[str] | None = None) -> int:
-    """Verify both directions and report the evidence.
+    """Run the verifier and return its status.
 
     Parameters
     ----------
@@ -491,15 +525,10 @@ def main(argv: typ.Sequence[str] | None = None) -> int:
     int
         ``0`` when both directions behaved as specified, ``1`` otherwise.
     """
-    arguments = build_parser().parse_args(argv)
-    try:
-        lines = verify(whitaker=arguments.whitaker, target=arguments.target)
-    except GateVerificationError as error:
-        print(f"windows complexity gate: {error}")
-        return 1
-    for line in lines:
-        print(f"windows complexity gate: {line}")
-    return 0
+    if argv is None:
+        return app()
+    result = app(list(argv), exit_on_error=False)
+    return result if isinstance(result, int) else 0
 
 
 if __name__ == "__main__":
