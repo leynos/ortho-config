@@ -4,7 +4,7 @@
 //! regression tests that assert the generated metadata rather than inside the
 //! test module, which keeps that suite within its line budget.
 
-use clap::Parser;
+use clap::{Args, Parser};
 use ortho_config::OrthoConfig;
 use serde::{Deserialize, Serialize};
 
@@ -81,4 +81,16 @@ pub(super) struct SkippedArgs {
     #[arg(skip)]
     #[ortho_config(default = String::from("fallback"))]
     internal: String,
+}
+
+/// Arguments where one field inherits a parent command's global argument.
+#[derive(Debug, Clone, Default, Args, Serialize, Deserialize, OrthoConfig)]
+#[ortho_config(prefix = "SPLITTERS")]
+pub(super) struct GlobalArgs {
+    /// Inherited from the parent command, not a field-local argument.
+    #[arg(from_global)]
+    verbose: bool,
+    /// Ordinary positional operand owned by this command.
+    #[arg(value_name = "INPUT")]
+    input: String,
 }

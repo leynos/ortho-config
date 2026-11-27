@@ -4,6 +4,18 @@ use super::{declaration, declaration_with};
 use crate::derive::parse::ClapRenameAll;
 
 #[test]
+fn from_global_fields_have_no_field_local_argument() {
+    let decl = declaration(&quote::quote! {
+        #[arg(from_global)]
+        verbose: bool
+    });
+    assert!(
+        decl.is_skipped,
+        "a from_global field owns no field-local clap argument"
+    );
+}
+
+#[test]
 fn empty_clap_attributes_declare_a_positional() {
     for tokens in [
         quote::quote! { #[arg()] input: String },

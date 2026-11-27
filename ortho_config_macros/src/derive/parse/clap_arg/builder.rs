@@ -149,6 +149,10 @@ impl ClapArgBuilder {
     fn consume_marker(&mut self, meta: &ParseNestedMeta) -> syn::Result<bool> {
         if meta.path.is_ident("skip") {
             self.skipped = true;
+        } else if meta.path.is_ident("from_global") {
+            // `from_global` reads a parent command's global argument; the
+            // field owns no argument of its own, so it has no CLI metadata.
+            self.skipped = true;
         } else if meta.path.is_ident("flatten") {
             self.flatten = true;
         } else if meta.path.is_ident("subcommand") || meta.path.is_ident("external_subcommand") {

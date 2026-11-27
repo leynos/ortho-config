@@ -16,8 +16,8 @@ use ortho_config::docs::{
 mod fixtures;
 
 use fixtures::{
-    Commands, HostArgs, PurgeArgs, SkippedArgs, SnakeCaseArgs, UnnamedArgs, UnnamedCommands,
-    ValidateArgs,
+    Commands, GlobalArgs, HostArgs, PurgeArgs, SkippedArgs, SnakeCaseArgs, UnnamedArgs,
+    UnnamedCommands, ValidateArgs,
 };
 
 /// Returns one field's metadata by name.
@@ -241,6 +241,17 @@ fn a_subcommand_path_projects_environment_and_file_metadata() -> Result<()> {
             == Some("cmds.validate.check"),
         "a mounted path should project the file key"
     );
+    Ok(())
+}
+
+#[test]
+fn an_inherited_global_field_has_no_cli_metadata() -> Result<()> {
+    let metadata = GlobalArgs::get_doc_metadata();
+    ensure!(
+        field(&metadata, "verbose")?.cli.is_none(),
+        "a from_global field owns no field-local CLI metadata"
+    );
+    ensure_positional(field(&metadata, "input")?, 1, "INPUT")?;
     Ok(())
 }
 
