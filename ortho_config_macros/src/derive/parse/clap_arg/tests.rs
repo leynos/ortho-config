@@ -129,6 +129,16 @@ fn explicit_id_controls_default_spellings() {
         decl.value_name, "preamble",
         "clap translates the value name from the assigned id verbatim"
     );
+
+    let call_form = declaration(&quote::quote! {
+        #[arg(id("preamble"), long)]
+        phrase: String
+    });
+    assert_eq!(
+        call_form.long.as_deref(),
+        Some("preamble"),
+        "the parenthesised id form should assign the same name"
+    );
 }
 
 #[test]

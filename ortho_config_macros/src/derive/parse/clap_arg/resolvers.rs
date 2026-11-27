@@ -84,18 +84,12 @@ pub(super) fn value_name(
 
 /// Whether a value may be omitted for one occurrence.
 ///
-/// `default_missing_value` supplies a value for the bare spelling, and
-/// `Option<Option<T>>` takes clap's inferred `num_args(0..=1)`. An explicit
-/// `num_args` bound outranks the type inference.
-pub(super) fn value_optional(
-    takes_value: bool,
-    has_default_missing_value: bool,
-    num_args: Option<ValueRange>,
-    ty: &Type,
-) -> bool {
-    takes_value
-        && (has_default_missing_value
-            || num_args.map_or_else(|| is_nested_option(ty), |range| range.min == 0))
+/// clap checks the minimum value count before applying any
+/// `default_missing_value`, so a bare flag is valid only when the range admits
+/// zero values. `Option<Option<T>>` takes clap's inferred `num_args(0..=1)`;
+/// an explicit bound outranks that inference.
+pub(super) fn value_optional(takes_value: bool, num_args: Option<ValueRange>, ty: &Type) -> bool {
+    takes_value && num_args.map_or_else(|| is_nested_option(ty), |range| range.min == 0)
 }
 
 /// Signals carried into the repetition decision.

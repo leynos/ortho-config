@@ -50,14 +50,29 @@ pub(crate) fn parse_id_from_meta(
         ));
     }
 
-    let Ok(value) = meta.value() else {
+    let Some(lit) = parse_id_literal(meta)? else {
         return Ok(());
     };
-    let lit: syn::LitStr = value.parse().map_err(|_| {
-        syn::Error::new_spanned(&meta.path, "clap argument `id` must be a string literal")
-    })?;
     *existing_id = Some(lit);
     Ok(())
+}
+
+/// Reads the string literal an `id` key assigns.
+///
+/// clap accepts both `id = "name"` and the method-call form `id("name")`.
+fn parse_id_literal(meta: &syn::meta::ParseNestedMeta<'_>) -> syn::Result<Option<syn::LitStr>> {
+    let invalid =
+        || syn::Error::new_spanned(&meta.path, "clap argument `id` must be a string literal");
+    if meta.input.peek(syn::Token![=]) {
+        let value = meta.value()?;
+        return value.parse().map(Some).map_err(|_| invalid());
+    }
+    if meta.input.peek(syn::token::Paren) {
+        let content;
+        syn::parenthesized!(content in meta.input);
+        return content.parse().map(Some).map_err(|_| invalid());
+    }
+    Ok(None)
 }
 
 /// Merge an `id` override from one `arg` or `clap` attribute into the field's

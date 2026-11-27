@@ -105,7 +105,7 @@ fn nested_option_accepts_a_bare_flag() {
 }
 
 #[test]
-fn unreadable_range_bounds_do_not_claim_an_optional_value() {
+fn unreadable_num_args_falls_back_to_the_generated_surface() {
     let literal = declaration(&quote::quote! {
         #[arg(long, num_args = 0..=1)]
         colour: String
@@ -115,13 +115,38 @@ fn unreadable_range_bounds_do_not_claim_an_optional_value() {
         "a literal 0..=1 range makes the value optional"
     );
 
-    let lower_bound = declaration(&quote::quote! {
-        #[arg(long, num_args = MIN..=1)]
-        colour: String
+    for tokens in [
+        quote::quote! { #[arg(long, num_args = MIN..=1)] colour: String },
+        quote::quote! { #[arg(long, num_args = LIMIT)] colour: Option<Option<String>> },
+    ] {
+        let field = super::parse_field(&tokens);
+        assert!(
+            super::parse_clap_arg_decl(&field, ClapRenameAll::default())
+                .expect("the declaration should parse")
+                .is_none(),
+            "an unreadable num_args should leave the declaration unmodelled"
+        );
+    }
+}
+
+#[test]
+fn default_missing_value_does_not_make_a_bounded_value_optional() {
+    let bounded = declaration(&quote::quote! {
+        #[arg(long, num_args = 1, default_missing_value = "auto")]
+        colour: Option<String>
     });
     assert!(
-        !lower_bound.value_optional,
-        "a non-literal lower bound must not be assumed to admit zero values"
+        !bounded.value_optional,
+        "a one-value bound rejects the bare flag even with a missing-value default"
+    );
+
+    let optional = declaration(&quote::quote! {
+        #[arg(long, num_args = 0..=1, default_missing_value = "auto")]
+        colour: Option<String>
+    });
+    assert!(
+        optional.value_optional,
+        "a zero-minimum bound keeps the bare flag valid"
     );
 }
 

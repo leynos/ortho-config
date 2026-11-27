@@ -38,8 +38,6 @@ pub(super) struct ClapArgBuilder {
     index: Option<u16>,
     /// Explicit value-count range.
     num_args: Option<ValueRange>,
-    /// Whether `default_missing_value` was declared.
-    has_default_missing_value: bool,
     /// Whether a clap default value was declared.
     has_default: bool,
     /// Explicit action-derived value consumption.
@@ -114,10 +112,7 @@ impl ClapArgBuilder {
 
     /// Records a key that supplies a value, visibility, or arity setting.
     fn consume_value_key(&mut self, meta: &ParseNestedMeta) -> syn::Result<bool> {
-        if meta.path.is_ident("default_missing_value") {
-            self.has_default_missing_value = true;
-            discard_unknown(meta)?;
-        } else if is_default_value_key(meta) {
+        if is_default_value_key(meta) {
             self.has_default = true;
             discard_unknown(meta)?;
         } else {
@@ -232,8 +227,17 @@ impl ClapArgBuilder {
     }
 
     /// Records a `num_args` range when it is written literally.
+    ///
+    /// A range the derive cannot read statically — a constant count, or a
+    /// bound that is not a literal integer — leaves the declaration unmodelled,
+    /// so the field falls back to the documented generated surface rather than
+    /// advertising an arity the parser may reject.
     fn set_num_args(&mut self, meta: &ParseNestedMeta) -> syn::Result<()> {
-        self.num_args = parse_value_range(meta)?;
+        let range = parse_value_range(meta)?;
+        if range.is_none() {
+            self.unparsed = true;
+        }
+        self.num_args = range;
         Ok(())
     }
 
@@ -304,12 +308,7 @@ impl ClapArgBuilder {
         let is_vec = is_vec_field(&field.ty);
         let num_args = self.num_args;
         let takes_value = self.resolve_takes_value(is_positional, &field.ty);
-        let value_optional = resolvers::value_optional(
-            takes_value,
-            self.has_default_missing_value,
-            num_args,
-            &field.ty,
-        );
+        let value_optional = resolvers::value_optional(takes_value, num_args, &field.ty);
         let multiple = resolvers::multiple(
             RepetitionFlags {
                 action_appends: self.action_appends,
