@@ -3,3 +3,6 @@ tomlkit==0.15.*
 markdown-it-py>=4.3.0,<5
 hypothesis>=6.170.16,<7
 interrogate>=1.7.0,<2
+# The doctest lane imports the scripts that declare it, so the CLI framework
+# they run on has to be importable here as well.
+cyclopts>=2.9,<6

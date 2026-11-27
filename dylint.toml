@@ -6,6 +6,11 @@
 # generated and holds CodeScene's ceiling of 9. It is experimental, so the
 # suite loads it only on request. The tracker is
 # https://github.com/leynos/whitaker/issues/504.
+#
+# Both passes read this file: `make lint-whitaker` scores the host `cfg`
+# surface, and `make lint-whitaker-windows` scores the Windows one, which the
+# host pass never compiles (issue #738). The limit and the macro handling are
+# therefore identical by construction; neither recipe overrides either.
 [whitaker]
 experimental = ["macro_aware_cognitive_complexity"]
 

@@ -288,6 +288,10 @@
   - [Boolean CLI overrides](execplans/issue-444-allow-generated-boolean-cli-options-to-override-with-false.md):
     plan for the optional-value boolean flag, the `value_optional` IR marker,
     and the explicit-false override.
+  - [Windows-only complexity coverage](execplans/issue-738-restore-cognitive-complexity-coverage-for-windows-only-rust-code.md):
+    plan for scoring `#[cfg(windows)]` code with Whitaker's macro-aware
+    cognitive-complexity lint at the Windows target, and for the self-test that
+    proves the gate can still fail.
 
 [adr-0008]: adrs/adr-0008-agent-native-policy-configuration.md
 [adr-0009]: adrs/adr-0009-linux-build-test-runner-placement.md

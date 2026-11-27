@@ -1,0 +1,400 @@
+"""Contract for the Windows-only cognitive-complexity gate.
+
+Whitaker's lints run inside a compiler driver, so the suite scores only the
+``cfg`` surface that compiler was asked to build. The host pass in
+``make lint-whitaker`` therefore scores no ``#[cfg(windows)]`` item at all, and
+the Windows continuous-integration leg runs Clippy alone: after PR #737 retired
+Clippy's ``cognitive_complexity``, nothing scored Windows-only code (issue
+#738).
+
+``make lint-whitaker-windows`` closes that gap without a Windows Whitaker lane:
+it runs the same suite at the Windows target from the Linux leg, so the lint,
+the threshold and the macro-aware handling are the ones the rest of the
+workspace already has. This contract holds both ends: the Makefile expresses
+the pass, and continuous integration runs it.
+
+The threshold is deliberately *not* restated here beyond the assertion that
+both passes read the one ``dylint.toml``. A second copy in the workflow or the
+recipe is how the two ends drift apart.
+
+Run via ``make test-workflow-contracts``.
+"""
+
+from __future__ import annotations
+
+import pathlib
+import re
+import typing as typ
+
+import pytest
+from makefile_support import recipe_lines
+from windows_complexity_gate import (
+    DISABLED_CONDITIONS,
+    _first_running,
+    _is_failure_tolerant,
+    _leg_is_linux,
+    _run_steps,
+    _runs,
+    _step_dicts,
+    is_disabled,
+)
+from workflow_legs import legs
+from workflow_reading import read_workflows, workflow_jobs
+
+REPOSITORY_ROOT: typ.Final[pathlib.Path] = pathlib.Path(__file__).resolve().parents[2]
+WORKFLOWS: typ.Final[pathlib.Path] = REPOSITORY_ROOT / ".github" / "workflows"
+
+#: Label for the expanded legs. `workflow_legs.legs` uses it only to name a
+#: leg, and the job list this contract reads spans every workflow file.
+WORKFLOW_LABEL: typ.Final[str] = "workflows"
+MAKEFILE_PATH: typ.Final[pathlib.Path] = REPOSITORY_ROOT / "Makefile"
+DYLINT_CONFIGURATION: typ.Final[pathlib.Path] = REPOSITORY_ROOT / "dylint.toml"
+PROBE_DIRECTORY: typ.Final[pathlib.Path] = (
+    REPOSITORY_ROOT / "tests" / "fixtures" / "windows_complexity_probe"
+)
+
+#: The Make targets that make up the gate: the pass itself, the prerequisite
+#: that provisions it, and the self-test that proves it can still fail.
+LINT_TARGET: typ.Final[str] = "lint-whitaker-windows"
+PREREQUISITE_TARGET: typ.Final[str] = "check-whitaker-windows-target"
+INSTALL_TARGET: typ.Final[str] = "install-whitaker-windows-target"
+SELF_TEST_TARGET: typ.Final[str] = "check-windows-complexity-gate"
+
+#: The target triple the pass names, which is the one the Windows leg builds
+#: natively. The Makefile's default and the self-test's default are held equal
+#: to it instead of being restated as literals in three places.
+WINDOWS_TARGET: typ.Final[str] = "x86_64-pc-windows-msvc"
+
+#: The one lint this gate exists for, and the section that configures it. Both
+#: passes read these, so the threshold and the macro handling cannot differ
+#: between them.
+COMPLEXITY_LINT: typ.Final[str] = "macro_aware_cognitive_complexity"
+LINT_SECTION: typ.Final[str] = f"[{COMPLEXITY_LINT}]"
+THRESHOLD_KEY: typ.Final[str] = "max_complexity"
+THRESHOLD: typ.Final[str] = "9"
+
+#: The assignment the pass must make, and the development flags it must not.
+STRICT_FLAGS: typ.Final[str] = '-D warnings'
+DEVELOPMENT_FLAGS: typ.Final[tuple[str, ...]] = (
+    "-Zthreads=8",
+    "-Zcodegen-backend=cranelift",
+    "-Clink-arg=-fuse-ld=mold",
+)
+
+#: `WINDOWS_TARGET ?= <triple>`, read as the default the Makefile states.
+WINDOWS_TARGET_SETTING: typ.Final[re.Pattern[str]] = re.compile(
+    r"^WINDOWS_TARGET\s*\?=\s*(\S+)\s*$", re.MULTILINE
+)
+
+
+@pytest.fixture(scope="module")
+def makefile() -> str:
+    """Return the repository Makefile's text.
+
+    Returns
+    -------
+    str
+        The Makefile as written.
+    """
+    return MAKEFILE_PATH.read_text(encoding="utf-8")
+
+
+@pytest.fixture(scope="module")
+def jobs() -> dict[str, dict[str, object]]:
+    """Return every job that can run, keyed by workflow and job name.
+
+    The key carries the workflow because two workflows may declare a job of
+    the same name: keying on the name alone would keep only the later one and
+    silently stop inspecting the other.
+
+    A job the workflow disables would contribute its steps to every collector
+    below while never running them, and GitHub reports a skipped job as a
+    successful check. Excluding it here means a disabled gate job leaves no
+    job running the pass, which fails the execution contract.
+
+    Returns
+    -------
+    dict
+        ``"<workflow>:<job>"`` to job mapping, disabled jobs omitted.
+    """
+    return {
+        f"{file_name}:{name}": job
+        for file_name, document in read_workflows(WORKFLOWS).items()
+        for name, job in workflow_jobs(document).items()
+        if not is_disabled(job)
+    }
+
+
+@pytest.fixture(scope="module")
+def gate_recipe(makefile: str) -> list[str]:
+    """Return the gate target's recipe lines.
+
+    Parameters
+    ----------
+    makefile : str
+        The repository Makefile's text.
+
+    Returns
+    -------
+    list of str
+        The recipe, empty when the target is absent.
+    """
+    return recipe_lines(makefile, LINT_TARGET)
+
+
+def test_the_makefile_states_the_windows_target(makefile: str) -> None:
+    """The triple is a variable, and it is the one the Windows leg builds.
+
+    A literal in the recipe would let the gate drift to another target, and
+    the self-test, which takes the same variable, would not notice.
+    """
+    (stated,) = WINDOWS_TARGET_SETTING.findall(makefile) or [None]
+    assert stated == WINDOWS_TARGET, (
+        f"WINDOWS_TARGET is {stated!r}, not the Windows leg's {WINDOWS_TARGET!r}"
+    )
+
+
+def test_the_gate_target_runs_whitaker_at_the_windows_target(
+    gate_recipe: list[str],
+) -> None:
+    """The recipe is a real Whitaker pass at the Windows triple.
+
+    ``--all`` is asserted because a scoped invocation that selects no library
+    exits zero without checking anything, which is the failure mode that makes
+    a clean run meaningless.
+    """
+    command = " ".join(gate_recipe)
+    assert command, f"{LINT_TARGET} has no recipe"
+    assert "$(WHITAKER) --all" in command, command
+    assert "--target $(WINDOWS_TARGET)" in command, command
+    assert "--all-targets" in command, command
+    assert "--all-features" in command, command
+
+
+def test_the_gate_target_takes_no_development_flags(gate_recipe: list[str]) -> None:
+    """Whitaker's toolchain is not this repository's, so the standard is off.
+
+    The pass restates `-D warnings` alone, exactly as the host pass does; the
+    parallel frontend and `mold` belong to a compiler the suite does not run.
+    """
+    command = " ".join(gate_recipe)
+    # `STRICT_RUSTFLAGS` is the variable both passes assign, and
+    # `build_standard_routing_test.py` holds it to `-D warnings` alone. Naming
+    # the variable here is what keeps the two routes on one definition.
+    assert 'RUSTFLAGS="$(STRICT_RUSTFLAGS)"' in command, command
+    assert "GATE_RUSTFLAGS" not in command, command
+    for flag in DEVELOPMENT_FLAGS:
+        assert flag not in command, f"{LINT_TARGET} carries {flag}"
+
+
+def test_the_gate_depends_on_its_prerequisite(makefile: str) -> None:
+    """Both the pass and the self-test check the standard library first.
+
+    Without the prerequisite either one fails inside Cargo with a message
+    about the target, which reads as a lint failure. Naming the check makes
+    the missing component the thing that is reported.
+    """
+    for target in (LINT_TARGET, SELF_TEST_TARGET):
+        rule = re.compile(
+            rf"^{re.escape(target)}\s*:[^=\n]*\b{re.escape(PREREQUISITE_TARGET)}\b",
+            re.MULTILINE,
+        )
+        assert rule.search(makefile), (
+            f"{target} does not depend on {PREREQUISITE_TARGET}"
+        )
+
+
+def test_the_prerequisite_and_install_targets_share_the_variable(
+    makefile: str,
+) -> None:
+    """Both provisioning targets pass the one triple and the one launcher.
+
+    A literal triple would provision a target the pass does not check, and
+    the launcher decides which installer is surveyed, so passing it keeps a
+    `WHITAKER=` override provisioning the installation the pass uses.
+    """
+    for target in (PREREQUISITE_TARGET, INSTALL_TARGET):
+        lines = recipe_lines(makefile, target)
+        command = " ".join(lines)
+        assert command, f"{target} has no recipe"
+        assert "--target $(WINDOWS_TARGET)" in command, command
+        assert "--launcher" in command and "$(WHITAKER)" in command, command
+
+
+def test_the_threshold_and_macro_handling_are_shared_not_repeated(
+    makefile: str, gate_recipe: list[str]
+) -> None:
+    """Both passes read one `dylint.toml`, and the recipe adds no override.
+
+    The threshold and the experimental opt-in live in one file. A flag in the
+    recipe, or a second configuration beside the probe, would be a second
+    threshold to keep in step.
+    """
+    configuration = DYLINT_CONFIGURATION.read_text(encoding="utf-8")
+    assert LINT_SECTION in configuration, configuration
+    assert f"{THRESHOLD_KEY} = {THRESHOLD}" in configuration, configuration
+    assert "[whitaker]" in configuration, "the suite is not told to load the lint"
+    assert f'experimental = ["{COMPLEXITY_LINT}"]' in configuration, configuration
+    command = " ".join(gate_recipe)
+    assert THRESHOLD_KEY not in command, command
+    assert "--max" not in command, command
+
+
+def test_the_probe_states_the_same_threshold() -> None:
+    """The self-test's crate is scored at the workspace's limit.
+
+    A probe tuned to another limit would pass while the real gate failed,
+    and either reads as evidence when it is not.
+    """
+    probe = (PROBE_DIRECTORY / "dylint.toml").read_text(encoding="utf-8")
+    workspace = DYLINT_CONFIGURATION.read_text(encoding="utf-8")
+    for setting in (f"{THRESHOLD_KEY} = {THRESHOLD}", f'["{COMPLEXITY_LINT}"]'):
+        assert setting in probe, probe
+    assert f"{THRESHOLD_KEY} = {THRESHOLD}" in workspace, workspace
+
+
+def test_the_probe_carries_both_directions() -> None:
+    """The fixture has an in-limit example and a feature-gated over-limit one.
+
+    The feature is what lets one crate demonstrate both directions; an
+    ungated over-limit example would fail every default build instead.
+    """
+    manifest = (PROBE_DIRECTORY / "Cargo.toml").read_text(encoding="utf-8")
+    lib = (PROBE_DIRECTORY / "src" / "lib.rs").read_text(encoding="utf-8")
+    assert "over_limit = []" in manifest, manifest
+    assert "\n[workspace]\n" in manifest, (
+        "the probe must stay out of the workspace, or --all-features fails it"
+    )
+    assert 'feature = "over_limit"' in lib, lib
+    assert "mod in_limit;" in lib, lib
+
+
+def test_the_self_test_target_runs_the_verifier(makefile: str) -> None:
+    """The self-test invokes the script at the same triple and launcher.
+
+    Passing the variables is what keeps a `WINDOWS_TARGET=` or `WHITAKER=`
+    override honest: the self-test must validate the installation the pass
+    uses, not whichever `whitaker` PATH resolves.
+    """
+    command = " ".join(recipe_lines(makefile, SELF_TEST_TARGET))
+    assert command, f"{SELF_TEST_TARGET} has no recipe"
+    assert "scripts/verify_windows_complexity_gate.py" in command, command
+    assert "--target $(WINDOWS_TARGET)" in command, command
+    assert "--whitaker" in command and "$(WHITAKER)" in command, command
+
+
+def test_continuous_integration_runs_the_gate_and_its_self_test(
+    jobs: dict[str, dict[str, object]],
+) -> None:
+    """Every leg that runs the pass also provisions, and runs the self-test.
+
+    Linux is the point: the suite is installed there, and the pass is what
+    makes Windows-only code visible to it. A job on a Windows runner would be
+    the Windows Whitaker lane the issue records as not required.
+
+    The check walks the legs rather than the job's joined text, because a step
+    guarded to one leg is invisible in that text: a job could lint on a leg
+    where it never provisions the target's ``rust-std`` and never runs the
+    self-test, and still satisfy a body-level assertion.
+    """
+    liable = False
+    for job_name, job in jobs.items():
+        steps = _step_dicts(job)
+        for leg in legs(WORKFLOW_LABEL, job_name, job):
+            gate = _first_running(steps, LINT_TARGET, leg.cell)
+            if gate is None:
+                continue
+            liable = True
+            where = leg.cell or "its only leg"
+            assert not _is_failure_tolerant(job), (
+                f"{job_name} marks the whole job continue-on-error, so its "
+                f"`make {LINT_TARGET}` on {where} cannot block a merge"
+            )
+            for target in (INSTALL_TARGET, SELF_TEST_TARGET):
+                index = _first_running(steps, target, leg.cell)
+                assert index is not None, (
+                    f"{job_name} runs the pass on {where} without `make {target}`"
+                )
+                assert not _is_failure_tolerant(steps[index]), (
+                    f"`make {target}` in {job_name} is continue-on-error"
+                )
+            install = _first_running(steps, INSTALL_TARGET, leg.cell)
+            assert install < gate, (
+                f"{job_name} installs the target's rust-std after the pass on "
+                f"{where}; a later step cannot provision an earlier one"
+            )
+            assert _leg_is_linux(leg), (
+                f"{job_name} runs the Windows-target pass on {leg.cell or leg.job.get('runs-on')!r}, not Linux"
+            )
+    assert liable, f"no job runs `make {LINT_TARGET}`"
+
+
+def test_the_host_pass_is_still_the_one_lint_runs(jobs: dict[str, dict[str, object]]) -> None:
+    """Existing Linux coverage is untouched.
+
+    The Linux leg keeps running `make lint`, which carries the host Whitaker
+    pass; the Windows-target pass is added beside it, not in place of it.
+    The step is required on a leg that can only land on Linux, because a step
+    guarded to the Windows leg would leave the host pass unrun while still
+    appearing in the job's text.
+    """
+    covered = False
+    for job_name, job in jobs.items():
+        steps = _step_dicts(job)
+        for leg in legs(WORKFLOW_LABEL, job_name, job):
+            if not any(
+                str(step.get("run", "")).strip() == "make lint"
+                and _runs(step, leg.cell)
+                for step in steps
+            ):
+                continue
+            covered = True
+            assert _leg_is_linux(leg), (
+                f"{job_name} runs `make lint` on a leg that can land off Linux"
+            )
+    assert covered, "no enabled step runs `make lint` on any leg"
+    makefile = MAKEFILE_PATH.read_text(encoding="utf-8")
+    host_recipe = " ".join(recipe_lines(makefile, "lint-whitaker"))
+    assert "$(WHITAKER) --all" in host_recipe, host_recipe
+    assert "--target" not in host_recipe, (
+        "the host pass grew a target argument; it must score the host surface"
+    )
+
+
+def test_the_gate_job_installs_whitaker_itself(
+    jobs: dict[str, dict[str, object]],
+) -> None:
+    """The job that runs the pass also installs the suite, on the same leg.
+
+    `whitaker_install_test.py` holds every install step to the pinned action
+    on a Linux runner, and `sccache_wiring_test.py` holds the caching wiring.
+    What neither can see is *which* job, and which leg of it, owns the
+    install: a job that runs the pass without installing the suite borrows
+    another job's, and one whose install is guarded to a leg the pass never
+    reaches has no suite at all. Both would fail only when that job stopped
+    running.
+    """
+    liable = False
+    for job_name, job in jobs.items():
+        steps = _step_dicts(job)
+        for leg in legs(WORKFLOW_LABEL, job_name, job):
+            lints = [
+                step
+                for step in steps
+                if f"make {LINT_TARGET}" in str(step.get("run", ""))
+                and _runs(step, leg.cell)
+            ]
+            if not lints:
+                continue
+            liable = True
+            installs = [
+                step
+                for step in steps
+                if step.get("name") == "Install Whitaker"
+                and _runs(step, leg.cell)
+            ]
+            assert installs, (
+                f"{job_name} runs `make {LINT_TARGET}` on {leg.cell or 'its only leg'} "
+                "without installing Whitaker on that leg"
+            )
+    assert liable, f"no job runs `make {LINT_TARGET}`"
