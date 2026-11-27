@@ -224,7 +224,7 @@ expression: snapshot
           "rotate"
         ],
         "field_name": "replacement",
-        "key_path": "cmds.rotate.replacement",
+        "key_path": "cmds.orthohelp_fixture.replacement",
         "exposure": "secret"
       }
     ]

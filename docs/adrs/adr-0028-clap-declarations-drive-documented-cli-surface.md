@@ -105,9 +105,10 @@ The documentation IR distinguishes two surfaces per field:
   requiredness. Bare `long` and `short` spellings follow the container's
   `#[command(rename_all = "...")]` casing; literal spellings and an assigned
   `id` stay verbatim. Requiredness follows clap: a declared default or a
-  value-less switch makes the argument non-required, while a value-taking
-  argument with no clap default is required even when Serde supplies a
-  `#[serde(default)]` for configuration loading. `CliMetadata.long` and
+  value-less switch makes the argument non-required, and clap treats
+  `Option<T>` and `Vec<T>` as non-required. A value-taking scalar argument with
+  no optional wrapper and no clap default is required, even when Serde supplies
+  a `#[serde(default)]` for configuration loading. `CliMetadata.long` and
   `CliMetadata.short` are absent for a positional operand, and
   `CliMetadata.positional: Option<PositionalMetadata>` carries the one-based
   index and the variadic, trailing-var-arg, and `--`-only flags.
@@ -139,10 +140,12 @@ chooses the identifier path as follows:
 
 Environment and file metadata are projected into the namespaces the subcommand
 merge reads: `<PREFIX>_CMDS_<NAME>_<FIELD>` and `cmds.<name>.<key>`. `<NAME>`
-is the payload's explicit `#[command(name = "...")]` where declared, otherwise
-the command label the selector supplies. Explicit `env(name = ...)` and
-`file(key_path = ...)` documentation overrides remain verbatim, because they
-are absolute declarations rather than generated names.
+is the payload's clap command name when it implements `CommandFactory`: the
+declared `#[command(name = "...")]`, or clap's package-name default. A docs-only
+`Args` payload has no command of its own and keeps the selector's command
+label. Explicit `env(name = ...)` and `file(key_path = ...)` documentation
+overrides remain verbatim, because they are absolute declarations rather than
+generated names.
 
 The generated selector no longer rebuilds identifiers. It calls
 `get_doc_metadata_for_subcommand`, so handwritten `OrthoConfigDocs` payloads
@@ -153,10 +156,10 @@ their value names. An operand that consumes the rest of the command line
 (`trailing_var_arg`) or is reachable only after `--` (`last`) follows the named
 flags, because a flag placed after it would be parsed as operand data; a `last`
 operand is also preceded by an emitted `--` delimiter. The PowerShell MAML
-renderer maps a positional's one-based clap index to MAML's zero-based
-`position` attribute and displays the value name. Agent context continues to
-list a positional as an input without a long flag; ordering positionals by
-index remains roadmap 12.2.3.
+`position` attribute is one-based, matching clap's positional index, so the
+renderer emits the index unchanged and displays the value name. Agent context
+continues to list a positional as an input without a long flag; ordering
+positionals by index remains roadmap 12.2.3.
 
 ## Goals and non-goals
 
@@ -195,10 +198,11 @@ index remains roadmap 12.2.3.
   loaded from an argument iterator.
 - Duplicate environment names and file keys are validated in the standalone
   namespace and, when the struct declares `#[command(name = "...")]`, in the
-  mounted namespace as well. Without a declared name the mount is supplied at
-  runtime, so the mounted check cannot run at expansion time; a projected
-  default can then coincide with a verbatim `env(name = ...)` or
-  `file(key_path = ...)` override only for the mount that supplies that name.
+  mounted namespace as well. A package-name default is resolved by the
+  generated code rather than at expansion time, and a docs-only `Args` payload
+  receives the selector label at runtime, so those cases cannot be checked
+  before mounting; a projected default can then coincide with a verbatim
+  `env(name = ...)` or `file(key_path = ...)` override only for that mount.
 - Positional operands are listed in agent context but not yet ordered by
   index. Consumers can read the order from `CliMetadata.positional`.
 

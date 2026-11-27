@@ -21,6 +21,22 @@ enum Commands {
     Validate(ValidateArgs),
 }
 
+/// A payload that relies on clap's default command name.
+#[derive(Debug, clap::Subcommand, ortho_config::OrthoConfigSubcommandDocs)]
+enum UnnamedCommands {
+    /// Runs without a declared command name.
+    Run(UnnamedArgs),
+}
+
+/// Arguments whose clap command name defaults to the package name.
+#[derive(Debug, Clone, Default, Parser, Serialize, Deserialize, OrthoConfig)]
+#[ortho_config(prefix = "SPLITTERS")]
+struct UnnamedArgs {
+    /// Token read from the mounted namespace.
+    #[arg(long)]
+    token: Option<String>,
+}
+
 /// Arguments that clap parses and the subcommand merge reads.
 #[derive(Debug, Clone, Default, Parser, Serialize, Deserialize, OrthoConfig)]
 #[command(name = "validate")]
@@ -293,6 +309,36 @@ fn a_subcommand_path_projects_environment_and_file_metadata() -> Result<()> {
             .map(|file| file.key_path.as_str())
             == Some("cmds.validate.check"),
         "a mounted path should project the file key"
+    );
+    Ok(())
+}
+
+#[test]
+fn a_parser_payload_without_a_name_uses_claps_package_default() -> Result<()> {
+    let mut metadata = UnnamedCommands::get_subcommand_doc_metadata();
+    ensure!(
+        metadata.len() == 1,
+        "expected one subcommand node, got {}",
+        metadata.len()
+    );
+    let run = metadata.remove(0);
+    ensure!(
+        run.app_name == "run",
+        "the enum label should remain the application name, got {:?}",
+        run.app_name
+    );
+
+    let token = field(&run, "token")?;
+    ensure!(
+        token.env.as_ref().map(|env| env.var_name.as_str())
+            == Some("SPLITTERS_CMDS_ORTHO_CONFIG_TOKEN"),
+        "the merge reads clap's package-name command name, got {:?}",
+        token.env
+    );
+    ensure!(
+        token.file.as_ref().map(|file| file.key_path.as_str()) == Some("cmds.ortho_config.token"),
+        "the file key should follow the same command name, got {:?}",
+        token.file
     );
     Ok(())
 }

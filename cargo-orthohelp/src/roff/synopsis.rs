@@ -115,9 +115,17 @@ fn push_last_operands(output: &mut String, operands: &[(&LocalizedFieldMetadata,
 }
 
 /// Formats a synopsis flag without bracketing or a line ending.
+///
+/// A variadic positional appends `...` so the synopsis shows that the operand
+/// accepts repeated values.
 fn format_synopsis_flag(field: &LocalizedFieldMetadata, cli: &CliMetadata) -> String {
     let placeholder = field.value.as_ref().map(value_type_placeholder);
-    format_option(cli, placeholder.as_deref(), "VALUE")
+    let flag = format_option(cli, placeholder.as_deref(), "VALUE");
+    if cli.positional.as_ref().is_some_and(|value| value.variadic) {
+        format!("{flag}...")
+    } else {
+        flag
+    }
 }
 
 /// Formats a synopsis flag and brackets it unless the corresponding field is required.

@@ -319,10 +319,10 @@ follow:
 
 - `long` and `short` are both `None` for a positional argument. The derive must
   not emit a synthesized long flag to keep the field addressable.
-- Generators order positionals by `index` in SYNOPSIS output, and by
-  `index - 1` in the PowerShell `position` attribute, because clap `index` is
-  1-based while PowerShell `Position` is 0-based; they render `value_name`
-  rather than a flag spelling.
+- Generators order positionals by `index` in SYNOPSIS output and emit the same
+  `index` as the PowerShell MAML `position` attribute, because both number the
+  first unnamed operand `1`; they render `value_name` rather than a flag
+  spelling.
 - The agent-context contract emits a positional input only when `positional`
   is `Some`, ordering emitted positional inputs by the positional metadata's
   `index`. A field with CLI metadata, no flag spelling, and no `positional`
@@ -681,18 +681,21 @@ Deterministic IDs when omitted:
   consumption, and requiredness come from clap rather than from the derive's
   generated parser. Bare `long` and `short` spellings follow the container's
   `#[command(rename_all = "...")]` casing; literal spellings and an assigned
-  `id` stay verbatim. Requiredness follows clap, so a value-taking argument
-  with no clap default stays required even when Serde supplies a
-  `#[serde(default)]` for configuration loading. Fields without a clap
-  declaration retain the generated `long` and `short` flags, because those are
-  the surface the OrthoConfig loader itself parses. A configuration root that
-  also declares clap arguments documents the declared command line while
+  `id` stay verbatim. Requiredness follows clap: `Option<T>` and `Vec<T>` are
+  non-required, while a value-taking scalar with no optional wrapper and no
+  clap default stays required even when Serde supplies a `#[serde(default)]`
+  for configuration loading. Fields without a clap declaration retain the
+  generated `long` and `short` flags, because those are the surface the
+  OrthoConfig loader itself parses. A configuration root that also declares
+  clap arguments documents the declared command line while
   `OrthoConfig::load_from_iter` keeps the generated flag form.
 - Subcommand metadata uses the names the subcommand merge reads:
   `<PREFIX>_CMDS_<NAME>_` for environment variables and `cmds.<name>` for file
-  keys. `about_id` and field help identifiers follow the struct's declared
-  `localization_base` when no parent path is supplied, and the mounted parent
-  path otherwise. See
+  keys. `<NAME>` is the payload's clap command name when it implements
+  `CommandFactory` (its `#[command(name = "...")]` or clap's package-name
+  default), or the selector label for a docs-only `Args` payload. `about_id`
+  and field help identifiers follow the struct's declared `localization_base`
+  when no parent path is supplied, and the mounted parent path otherwise. See
   [ADR-0028](adrs/adr-0028-clap-declarations-drive-documented-cli-surface.md).
 - Roff SYNOPSIS places ordinary positionals first, sorted by clap index. An
   operand that consumes the rest of the command line (`trailing_var_arg`) or is

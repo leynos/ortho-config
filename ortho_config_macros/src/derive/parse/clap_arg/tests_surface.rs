@@ -164,6 +164,48 @@ fn os_string_defaults_make_an_argument_optional() {
 }
 
 #[test]
+fn help_actions_take_no_value() {
+    let help_short = declaration(&quote::quote! {
+        #[arg(long, action = clap::ArgAction::HelpShort)]
+        usage: Option<String>
+    });
+    assert!(
+        !help_short.takes_value,
+        "HelpShort displays help without accepting a value"
+    );
+
+    let help_long = declaration(&quote::quote! {
+        #[arg(long, action = clap::ArgAction::HelpLong)]
+        usage: Option<String>
+    });
+    assert!(
+        !help_long.takes_value,
+        "HelpLong displays help without accepting a value"
+    );
+}
+
+#[test]
+fn option_vec_repetition_survives_a_single_value_bound() {
+    let repeated = declaration(&quote::quote! {
+        #[arg(long, num_args = 1)]
+        tags: Vec<String>
+    });
+    assert!(
+        repeated.multiple,
+        "clap still infers ArgAction::Append for a Vec option"
+    );
+
+    let explicit_set = declaration(&quote::quote! {
+        #[arg(long, num_args = 1, action = clap::ArgAction::Set)]
+        tags: Vec<String>
+    });
+    assert!(
+        !explicit_set.multiple,
+        "an explicit Set action stops repeated occurrences"
+    );
+}
+
+#[test]
 fn qualified_vec_paths_stay_scalar_like_claps_own_rule() {
     let decl = declaration(&quote::quote! {
         #[arg(long)]

@@ -19,6 +19,8 @@ use super::minimal_metadata;
 struct Position {
     /// One-based clap index.
     index: u16,
+    /// Whether the operand accepts more than one value.
+    variadic: bool,
     /// Whether the operand is reachable only after `--`.
     last: bool,
     /// Whether the operand consumes the remaining command line.
@@ -30,6 +32,17 @@ impl Position {
     const fn indexed(index: u16) -> Self {
         Self {
             index,
+            variadic: false,
+            last: false,
+            var_arg: false,
+        }
+    }
+
+    /// An operand that accepts repeated values.
+    const fn variadic(index: u16) -> Self {
+        Self {
+            index,
+            variadic: true,
             last: false,
             var_arg: false,
         }
@@ -39,6 +52,7 @@ impl Position {
     const fn last(index: u16) -> Self {
         Self {
             index,
+            variadic: false,
             last: true,
             var_arg: false,
         }
@@ -48,6 +62,7 @@ impl Position {
     const fn var_arg(index: u16) -> Self {
         Self {
             index,
+            variadic: false,
             last: false,
             var_arg: true,
         }
@@ -80,6 +95,7 @@ fn test_field(
             hide_in_help: false,
             positional: position.map(|placement| {
                 PositionalMetadata::new(placement.index)
+                    .with_variadic(placement.variadic)
                     .with_var_arg(placement.var_arg)
                     .with_last(placement.last)
             }),
@@ -204,6 +220,28 @@ fn golden_optional_last_operand_groups_the_delimiter(mut minimal_metadata: Local
     assert!(
         !synopsis.contains("\\-\\-\n"),
         "an optional `last` operand must not advertise a mandatory delimiter: {synopsis}"
+    );
+}
+
+/// Test that a variadic positional advertises repetition.
+#[rstest]
+fn golden_variadic_positional_shows_repetition(mut minimal_metadata: LocalizedDocMetadata) {
+    minimal_metadata.fields.push(test_field(
+        "paths",
+        "PATH",
+        true,
+        Some(Position::variadic(1)),
+    ));
+
+    let output = generate_to_string(&minimal_metadata, &RoffConfig::default());
+    let synopsis = output
+        .split(".SH DESCRIPTION")
+        .next()
+        .expect("synopsis should precede the description");
+
+    assert!(
+        synopsis.contains("\\fIPATH\\fR..."),
+        "a variadic operand should show repetition notation: {synopsis}"
     );
 }
 

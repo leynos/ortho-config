@@ -226,8 +226,8 @@ fn render_help_positions_positional_operands(mut minimal_doc: LocalizedDocMetada
     );
 
     assert!(
-        xml.contains("position=\"0\""),
-        "the first positional should map to zero-based position 0:\n{xml}"
+        xml.contains("position=\"1\""),
+        "the first positional should keep MAML's one-based position 1:\n{xml}"
     );
     assert!(
         xml.contains("<maml:name>PROPOSAL</maml:name>"),

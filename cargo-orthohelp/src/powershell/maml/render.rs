@@ -85,8 +85,9 @@ fn render_syntax(writer: &mut XmlWriter, command: &CommandSpec<'_>) {
 /// Describe one CLI parameter in the syntax declaration.
 ///
 /// Fields without CLI metadata are omitted, and switches have no value node.
-/// A positional operand carries its zero-based clap index as the MAML
-/// `position`; named flags keep `position="named"`.
+/// A positional operand carries its clap index as the MAML `position`; MAML
+/// numbers the first unnamed operand `1`, matching clap's one-based index.
+/// Named flags keep `position="named"`.
 fn render_syntax_parameter(writer: &mut XmlWriter, field: &LocalizedFieldMetadata) {
     let Some(cli) = field.cli.as_ref() else {
         return;
@@ -246,12 +247,12 @@ fn should_render_parameter(field: &LocalizedFieldMetadata) -> bool {
 
 /// Select the MAML `position` attribute for a CLI parameter.
 ///
-/// clap exposes one-based positional indices while MAML's `position` attribute
-/// is zero-based, so the first operand reports `position="0"` rather than `1`.
+/// Both clap and MAML number the first unnamed operand `1`, so the resolved
+/// index is emitted unchanged; named flags report `"named"`.
 fn parameter_position(cli: &CliMetadata) -> String {
     cli.positional.as_ref().map_or_else(
         || String::from("named"),
-        |positional| positional.index.saturating_sub(1).to_string(),
+        |positional| positional.index.to_string(),
     )
 }
 

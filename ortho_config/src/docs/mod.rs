@@ -5,6 +5,8 @@
 
 mod ir;
 
+mod mount_name;
+
 mod profile_redaction;
 
 #[cfg(test)]
@@ -19,6 +21,8 @@ pub use ir::{
     RendererRecord, SectionsMetadata, SourceKind, StdoutPurpose, StreamContent, TogglePolicy,
     TtyPolicy, ValueType, WindowsMetadata,
 };
+#[doc(hidden)]
+pub use mount_name::MountCommandName;
 pub use profile_redaction::ProfileFieldExposure;
 
 /// Current IR schema version.

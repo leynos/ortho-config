@@ -13,6 +13,7 @@ use syn::spanned::Spanned;
 use syn::{Expr, Lit, Type};
 
 use super::super::{ClapRenameAll, discard_unknown};
+use super::resolvers::{self, RepetitionFlags};
 use super::value_syntax::{
     ValueRange, action_name, argument, clap_option_inner, is_bare_bool, is_default_value_key,
     is_vec_field, parse_bool, parse_lit_str, parse_usize, parse_value_range, single_char,
@@ -64,6 +65,8 @@ pub(super) struct ClapArgBuilder {
     takes_value: Option<bool>,
     /// Whether the declared action appends repeated values.
     action_appends: bool,
+    /// Whether the declared action replaces rather than accumulates values.
+    action_set: bool,
     /// Whether clap hides the argument.
     hide: bool,
     /// Explicit requiredness.
@@ -258,10 +261,13 @@ impl ClapArgBuilder {
             return Ok(());
         };
         match name.as_str() {
-            "SetTrue" | "SetFalse" | "Count" | "Help" | "Version" => {
+            "SetTrue" | "SetFalse" | "Count" | "Help" | "HelpShort" | "HelpLong" | "Version" => {
                 self.takes_value = Some(false);
             }
-            "Set" => self.takes_value = Some(true),
+            "Set" => {
+                self.takes_value = Some(true);
+                self.action_set = true;
+            }
             "Append" => {
                 self.takes_value = Some(true);
                 self.action_appends = true;
@@ -288,11 +294,22 @@ impl ClapArgBuilder {
         let is_vec = is_vec_field(&field.ty);
         let num_args = self.num_args;
         let takes_value = self.resolve_takes_value(is_positional, &field.ty);
-        let value_optional = takes_value
-            && (self.has_default_missing_value
-                || num_args.map_or_else(|| is_nested_option(&field.ty), |range| range.min == 0));
-        let multiple = self.action_appends || num_args.map_or(is_vec, |range| range.max > 1);
-        let variadic = is_positional && num_args.map_or(is_vec, |range| range.max > 1);
+        let value_optional = resolvers::value_optional(
+            takes_value,
+            self.has_default_missing_value,
+            num_args,
+            &field.ty,
+        );
+        let multiple = resolvers::multiple(
+            RepetitionFlags {
+                action_appends: self.action_appends,
+                action_set: self.action_set,
+                is_vec,
+                is_positional,
+            },
+            num_args,
+        );
+        let variadic = is_positional && resolvers::variadic(is_vec, num_args);
         let positional = is_positional.then_some(ClapPositionalDecl {
             index: self.index,
             variadic,
@@ -380,12 +397,4 @@ impl ClapArgBuilder {
         }
         !(is_vec_field(ty) || clap_option_inner(ty).is_some())
     }
-}
-
-/// Reports whether a type is `Option<Option<T>>`.
-///
-/// `clap_derive` infers `num_args(0..=1)` for this shape, so a bare flag is a
-/// valid spelling even though the type is not a plain boolean.
-fn is_nested_option(ty: &Type) -> bool {
-    clap_option_inner(ty).is_some_and(|inner| clap_option_inner(inner).is_some())
 }

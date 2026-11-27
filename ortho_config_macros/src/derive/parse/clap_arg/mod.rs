@@ -11,6 +11,7 @@
 //! metadata later, where declaration-order positional indices are available.
 
 mod builder;
+mod resolvers;
 #[cfg(test)]
 mod tests;
 mod value_syntax;

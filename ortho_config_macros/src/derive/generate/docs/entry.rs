@@ -286,10 +286,20 @@ impl DocTokens {
                         path.push(name.to_owned());
                         path
                     };
-                    let mount_name = #command_name.unwrap_or(name);
+                    let mount_name = {
+                        use #krate::docs::MountCommandName as _;
+                        let explicit: Option<&str> = #command_name;
+                        explicit
+                            .map(str::to_owned)
+                            .or_else(|| {
+                                let probe = core::marker::PhantomData::<&Self>;
+                                (&&probe).mount_command_name()
+                            })
+                            .unwrap_or_else(|| name.to_owned())
+                    };
                     let mut metadata = Self::__ortho_config_doc_metadata(
                         &command_path,
-                        Some(mount_name),
+                        Some(mount_name.as_str()),
                     );
                     metadata.app_name = name.to_owned();
                     metadata
