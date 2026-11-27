@@ -37,8 +37,8 @@ mod type_utils;
 pub(crate) use behaviour_attrs::parse_behaviour_meta;
 pub(crate) use clap_arg::{ClapArgDecl, ClapPositionalDecl, parse_clap_arg_decl};
 pub(crate) use clap_attrs::{
-    clap_arg_id_from_attribute, clap_arg_id_or_field_name, clap_command_name, clap_field_env,
-    clap_field_is_flattened, clap_field_is_subcommand, clap_rename_all, clap_variant_name,
+    clap_arg_id_from_attribute, clap_arg_id_or_field_name, clap_field_env, clap_field_is_flattened,
+    clap_field_is_subcommand, clap_rename_all, clap_variant_name,
     reject_subcommand_ortho_config_attrs,
 };
 pub(crate) use clap_defaults::{ClapDefaultValue, ClapInferredDefault, clap_default_value};
@@ -50,8 +50,10 @@ pub(crate) use doc_types::{
     ExitClassAttr, HeadingOverrides, OutputAttrs, RenderWidthAttr, RendererFieldAttr,
     RendererRecordAttrs,
 };
-pub(crate) use field_attrs::{ProfileFieldAnnotation, ProfileFieldLabel, parse_field_attrs};
-pub(crate) use input::parse_input;
+pub(crate) use field_attrs::{
+    ProfileFieldAnnotation, ProfileFieldLabel, parse_field_attrs, parse_schema_field_attrs,
+};
+pub(crate) use input::{parse_input, parse_schema_input};
 #[cfg(any(test, doctest))]
 pub(crate) use literals::__doc_lit_str;
 /// Re-exported for the `lit` tests, which reach the helpers through this

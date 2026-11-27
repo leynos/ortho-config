@@ -6,37 +6,18 @@
 //! expressions, and the `OrthoConfig` derive must not reject a valid clap
 //! attribute it cannot interpret.
 
-use heck::ToShoutySnakeCase;
 use syn::ext::IdentExt;
 use syn::meta::ParseNestedMeta;
 use syn::spanned::Spanned;
 use syn::{Expr, Lit, Type};
 
 use super::super::{ClapRenameAll, discard_unknown};
-use super::resolvers::{self, RepetitionFlags};
+use super::resolvers::{self, NameChoice, RepetitionFlags, ShortChoice};
 use super::value_syntax::{
     ValueRange, action_name, argument, clap_option_inner, is_bare_bool, is_default_value_key,
     is_vec_field, parse_bool, parse_lit_str, parse_usize, parse_value_range, single_char,
 };
 use super::{ClapArgDecl, ClapPositionalDecl};
-
-/// A name that either follows clap's casing rule or is written literally.
-#[derive(Debug, Clone)]
-enum NameChoice {
-    /// Derive the spelling from the field's clap argument id.
-    Derived,
-    /// Use the author's literal spelling.
-    Explicit(String),
-}
-
-/// A short flag that either follows clap's casing rule or is literal.
-#[derive(Debug, Clone, Copy)]
-enum ShortChoice {
-    /// Derive the character from the field's clap argument id.
-    Derived,
-    /// Use the author's literal character.
-    Explicit(char),
-}
 
 /// Accumulates one field's clap declaration until the field type is known.
 #[expect(
@@ -67,6 +48,10 @@ pub(super) struct ClapArgBuilder {
     action_appends: bool,
     /// Whether the declared action replaces rather than accumulates values.
     action_set: bool,
+    /// Whether the declared action counts repeated occurrences.
+    action_counts: bool,
+    /// Whether the declared action consumes a value, before arity overrides.
+    action_takes_value: Option<bool>,
     /// Whether clap hides the argument.
     hide: bool,
     /// Explicit requiredness.
@@ -260,16 +245,31 @@ impl ClapArgBuilder {
         let Some(name) = action_name(&action) else {
             return Ok(());
         };
+        // clap keeps only the final action, so a later declaration replaces
+        // every action-derived flag rather than adding to it.
+        self.takes_value = None;
+        self.action_appends = false;
+        self.action_set = false;
+        self.action_counts = false;
+        self.action_takes_value = None;
         match name.as_str() {
-            "SetTrue" | "SetFalse" | "Count" | "Help" | "HelpShort" | "HelpLong" | "Version" => {
+            "SetTrue" | "SetFalse" | "Help" | "HelpShort" | "HelpLong" | "Version" => {
                 self.takes_value = Some(false);
+                self.action_takes_value = Some(false);
+            }
+            "Count" => {
+                self.takes_value = Some(false);
+                self.action_takes_value = Some(false);
+                self.action_counts = true;
             }
             "Set" => {
                 self.takes_value = Some(true);
+                self.action_takes_value = Some(true);
                 self.action_set = true;
             }
             "Append" => {
                 self.takes_value = Some(true);
+                self.action_takes_value = Some(true);
                 self.action_appends = true;
             }
             _ => {}
@@ -288,8 +288,18 @@ impl ClapArgBuilder {
             syn::Error::new_spanned(field, "tuple fields cannot declare clap arguments")
         })?;
         let raw_field = field_ident.unraw().to_string();
-        let (long, short) = self.resolve_spellings(explicit_id.as_deref(), &raw_field, rename_all);
-        let value_name = self.resolve_value_name(explicit_id.as_deref(), &raw_field);
+        let (long, short) = resolvers::spellings(resolvers::SpellingInputs {
+            long: self.long.as_ref(),
+            short: self.short.as_ref(),
+            explicit_id: explicit_id.as_deref(),
+            raw_field: &raw_field,
+            rename_all,
+        });
+        let value_name = resolvers::value_name(
+            self.value_name.as_deref(),
+            explicit_id.as_deref(),
+            &raw_field,
+        );
         let is_positional = long.is_none() && short.is_none();
         let is_vec = is_vec_field(&field.ty);
         let num_args = self.num_args;
@@ -304,6 +314,7 @@ impl ClapArgBuilder {
             RepetitionFlags {
                 action_appends: self.action_appends,
                 action_set: self.action_set,
+                action_counts: self.action_counts,
                 is_vec,
                 is_positional,
             },
@@ -326,44 +337,8 @@ impl ClapArgBuilder {
             value_optional,
             multiple,
             hide_in_help: self.hide,
-            required: self.resolve_required(takes_value, &field.ty),
+            required: self.resolve_required(&field.ty),
             is_skipped: self.skipped,
-        })
-    }
-
-    /// Resolves the long and short spellings from the field's clap id.
-    ///
-    /// A bare `long`/`short` follows the container's `rename_all` casing, as
-    /// `clap_derive` does. An assigned id is already a literal name and is not
-    /// re-cased.
-    fn resolve_spellings(
-        &self,
-        explicit_id: Option<&str>,
-        raw_field: &str,
-        rename_all: ClapRenameAll,
-    ) -> (Option<String>, Option<char>) {
-        let derived = explicit_id.map_or_else(|| rename_all.apply(raw_field), str::to_owned);
-        let long = match &self.long {
-            None => None,
-            Some(NameChoice::Explicit(value)) => Some(value.clone()),
-            Some(NameChoice::Derived) => Some(derived.clone()),
-        };
-        let short = match self.short {
-            None => None,
-            Some(ShortChoice::Explicit(value)) => Some(value),
-            Some(ShortChoice::Derived) => derived.chars().next(),
-        };
-        (long, short)
-    }
-
-    /// Resolves the value placeholder from the declaration or clap's casing.
-    ///
-    /// `clap_derive` renders an unset value name as the field ident in
-    /// `SCREAMING_SNAKE_CASE` regardless of the container's `rename_all`, so
-    /// the placeholder is intentionally independent of that casing rule.
-    fn resolve_value_name(&self, explicit_id: Option<&str>, raw_field: &str) -> String {
-        self.value_name.clone().unwrap_or_else(|| {
-            explicit_id.map_or_else(|| raw_field.to_shouty_snake_case(), str::to_owned)
         })
     }
 
@@ -372,27 +347,34 @@ impl ClapArgBuilder {
         if is_positional {
             return true;
         }
-        if let Some(value) = self.takes_value {
-            return value;
-        }
         if let Some(range) = self.num_args {
             return range.max > 0;
+        }
+        if let Some(value) = self.takes_value {
+            return value;
         }
         !is_bare_bool(ty)
     }
 
     /// Resolves clap's requiredness from explicit and inferred signals.
     ///
-    /// `clap_derive` marks a plain value-taking argument required when it has
-    /// no clap default; `Option` and `Vec` shapes are never required. The
-    /// configuration loader's Serde defaults do not relax a clap declaration,
-    /// so a declared argument must not fall back to those when it is missing a
-    /// value.
-    fn resolve_required(&self, takes_value: bool, ty: &Type) -> bool {
+    /// An argument with no clap default is required, except that `Option` and
+    /// `Vec` shapes and the value-free actions clap infers for a bare boolean
+    /// are never required. Requiredness therefore does not follow an
+    /// `num_args` arity override. The configuration loader's Serde defaults do
+    /// not relax a clap declaration, so a declared argument must not fall back
+    /// to those when it is missing a value.
+    fn resolve_required(&self, ty: &Type) -> bool {
         if let Some(required) = self.required {
             return required;
         }
-        if self.has_default || !takes_value {
+        if self.has_default {
+            return false;
+        }
+        if self.action_takes_value == Some(false) {
+            return false;
+        }
+        if self.action_takes_value.is_none() && is_bare_bool(ty) {
             return false;
         }
         !(is_vec_field(ty) || clap_option_inner(ty).is_some())

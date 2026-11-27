@@ -5,9 +5,82 @@
 //! defaults. They live apart from the builder so each decision stays small
 //! enough to review on its own.
 
+use heck::ToShoutySnakeCase;
 use syn::Type;
 
+use super::super::ClapRenameAll;
 use super::value_syntax::{ValueRange, clap_option_inner};
+
+/// A name that either follows clap's casing rule or is written literally.
+#[derive(Debug, Clone)]
+pub(super) enum NameChoice {
+    /// Derive the spelling from the field's clap argument id.
+    Derived,
+    /// Use the author's literal spelling.
+    Explicit(String),
+}
+
+/// A short flag that either follows clap's casing rule or is literal.
+#[derive(Debug, Clone, Copy)]
+pub(super) enum ShortChoice {
+    /// Derive the character from the field's clap argument id.
+    Derived,
+    /// Use the author's literal character.
+    Explicit(char),
+}
+
+/// Inputs for resolving a field's flag spellings.
+#[derive(Clone, Copy)]
+pub(super) struct SpellingInputs<'a> {
+    /// Long spelling choice, when `long` was declared.
+    pub(super) long: Option<&'a NameChoice>,
+    /// Short spelling choice, when `short` was declared.
+    pub(super) short: Option<&'a ShortChoice>,
+    /// Explicit clap argument id, when one was assigned.
+    pub(super) explicit_id: Option<&'a str>,
+    /// Field name with the raw-identifier prefix removed.
+    pub(super) raw_field: &'a str,
+    /// Container-level casing applied to derived spellings.
+    pub(super) rename_all: ClapRenameAll,
+}
+
+/// Resolves the long and short spellings from the field's clap id.
+///
+/// A bare `long`/`short` follows the container's `rename_all` casing, as
+/// `clap_derive` does. An assigned id is already a literal name and is not
+/// re-cased.
+pub(super) fn spellings(inputs: SpellingInputs<'_>) -> (Option<String>, Option<char>) {
+    let derived = inputs
+        .explicit_id
+        .map_or_else(|| inputs.rename_all.apply(inputs.raw_field), str::to_owned);
+    let long = match inputs.long {
+        None => None,
+        Some(NameChoice::Explicit(value)) => Some(value.clone()),
+        Some(NameChoice::Derived) => Some(derived.clone()),
+    };
+    let short = match inputs.short {
+        None => None,
+        Some(ShortChoice::Explicit(value)) => Some(*value),
+        Some(ShortChoice::Derived) => derived.chars().next(),
+    };
+    (long, short)
+}
+
+/// Resolves the value placeholder from the declaration or clap's casing.
+///
+/// `clap_derive` renders an unset value name as the field ident in
+/// `SCREAMING_SNAKE_CASE` regardless of the container's `rename_all`, so the
+/// placeholder is intentionally independent of that casing rule.
+pub(super) fn value_name(
+    explicit_value: Option<&str>,
+    explicit_id: Option<&str>,
+    raw_field: &str,
+) -> String {
+    explicit_value.map_or_else(
+        || explicit_id.map_or_else(|| raw_field.to_shouty_snake_case(), str::to_owned),
+        str::to_owned,
+    )
+}
 
 /// Whether a value may be omitted for one occurrence.
 ///
@@ -36,6 +109,8 @@ pub(super) struct RepetitionFlags {
     pub(super) action_appends: bool,
     /// Whether the declared action replaces rather than accumulates values.
     pub(super) action_set: bool,
+    /// Whether the declared action counts repeated occurrences.
+    pub(super) action_counts: bool,
     /// Whether the field's type is a vector.
     pub(super) is_vec: bool,
     /// Whether the field is a positional operand.
@@ -52,6 +127,7 @@ pub(super) struct RepetitionFlags {
 pub(super) fn multiple(flags: RepetitionFlags, num_args: Option<ValueRange>) -> bool {
     let repeats_per_occurrence = num_args.is_some_and(|range| range.max > 1);
     let repeats_across_occurrences = flags.action_appends
+        || flags.action_counts
         || (!flags.action_set && flags.is_vec && (!flags.is_positional || num_args.is_none()));
     repeats_across_occurrences || repeats_per_occurrence
 }

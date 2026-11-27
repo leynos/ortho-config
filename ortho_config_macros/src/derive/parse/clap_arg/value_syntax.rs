@@ -184,7 +184,19 @@ pub(super) fn single_char(value: &str) -> Option<char> {
 /// Reports whether a type is exactly `bool`, the one type clap treats as a
 /// value-less switch by default.
 pub(super) fn is_bare_bool(ty: &Type) -> bool {
-    matches!(ty, Type::Path(path) if path.qself.is_none() && path.path.is_ident("bool"))
+    let unwrapped = unwrap_type_group(ty);
+    matches!(unwrapped, Type::Path(path) if path.qself.is_none() && path.path.is_ident("bool"))
+}
+
+/// Unwraps invisible `Type::Group` nodes produced by macro fragments.
+///
+/// A `$ty:ty` fragment forwarded through `macro_rules!` reaches the derive as
+/// a group; clap unwraps these before classifying the type.
+fn unwrap_type_group(mut ty: &Type) -> &Type {
+    while let Type::Group(group) = ty {
+        ty = &group.elem;
+    }
+    ty
 }
 
 /// Returns the inner type of an unqualified single-segment `name<T>`.
@@ -194,7 +206,7 @@ pub(super) fn is_bare_bool(ty: &Type) -> bool {
 /// clap. Mirroring that rule keeps the documented surface aligned with what
 /// the application's parser accepts.
 fn single_segment_argument<'a>(ty: &'a Type, name: &str) -> Option<&'a Type> {
-    let Type::Path(path) = ty else {
+    let Type::Path(path) = unwrap_type_group(ty) else {
         return None;
     };
     if path.qself.is_some() || path.path.leading_colon.is_some() {

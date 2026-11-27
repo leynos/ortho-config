@@ -245,6 +245,35 @@ fn golden_variadic_positional_shows_repetition(mut minimal_metadata: LocalizedDo
     );
 }
 
+/// Test that an optional positional value never renders the flag `=` form.
+#[rstest]
+fn golden_optional_value_positional_omits_the_equals_form(
+    mut minimal_metadata: LocalizedDocMetadata,
+) {
+    let mut field = test_field("paths", "PATH", true, Some(Position::indexed(1)));
+    field
+        .cli
+        .as_mut()
+        .expect("the test field carries CLI metadata")
+        .value_optional = true;
+    minimal_metadata.fields.push(field);
+
+    let output = generate_to_string(&minimal_metadata, &RoffConfig::default());
+    let synopsis = output
+        .split(".SH DESCRIPTION")
+        .next()
+        .expect("synopsis should precede the description");
+
+    assert!(
+        synopsis.contains("\\fIPATH\\fR"),
+        "the positional should render a plain placeholder: {synopsis}"
+    );
+    assert!(
+        !synopsis.contains("[="),
+        "a positional must not use the flag-value equals form: {synopsis}"
+    );
+}
+
 /// Test that a `trailing_var_arg` operand follows the named flags.
 ///
 /// Once the operand starts, clap reads every later word as one of its values,

@@ -681,10 +681,11 @@ Deterministic IDs when omitted:
   consumption, and requiredness come from clap rather than from the derive's
   generated parser. Bare `long` and `short` spellings follow the container's
   `#[command(rename_all = "...")]` casing; literal spellings and an assigned
-  `id` stay verbatim. Requiredness follows clap: `Option<T>` and `Vec<T>` are
-  non-required, while a value-taking scalar with no optional wrapper and no
-  clap default stays required even when Serde supplies a `#[serde(default)]`
-  for configuration loading. Fields without a clap declaration retain the
+  `id` stay verbatim. Requiredness follows clap's inference: `Option<T>` and
+  `Vec<T>` are non-required, while a value-taking scalar with no optional
+  wrapper and no clap default is required by default even when Serde supplies a
+  `#[serde(default)]` for configuration loading. An explicit `required` setting
+  overrides the inference. Fields without a clap declaration retain the
   generated `long` and `short` flags, because those are the surface the
   OrthoConfig loader itself parses. A configuration root that also declares
   clap arguments documents the declared command line while

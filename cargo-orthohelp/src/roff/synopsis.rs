@@ -8,7 +8,9 @@
 use crate::ir::{LocalizedFieldMetadata, LocalizedHeadings};
 use crate::schema::CliMetadata;
 
-use super::escape::{escape_macro_arg, escape_text, format_option, value_type_placeholder};
+use super::escape::{
+    escape_macro_arg, escape_text, format_flag_with_value, format_option, value_type_placeholder,
+};
 
 /// Generates the SYNOPSIS section content.
 pub fn synopsis_section(
@@ -120,7 +122,19 @@ fn push_last_operands(output: &mut String, operands: &[(&LocalizedFieldMetadata,
 /// accepts repeated values.
 fn format_synopsis_flag(field: &LocalizedFieldMetadata, cli: &CliMetadata) -> String {
     let placeholder = field.value.as_ref().map(value_type_placeholder);
-    let flag = format_option(cli, placeholder.as_deref(), "VALUE");
+    let flag = if cli.positional.is_some() && cli.takes_value {
+        // An optional value on a positional means the operand may be omitted,
+        // not that it takes `=VALUE`; the flag-value form belongs to flags.
+        let value_name = cli
+            .value_name
+            .as_deref()
+            .filter(|name| !name.is_empty())
+            .or_else(|| placeholder.as_deref().filter(|name| !name.is_empty()))
+            .unwrap_or("VALUE");
+        format_flag_with_value(None, None, value_name)
+    } else {
+        format_option(cli, placeholder.as_deref(), "VALUE")
+    };
     if cli.positional.as_ref().is_some_and(|value| value.variadic) {
         format!("{flag}...")
     } else {

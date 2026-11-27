@@ -104,11 +104,12 @@ The documentation IR distinguishes two surfaces per field:
   `num_args`, `trailing_var_arg`, `last`, value consumption, visibility, and
   requiredness. Bare `long` and `short` spellings follow the container's
   `#[command(rename_all = "...")]` casing; literal spellings and an assigned
-  `id` stay verbatim. Requiredness follows clap: a declared default or a
-  value-less switch makes the argument non-required, and clap treats
+  `id` stay verbatim. Requiredness follows clap's inference: a declared default
+  or a value-less switch makes the argument non-required, and clap treats
   `Option<T>` and `Vec<T>` as non-required. A value-taking scalar argument with
-  no optional wrapper and no clap default is required, even when Serde supplies
-  a `#[serde(default)]` for configuration loading. `CliMetadata.long` and
+  no optional wrapper and no clap default is required by default, even when
+  Serde supplies a `#[serde(default)]` for configuration loading; an explicit
+  `required` setting overrides that inference either way. `CliMetadata.long` and
   `CliMetadata.short` are absent for a positional operand, and
   `CliMetadata.positional: Option<PositionalMetadata>` carries the one-based
   index and the variadic, trailing-var-arg, and `--`-only flags.
@@ -197,12 +198,11 @@ positionals by index remains roadmap 12.2.3.
   form, so a root should not rely on a clap-only positional when it is also
   loaded from an argument iterator.
 - Duplicate environment names and file keys are validated in the standalone
-  namespace and, when the struct declares `#[command(name = "...")]`, in the
-  mounted namespace as well. A package-name default is resolved by the
-  generated code rather than at expansion time, and a docs-only `Args` payload
-  receives the selector label at runtime, so those cases cannot be checked
-  before mounting; a projected default can then coincide with a verbatim
-  `env(name = ...)` or `file(key_path = ...)` override only for that mount.
+  namespace. The mounted namespace is resolved at runtime from the payload's
+  clap command name, or from the selector label for a docs-only `Args` payload,
+  so a projected default can coincide with a verbatim `env(name = ...)` or
+  `file(key_path = ...)` override only for that mount; the derive cannot
+  compare the mounted names at expansion time.
 - Positional operands are listed in agent context but not yet ordered by
   index. Consumers can read the order from `CliMetadata.positional`.
 

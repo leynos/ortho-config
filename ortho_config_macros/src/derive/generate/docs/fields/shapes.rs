@@ -36,11 +36,6 @@ pub(crate) struct FieldDocArgs<'a> {
     pub cli_fields: &'a [CliFieldMetadata],
     /// Catalogue identifiers generated for this struct.
     pub localization_ids: &'a LocalizationIds,
-    /// Explicit clap command name, which fixes the mounted namespace.
-    ///
-    /// Without a declaration the mount name is supplied at runtime, so
-    /// projected-name uniqueness cannot be checked at expansion time.
-    pub clap_command_name: Option<&'a str>,
     /// Resolved crate path for generated code references.
     pub krate: &'a proc_macro2::TokenStream,
 }

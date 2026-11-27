@@ -189,17 +189,6 @@ pub(crate) fn clap_rename_all(attrs: &[syn::Attribute]) -> syn::Result<ClapRenam
     Ok(rename_all)
 }
 
-/// Reads an explicit clap command name from a struct's `#[command(name)]`.
-///
-/// The subcommand merge names its environment and file namespace from the
-/// payload's `CommandFactory` command name, so documentation metadata uses the
-/// same declaration where the author supplied one.
-pub(crate) fn clap_command_name(attrs: &[syn::Attribute]) -> syn::Result<Option<String>> {
-    let mut name = None;
-    for_each_command_literal(attrs, "name", |value| name = Some(value.value()))?;
-    Ok(name)
-}
-
 /// Parse a clap command `name = "..."` override from an enum variant.
 ///
 /// Both `name = "..."` and `name("...")` are accepted. Unlike the struct-level

@@ -4,7 +4,6 @@ mod clap_surface;
 mod cli;
 mod defaults;
 mod emission;
-mod mount_projection;
 mod resolution;
 mod shapes;
 mod tokens;
@@ -100,7 +99,6 @@ pub(super) fn build_fields_metadata(args: &FieldDocArgs<'_>) -> syn::Result<Fiel
             .collect(),
         env_seen: HashMap::new(),
         file_seen: HashMap::new(),
-        projected: mount_projection::ProjectedNames::new(args.prefix, args.clap_command_name),
         krate: args.krate,
     };
 
@@ -137,8 +135,6 @@ struct FieldMetaBuilder<'a> {
     env_seen: HashMap<String, proc_macro2::Span>,
     /// File keys already claimed, with the span to blame.
     file_seen: HashMap<String, proc_macro2::Span>,
-    /// Projected names already claimed under a statically known mount.
-    projected: mount_projection::ProjectedNames,
     /// Resolved crate path for generated code references.
     krate: &'a proc_macro2::TokenStream,
 }
@@ -269,12 +265,6 @@ impl<'a> FieldMetaBuilder<'a> {
         );
         validate_env_name(context.name, &env_name)?;
         ensure_unique("env", context.name, &env_name, &mut self.env_seen)?;
-        self.projected.check_env(mount_projection::EnvClaim {
-            field: context.name,
-            field_name: context.field_name,
-            is_explicit: explicit.is_some(),
-            env_name: &env_name,
-        })?;
         let lit = syn::LitStr::new(&env_name, proc_macro2::Span::call_site());
         let krate = self.krate;
         if explicit.is_some() {
@@ -311,11 +301,6 @@ impl<'a> FieldMetaBuilder<'a> {
         };
         validate_file_key(context.name, &key_path)?;
         ensure_unique("file", context.name, &key_path, &mut self.file_seen)?;
-        self.projected.check_file(mount_projection::FileClaim {
-            field: context.name,
-            is_explicit: explicit.is_some(),
-            key_path: &key_path,
-        })?;
         let lit = syn::LitStr::new(&key_path, proc_macro2::Span::call_site());
         let krate = self.krate;
         if explicit.is_some() {

@@ -74,6 +74,28 @@ pub(crate) fn parse_field_attrs(
     field: &syn::Field,
     rename_all: ClapRenameAll,
 ) -> Result<FieldAttrs, syn::Error> {
+    parse_field_attrs_inner(field, rename_all, true)
+}
+
+/// Parses field attributes for a schema-only derive.
+///
+/// The schema-only expansion emits no CLI documentation, so it does not
+/// inspect the clap argument declaration. That keeps declarations clap accepts
+/// but the derive cannot resolve statically — such as a constant `id` — from
+/// failing an expansion that never describes them.
+pub(crate) fn parse_schema_field_attrs(
+    field: &syn::Field,
+    rename_all: ClapRenameAll,
+) -> Result<FieldAttrs, syn::Error> {
+    parse_field_attrs_inner(field, rename_all, false)
+}
+
+/// Parses field attributes, optionally reading the clap argument declaration.
+fn parse_field_attrs_inner(
+    field: &syn::Field,
+    rename_all: ClapRenameAll,
+    parse_clap_surface: bool,
+) -> Result<FieldAttrs, syn::Error> {
     let mut out = FieldAttrs {
         cli: if clap_field_is_subcommand(field)? {
             CliFieldMode::SubcommandSelector
@@ -86,7 +108,9 @@ pub(crate) fn parse_field_attrs(
         reject_subcommand_ortho_config_attrs(field)?;
         return Ok(out);
     }
-    out.clap_arg = parse_clap_arg_decl(field, rename_all)?;
+    if parse_clap_surface {
+        out.clap_arg = parse_clap_arg_decl(field, rename_all)?;
+    }
     parse_ortho_config(&field.attrs, |meta| {
         if !apply_field_attr(meta, &mut out)? {
             // Unknown attributes are intentionally discarded to preserve

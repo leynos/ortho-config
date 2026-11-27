@@ -113,8 +113,6 @@ pub(super) struct DocTokens {
     file_prefix_local: TokenStream,
     /// Whether the struct declares an explicit localization base.
     has_explicit_base: bool,
-    /// Explicit clap command name expression.
-    command_name: TokenStream,
 }
 
 impl DocTokens {
@@ -138,7 +136,6 @@ impl DocTokens {
             serde_rename_all: args.serde_rename_all,
             cli_fields: args.cli_fields,
             localization_ids: args.localization_ids,
-            clap_command_name: args.clap_command_name,
             krate,
         })?;
         let subcommands = build_subcommands_metadata(args)?;
@@ -150,14 +147,6 @@ impl DocTokens {
             needs_env_projection,
             needs_file_projection,
         );
-        let command_name = args.clap_command_name.map_or_else(
-            || quote! { None },
-            |name| {
-                let lit = syn::LitStr::new(name, proc_macro2::Span::call_site());
-                quote! { Some(#lit) }
-            },
-        );
-
         Ok(Self {
             krate: krate.clone(),
             app_name_lit: syn::LitStr::new(&app_name_value, proc_macro2::Span::call_site()),
@@ -177,7 +166,6 @@ impl DocTokens {
             env_prefix_local: projection.env_prefix_local(),
             file_prefix_local: projection.file_prefix_local(),
             has_explicit_base: args.struct_attrs.localization_base.is_some(),
-            command_name,
         })
     }
 
@@ -205,6 +193,21 @@ impl DocTokens {
         } = self;
         quote! {
             impl #ident {
+                /// Resolves the namespace the subcommand merge reads.
+                ///
+                /// A payload with a clap command reports that command's name —
+                /// its declared name or clap's package-name default. A
+                /// documentation-only `Args` payload has no command of its own
+                /// and falls back to `name`.
+                #[doc(hidden)]
+                fn __ortho_config_mount_name(name: &str) -> String {
+                    use #krate::docs::MountCommandName as _;
+                    let probe = core::marker::PhantomData::<&Self>;
+                    (&&probe)
+                        .mount_command_name()
+                        .unwrap_or_else(|| name.to_owned())
+                }
+
                 /// Builds documentation metadata for the command mounted at
                 /// `command_path`.
                 ///
@@ -244,7 +247,6 @@ impl DocTokens {
         let Self {
             krate,
             has_explicit_base,
-            command_name,
             ..
         } = self;
         quote! {
@@ -264,8 +266,9 @@ impl DocTokens {
                     if command_path.is_empty() {
                         return Self::get_doc_metadata();
                     }
-                    let subcommand = command_path.last().map(String::as_str);
-                    Self::__ortho_config_doc_metadata(command_path, subcommand)
+                    let label = command_path.last().map_or("", String::as_str);
+                    let mount_name = Self::__ortho_config_mount_name(label);
+                    Self::__ortho_config_doc_metadata(command_path, Some(&mount_name))
                 }
 
                 fn get_doc_metadata_for_subcommand(
@@ -286,17 +289,7 @@ impl DocTokens {
                         path.push(name.to_owned());
                         path
                     };
-                    let mount_name = {
-                        use #krate::docs::MountCommandName as _;
-                        let explicit: Option<&str> = #command_name;
-                        explicit
-                            .map(str::to_owned)
-                            .or_else(|| {
-                                let probe = core::marker::PhantomData::<&Self>;
-                                (&&probe).mount_command_name()
-                            })
-                            .unwrap_or_else(|| name.to_owned())
-                    };
+                    let mount_name = Self::__ortho_config_mount_name(name);
                     let mut metadata = Self::__ortho_config_doc_metadata(
                         &command_path,
                         Some(mount_name.as_str()),

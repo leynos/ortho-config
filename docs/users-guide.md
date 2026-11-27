@@ -2093,13 +2093,14 @@ that declaration, so a positional operand has no long or short flag, keeps
 clap's value name, and carries its one-based positional index. A bare `long` or
 `short` follows the container's `#[command(rename_all = "...")]` casing, while
 a literal spelling or an assigned `id` stays verbatim. A clap boolean flag is a
-switch rather than an optional-value flag. `Option<T>` and `Vec<T>` are never
-required, while a value-taking scalar with no optional wrapper and no clap
-default stays required even when Serde supplies a `#[serde(default)]`. Fields
-without a clap declaration keep the long and short flags generated for the
-OrthoConfig parser. A configuration root that also declares clap arguments has
-two parsers: the metadata describes the declared clap command line, while
-`load_from_iter` continues to accept the generated flag form.
+switch rather than an optional-value flag. By default, `Option<T>` and `Vec<T>`
+are not required, while a value-taking scalar with no optional wrapper and no
+clap default is required even when Serde supplies a `#[serde(default)]`. An
+explicit `required` setting overrides that inference. Fields without a clap
+declaration keep the long and short flags generated for the OrthoConfig parser.
+A configuration root that also declares clap arguments has two parsers: the
+metadata describes the declared clap command line, while `load_from_iter`
+continues to accept the generated flag form.
 
 Subcommand metadata is scoped to the names the subcommand merge reads. A field
 documented through `OrthoConfigSubcommandDocs`, or through a mounted command

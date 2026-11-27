@@ -34,7 +34,7 @@ use derive::generate::localization::{
 };
 use derive::generate::ortho_impl::generate_trait_implementation;
 use derive::generate::required_schema::RequiredSchemaSource;
-use derive::parse::{parse_input, serde_rename_all};
+use derive::parse::{parse_input, parse_schema_input, serde_rename_all};
 
 /// Derive macro for the
 /// [`OrthoConfig`](https://docs.rs/ortho_config/latest/ortho_config/trait.OrthoConfig.html)
@@ -89,7 +89,6 @@ fn expand_ortho_config(derive_input: &DeriveInput) -> syn::Result<proc_macro2::T
     }
     .generate()?;
     let localization_ids = generate_localization_ids(&struct_attrs, &ident, &fields, &field_attrs)?;
-    let clap_command_name = derive::parse::clap_command_name(&derive_input.attrs)?;
     let docs_impl = generate_docs_impl(&DocsArgs {
         ident: &ident,
         fields: &fields,
@@ -98,7 +97,6 @@ fn expand_ortho_config(derive_input: &DeriveInput) -> syn::Result<proc_macro2::T
         serde_rename_all,
         cli_fields: &components.cli_field_metadata,
         localization_ids: &localization_ids,
-        clap_command_name: clap_command_name.as_deref(),
         krate: &krate,
     })?;
     emit_identifier_artefact(&localization_ids, &ident)?;
@@ -141,7 +139,7 @@ pub fn derive_required_config_schema(input_tokens: TokenStream) -> TokenStream {
 fn expand_required_config_schema(
     derive_input: &DeriveInput,
 ) -> syn::Result<proc_macro2::TokenStream> {
-    let (ident, fields, struct_attrs, field_attrs) = parse_input(derive_input)?;
+    let (ident, fields, struct_attrs, field_attrs) = parse_schema_input(derive_input)?;
     let krate = derive::crate_path::resolve(struct_attrs.crate_path.as_ref());
     RequiredSchemaSource {
         ident: &ident,

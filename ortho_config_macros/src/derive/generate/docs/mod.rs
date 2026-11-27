@@ -51,12 +51,6 @@ pub(crate) struct DocsArgs<'a> {
     /// mounted command path. Fields absent from this model retain docs-only
     /// dotted defaults.
     pub localization_ids: &'a LocalizationIds,
-    /// Explicit clap command name written on the struct, when present.
-    ///
-    /// The subcommand merge derives its environment and file namespace from
-    /// the payload's `CommandFactory` command name, so subcommand metadata
-    /// uses this declaration where the author supplied one.
-    pub clap_command_name: Option<&'a str>,
     /// Resolved crate path for generated code references.
     pub krate: &'a TokenStream,
 }

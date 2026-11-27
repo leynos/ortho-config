@@ -6,88 +6,19 @@
 //! that disagreed with the struct's own `ABOUT_ID`.
 
 use anyhow::{Result, anyhow, ensure};
-use clap::Parser;
+use ortho_config::OrthoConfigLocalization;
 use ortho_config::docs::{
     DocMetadata, FieldMetadata, OrthoConfigDocs as _, OrthoConfigSubcommandDocs as _,
     PositionalMetadata,
 };
-use ortho_config::{OrthoConfig, OrthoConfigLocalization};
-use serde::{Deserialize, Serialize};
 
-/// Top-level commands exercised by the regression.
-#[derive(Debug, clap::Subcommand, ortho_config::OrthoConfigSubcommandDocs)]
-enum Commands {
-    /// Validates a proposal.
-    Validate(ValidateArgs),
-}
+#[path = "support/docs_ir_clap_surface_fixtures.rs"]
+mod fixtures;
 
-/// A payload that relies on clap's default command name.
-#[derive(Debug, clap::Subcommand, ortho_config::OrthoConfigSubcommandDocs)]
-enum UnnamedCommands {
-    /// Runs without a declared command name.
-    Run(UnnamedArgs),
-}
-
-/// Arguments whose clap command name defaults to the package name.
-#[derive(Debug, Clone, Default, Parser, Serialize, Deserialize, OrthoConfig)]
-#[ortho_config(prefix = "SPLITTERS")]
-struct UnnamedArgs {
-    /// Token read from the mounted namespace.
-    #[arg(long)]
-    token: Option<String>,
-}
-
-/// Arguments that clap parses and the subcommand merge reads.
-#[derive(Debug, Clone, Default, Parser, Serialize, Deserialize, OrthoConfig)]
-#[command(name = "validate")]
-#[ortho_config(prefix = "SPLITTERS", localization_base = "splitters.cli.validate")]
-struct ValidateArgs {
-    /// Proposal identifier.
-    #[arg(value_name = "PROPOSAL")]
-    proposal: String,
-    /// Check command.
-    #[arg(long, value_name = "COMMAND")]
-    check: Option<String>,
-}
-
-/// A boolean flag that clap parses as a bare switch.
-#[derive(Debug, Clone, Default, Parser, Serialize, Deserialize, OrthoConfig)]
-#[ortho_config(prefix = "SPLITTERS")]
-struct PurgeArgs {
-    /// Skip the confirmation prompt.
-    #[arg(long)]
-    force: bool,
-}
-
-/// Arguments whose container casing changes the derived long flag.
-#[derive(Debug, Clone, Default, Parser, Serialize, Deserialize, OrthoConfig)]
-#[command(rename_all = "snake_case")]
-#[ortho_config(prefix = "SPLITTERS")]
-struct SnakeCaseArgs {
-    /// Output file path.
-    #[arg(long)]
-    output_file: String,
-}
-
-/// A clap-required argument that also carries a Serde default.
-#[derive(Debug, Clone, Default, Parser, Serialize, Deserialize, OrthoConfig)]
-#[ortho_config(prefix = "SPLITTERS")]
-struct HostArgs {
-    /// Host to contact.
-    #[arg(long)]
-    #[serde(default)]
-    host: String,
-}
-
-/// A skipped CLI field whose configuration default keeps it non-required.
-#[derive(Debug, Clone, Default, Parser, Serialize, Deserialize, OrthoConfig)]
-#[ortho_config(prefix = "SPLITTERS")]
-struct SkippedArgs {
-    /// Internal value supplied by configuration.
-    #[arg(skip)]
-    #[ortho_config(default = String::from("fallback"))]
-    internal: String,
-}
+use fixtures::{
+    Commands, HostArgs, PurgeArgs, SkippedArgs, SnakeCaseArgs, UnnamedArgs, UnnamedCommands,
+    ValidateArgs,
+};
 
 /// Returns one field's metadata by name.
 fn field<'a>(metadata: &'a DocMetadata, name: &str) -> Result<&'a FieldMetadata> {
@@ -309,6 +240,46 @@ fn a_subcommand_path_projects_environment_and_file_metadata() -> Result<()> {
             .map(|file| file.key_path.as_str())
             == Some("cmds.validate.check"),
         "a mounted path should project the file key"
+    );
+    Ok(())
+}
+
+#[test]
+fn a_path_mount_keeps_the_payload_namespace() -> Result<()> {
+    let command_path = [String::from("root"), String::from("shown")];
+    let metadata = ValidateArgs::get_doc_metadata_for_path(&command_path);
+
+    ensure!(
+        metadata.about_id == "root-shown-about",
+        "localization identifiers should follow the supplied path, got {}",
+        metadata.about_id
+    );
+    ensure!(
+        field(&metadata, "proposal")?
+            .env
+            .as_ref()
+            .map(|env| env.var_name.as_str())
+            == Some("SPLITTERS_CMDS_VALIDATE_PROPOSAL"),
+        "the merge namespace should follow the payload command name"
+    );
+    ensure!(
+        field(&metadata, "check")?
+            .file
+            .as_ref()
+            .map(|file| file.key_path.as_str())
+            == Some("cmds.validate.check"),
+        "the file key should follow the payload command name"
+    );
+
+    let unnamed_path = [String::from("root"), String::from("shown")];
+    let unnamed = UnnamedArgs::get_doc_metadata_for_path(&unnamed_path);
+    ensure!(
+        field(&unnamed, "token")?
+            .env
+            .as_ref()
+            .map(|env| env.var_name.as_str())
+            == Some("SPLITTERS_CMDS_ORTHO_CONFIG_TOKEN"),
+        "a Parser payload should project its package-name command at any mount"
     );
     Ok(())
 }
