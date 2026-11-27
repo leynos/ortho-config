@@ -15,6 +15,7 @@ use syn::{Attribute, Expr, LitStr};
 mod behaviour_attrs;
 mod clap_arg;
 mod clap_attrs;
+mod clap_command;
 mod clap_defaults;
 mod clap_rename;
 mod discovery_attrs;
@@ -38,9 +39,9 @@ pub(crate) use behaviour_attrs::parse_behaviour_meta;
 pub(crate) use clap_arg::{ClapArgDecl, ClapPositionalDecl, parse_clap_arg_decl};
 pub(crate) use clap_attrs::{
     clap_arg_id_from_attribute, clap_arg_id_or_field_name, clap_field_env, clap_field_is_flattened,
-    clap_field_is_subcommand, clap_rename_all, clap_variant_name,
-    reject_subcommand_ortho_config_attrs,
+    clap_field_is_subcommand, reject_subcommand_ortho_config_attrs,
 };
+pub(crate) use clap_command::{clap_rename_all, clap_variant_name};
 pub(crate) use clap_defaults::{ClapDefaultValue, ClapInferredDefault, clap_default_value};
 pub(crate) use clap_rename::ClapRenameAll;
 pub(crate) use discovery_attrs::{DiscoveryAttrs, MergeStrategy, parse_prefix};

@@ -75,6 +75,14 @@ impl ClapArgBuilder {
         !self.seen || self.unparsed || self.flatten || self.subcommand
     }
 
+    /// Records that a clap argument attribute was present.
+    ///
+    /// An empty `#[arg()]` has no keys to consume, but it still declares the
+    /// argument; clap treats it as positional.
+    pub(super) const fn mark_present(&mut self) {
+        self.seen = true;
+    }
+
     /// Records one nested key from an `arg` or `clap` attribute.
     pub(super) fn consume(&mut self, meta: &ParseNestedMeta) -> syn::Result<()> {
         self.seen = true;
@@ -244,9 +252,11 @@ impl ClapArgBuilder {
     /// Records whether an explicit action consumes values.
     fn set_action(&mut self, meta: &ParseNestedMeta) -> syn::Result<()> {
         let Some(action) = argument(meta)? else {
+            self.unparsed = true;
             return Ok(());
         };
         let Some(name) = action_name(&action) else {
+            self.unparsed = true;
             return Ok(());
         };
         // clap keeps only the final action, so a later declaration replaces
@@ -276,7 +286,7 @@ impl ClapArgBuilder {
                 self.action_takes_value = Some(true);
                 self.action_appends = true;
             }
-            _ => {}
+            _ => self.unparsed = true,
         }
         Ok(())
     }

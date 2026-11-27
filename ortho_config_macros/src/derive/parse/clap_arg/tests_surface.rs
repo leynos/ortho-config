@@ -4,6 +4,41 @@ use super::{declaration, declaration_with};
 use crate::derive::parse::ClapRenameAll;
 
 #[test]
+fn empty_clap_attributes_declare_a_positional() {
+    for tokens in [
+        quote::quote! { #[arg()] input: String },
+        quote::quote! { #[clap()] input: String },
+    ] {
+        let field = super::parse_field(&tokens);
+        let decl = super::parse_clap_arg_decl(&field, ClapRenameAll::default())
+            .expect("the declaration should parse")
+            .expect("an empty attribute still declares the argument");
+        assert!(
+            decl.long.is_none() && decl.short.is_none(),
+            "an empty attribute leaves the argument positional"
+        );
+        assert!(
+            decl.positional.is_some(),
+            "an empty attribute should carry positional metadata"
+        );
+    }
+}
+
+#[test]
+fn an_unreadable_id_falls_back_to_the_generated_surface() {
+    let field = super::parse_field(&quote::quote! {
+        #[arg(id = ARG_ID, long)]
+        host: String
+    });
+    assert!(
+        super::parse_clap_arg_decl(&field, ClapRenameAll::default())
+            .expect("the declaration should parse")
+            .is_none(),
+        "an unreadable id should leave the declaration unmodelled"
+    );
+}
+
+#[test]
 fn container_casing_rewrites_only_derived_spellings() {
     let cased = declaration_with(
         &quote::quote! {

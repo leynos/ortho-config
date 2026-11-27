@@ -17,7 +17,10 @@ mod tests;
 mod value_syntax;
 
 use super::ClapRenameAll;
-use super::clap_attrs::{clap_field_is_flattened, clap_field_is_subcommand, is_clap_attribute};
+use super::clap_attrs::{
+    clap_field_is_flattened, clap_field_is_subcommand, has_unreadable_clap_arg_id,
+    is_clap_attribute,
+};
 use builder::ClapArgBuilder;
 
 /// One clap argument declaration as written on a source field.
@@ -76,12 +79,18 @@ pub(crate) fn parse_clap_arg_decl(
     if clap_field_is_subcommand(field)? || clap_field_is_flattened(field)? {
         return Ok(None);
     }
+    if has_unreadable_clap_arg_id(field)? {
+        return Ok(None);
+    }
 
     let mut builder = ClapArgBuilder::default();
     for attr in field.attrs.iter().filter(|attr| is_clap_attribute(attr)) {
         if !matches!(attr.meta, syn::Meta::List(_)) {
             continue;
         }
+        // An empty `#[arg()]` still declares the argument, and clap treats it
+        // as positional; marking presence before the walk keeps that case.
+        builder.mark_present();
         attr.parse_nested_meta(|meta| builder.consume(&meta))?;
     }
 

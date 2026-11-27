@@ -139,6 +139,16 @@ fn explicit_id_controls_default_spellings() {
         Some("preamble"),
         "the parenthesised id form should assign the same name"
     );
+
+    let trailing_comma = declaration(&quote::quote! {
+        #[arg(id("preamble",), long)]
+        phrase: String
+    });
+    assert_eq!(
+        trailing_comma.long.as_deref(),
+        Some("preamble"),
+        "a trailing comma in the parenthesised id form should be accepted"
+    );
 }
 
 #[test]
