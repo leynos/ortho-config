@@ -362,11 +362,18 @@ lint-whitaker-windows: check-whitaker-windows-target ## Score the Windows-only c
 # in `rust-toolchain.toml`. Split into an install step and a check step for the
 # same reason `install-build-tools` and `check-build-tools` are split: a gate
 # reports a missing prerequisite instead of reaching the network on its own.
+#
+# `WHITAKER` is passed so the installer is the one staged beside that launcher,
+# which is the installation the pass above will use. Reading `PATH` instead
+# would survey whatever `whitaker-installer` resolves to, which a launcher
+# override need not share.
 install-whitaker-windows-target: ## Install the Windows rust-std for Whitaker's toolchain
-	$(PYTHON) scripts/whitaker_windows_target.py install --target $(WINDOWS_TARGET)
+	$(PYTHON) scripts/whitaker_windows_target.py install \
+		--target $(WINDOWS_TARGET) --launcher $(call shell_quote,$(WHITAKER))
 
 check-whitaker-windows-target: ## Verify Whitaker's toolchain can build the Windows target
-	$(PYTHON) scripts/whitaker_windows_target.py check --target $(WINDOWS_TARGET)
+	$(PYTHON) scripts/whitaker_windows_target.py check \
+		--target $(WINDOWS_TARGET) --launcher $(call shell_quote,$(WHITAKER))
 
 # The gate is only worth its runtime if it can still fail. This runs the same
 # command against a two-function fixture: the in-limit example must pass, and

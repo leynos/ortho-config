@@ -37,6 +37,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import pathlib
+import shlex
 import subprocess  # noqa: S404 - the installer and rustup are the subject.
 import typing as typ
 
@@ -44,9 +47,12 @@ import typing as typ
 #: The installer writes its report to standard error, so both streams are read.
 TOOLCHAIN_PREFIX: typ.Final[str] = "Toolchain: "
 
-#: The default installer executable. The `whitaker` wrapper resolves the same
-#: name beside itself or on `PATH`, so a machine that can run the suite can
-#: run this.
+#: The default launcher. Its directory is where the wrapper looks first for the
+#: installer, so it decides which installation this helper surveys.
+DEFAULT_LAUNCHER: typ.Final[str] = "whitaker"
+
+#: The default installer executable, used when none is staged beside the
+#: launcher. It is on `PATH` on a machine where the wrapper works.
 DEFAULT_INSTALLER: typ.Final[str] = "whitaker-installer"
 
 #: The default target triple. Named here as well as in the Makefile because the
@@ -64,6 +70,78 @@ INSTALL_DEADLINE_SECONDS: typ.Final[int] = 1800
 
 class ToolchainLookupError(RuntimeError):
     """Raised when the suite's toolchain cannot be determined."""
+
+
+def split_launcher(launcher: str) -> list[str]:
+    """Return the argv for a launcher command, without running a shell.
+
+    `WHITAKER` may name one executable or a command with arguments, such as
+    `env whitaker`, so the first word is what names the directory to search.
+
+    Parameters
+    ----------
+    launcher : str
+        The launcher as the caller configured it.
+
+    Returns
+    -------
+    list of str
+        The command and its leading arguments.
+
+    Examples
+    --------
+    >>> split_launcher("whitaker")
+    ['whitaker']
+    >>> split_launcher("env whitaker")
+    ['env', 'whitaker']
+    """
+    return shlex.split(launcher, posix=os.name != "nt")
+
+
+def installer_beside(launcher: str) -> pathlib.Path | None:
+    """Return the installer staged beside *launcher*, when one is there.
+
+    The `whitaker` wrapper resolves `whitaker-installer` from its own directory
+    first and from `PATH` second, so searching the same way is what keeps this
+    helper surveying the installation the launcher actually runs. Naming the
+    `PATH` installer unconditionally would check, and provision, a different
+    installation from the one the gate lints with.
+
+    Parameters
+    ----------
+    launcher : str
+        The launcher as the caller configured it.
+
+    Returns
+    -------
+    pathlib.Path or None
+        The installer beside the launcher, or ``None`` when there is none.
+    """
+    suffix = ".exe" if os.name == "nt" else ""
+    candidate = pathlib.Path(split_launcher(launcher)[0]).with_name(
+        f"{DEFAULT_INSTALLER}{suffix}"
+    )
+    if candidate.is_file() and os.access(candidate, os.X_OK):
+        return candidate
+    return None
+
+
+def default_installer(launcher: str) -> str:
+    """Return the installer to query for *launcher*.
+
+    Parameters
+    ----------
+    launcher : str
+        The launcher as the caller configured it.
+
+    Returns
+    -------
+    str
+        The installer beside the launcher when there is one, and the bare name
+        otherwise, which `PATH` then resolves.
+    """
+    beside = installer_beside(launcher)
+    return str(beside) if beside else DEFAULT_INSTALLER
 
 
 def parse_toolchain(dry_run_output: str) -> str:
@@ -410,7 +488,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="check that the target is installed, or install it",
     )
     parser.add_argument("--target", default=DEFAULT_TARGET)
-    parser.add_argument("--installer", default=DEFAULT_INSTALLER)
+    parser.add_argument("--launcher", default=DEFAULT_LAUNCHER)
+    parser.add_argument(
+        "--installer",
+        default=None,
+        help="installer to query; defaults to the one staged beside the launcher",
+    )
     return parser
 
 
@@ -429,8 +512,9 @@ def main(argv: typ.Sequence[str] | None = None) -> int:
         the suite's toolchain cannot be determined.
     """
     arguments = build_parser().parse_args(argv)
+    installer = arguments.installer or default_installer(arguments.launcher)
     try:
-        satisfied, missing, absent = survey(arguments.installer, arguments.target)
+        satisfied, missing, absent = survey(installer, arguments.target)
     except ToolchainLookupError as error:
         print(f"whitaker windows target: {error}")
         return 1
@@ -440,11 +524,18 @@ def main(argv: typ.Sequence[str] | None = None) -> int:
             "not installed; skipping it",
         )
     if arguments.verb == "install":
-        for channel in missing:
-            install_target(channel, arguments.target)
-            print(
-                f"whitaker windows target: {arguments.target} installed for {channel}"
-            )
+        # A failure stops the run but keeps whatever was already installed, so
+        # a retry surveys the completed ones rather than starting over.
+        try:
+            for channel in missing:
+                install_target(channel, arguments.target)
+                print(
+                    f"whitaker windows target: {arguments.target} installed for "
+                    f"{channel}"
+                )
+        except ToolchainLookupError as error:
+            print(f"whitaker windows target: {error}")
+            return 1
         if not missing:
             print(
                 f"whitaker windows target: {arguments.target} is installed for "

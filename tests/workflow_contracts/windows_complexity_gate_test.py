@@ -117,8 +117,44 @@ def gate_recipe(makefile: str) -> list[str]:
     return recipe_lines(makefile, LINT_TARGET)
 
 
+def is_disabled(step: dict[str, object]) -> bool:
+    """Report whether a step can never run.
+
+    A step carrying ``if: false`` is accepted by ``workflow_reading`` like any
+    other, so a job could satisfy every assertion below while running no gate
+    at all. Only the literal forms GitHub treats as a constant false are
+    matched here; anything else is a real condition and is left alone.
+
+    Parameters
+    ----------
+    step : dict
+        A parsed workflow step.
+
+    Returns
+    -------
+    bool
+        Whether the step is unconditionally skipped.
+
+    Examples
+    --------
+    >>> is_disabled({"run": "make lint"})
+    False
+    >>> is_disabled({"run": "make lint", "if": False})
+    True
+    >>> is_disabled({"run": "make lint", "if": "${{ false }}"})
+    True
+    >>> is_disabled({"run": "make lint", "if": "${{ matrix.platform == 'linux' }}"})
+    False
+    """
+    condition = step.get("if")
+    return condition is False or str(condition).strip().lower() in {
+        "false",
+        "${{ false }}",
+    }
+
+
 def _run_steps(job: dict[str, object]) -> list[str]:
-    """Return one job's `run:` bodies.
+    """Return the `run:` bodies of one job's enabled steps.
 
     Parameters
     ----------
@@ -133,7 +169,29 @@ def _run_steps(job: dict[str, object]) -> list[str]:
     return [
         str(step["run"])
         for step in (job.get("steps") or [])
-        if isinstance(step, dict) and "run" in step
+        if isinstance(step, dict) and "run" in step and not is_disabled(step)
+    ]
+
+
+def _enabled_installs(job: dict[str, object]) -> list[dict[str, object]]:
+    """Return one job's `Install Whitaker` steps that can run.
+
+    Parameters
+    ----------
+    job : dict
+        A parsed workflow job.
+
+    Returns
+    -------
+    list of dict
+        The enabled install steps, in declaration order.
+    """
+    return [
+        step
+        for step in (job.get("steps") or [])
+        if isinstance(step, dict)
+        and step.get("name") == "Install Whitaker"
+        and not is_disabled(step)
     ]
 
 
@@ -203,17 +261,20 @@ def test_the_gate_depends_on_its_prerequisite(makefile: str) -> None:
 def test_the_prerequisite_and_install_targets_share_the_variable(
     makefile: str,
 ) -> None:
-    """Both provisioning targets pass the one triple variable.
+    """Both provisioning targets pass the one triple and the one launcher.
 
-    A literal here would provision a different target from the one the pass
-    checks, and the pass would then fail for want of a component nobody
-    installed.
+    A literal triple here would provision a different target from the one the
+    pass checks, and the pass would then fail for want of a component nobody
+    installed. The launcher decides which installer is surveyed, so passing it
+    is what keeps a `WHITAKER=` override provisioning the installation the
+    pass will actually use.
     """
     for target in (PREREQUISITE_TARGET, INSTALL_TARGET):
         lines = recipe_lines(makefile, target)
         command = " ".join(lines)
         assert command, f"{target} has no recipe"
         assert "--target $(WINDOWS_TARGET)" in command, command
+        assert "--launcher" in command and "$(WHITAKER)" in command, command
 
 
 def test_the_threshold_and_macro_handling_are_shared_not_repeated(
@@ -345,8 +406,6 @@ def test_the_gate_job_installs_whitaker_itself(
     ]
     assert installing, f"no job runs `make {LINT_TARGET}`"
     for job_name in installing:
-        steps = jobs[job_name].get("steps") or []
-        assert any(
-            isinstance(step, dict) and step.get("name") == "Install Whitaker"
-            for step in steps
-        ), f"{job_name} runs `make {LINT_TARGET}` without installing Whitaker"
+        assert _enabled_installs(jobs[job_name]), (
+            f"{job_name} runs `make {LINT_TARGET}` without an install that can run"
+        )

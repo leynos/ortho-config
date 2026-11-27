@@ -163,6 +163,15 @@ records the fixture's deliberate non-membership.
   different toolchain from the one the installer would build next; channels
   whose toolchain `rustup` does not already have are reported and skipped,
   since installing one would download a compiler.
+- 2026-11-27: Two further review rounds added four more findings, all
+  accepted. A launcher override may name a command with arguments, so the probe
+  splits it with `shlex` without a shell. Toolchains are resolved to the
+  identities `rustup` reported rather than to a bare channel, which would let
+  rustup infer a host. The probe drops an inherited `CARGO_ENCODED_RUSTFLAGS`,
+  and both helpers report a missing tool by name instead of raising. The
+  provisioning targets pass the selected launcher, so the installer surveyed is
+  the one staged beside it, and the CI contract now rejects a step that can
+  never run.
 - 2026-11-27: A second CodeRabbit review cleared both earlier findings and
   raised one more, accepted: the provisioning helper compared a channel against
   `rustup toolchain list` after stripping one of five hard-coded host suffixes,
