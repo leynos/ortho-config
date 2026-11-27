@@ -28,10 +28,15 @@ import typing as typ
 
 import pytest
 from makefile_support import recipe_lines
+from workflow_legs import legs, step_runs_on
 from workflow_reading import read_workflows, workflow_jobs
 
 REPOSITORY_ROOT: typ.Final[pathlib.Path] = pathlib.Path(__file__).resolve().parents[2]
 WORKFLOWS: typ.Final[pathlib.Path] = REPOSITORY_ROOT / ".github" / "workflows"
+
+#: Label for the expanded legs. `workflow_legs.legs` uses it only to name a
+#: leg, and the job list this contract reads spans every workflow file.
+WORKFLOW_LABEL: typ.Final[str] = "workflows"
 MAKEFILE_PATH: typ.Final[pathlib.Path] = REPOSITORY_ROOT / "Makefile"
 DYLINT_CONFIGURATION: typ.Final[pathlib.Path] = REPOSITORY_ROOT / "dylint.toml"
 PROBE_DIRECTORY: typ.Final[pathlib.Path] = (
@@ -202,8 +207,8 @@ def _run_steps(job: dict[str, object]) -> list[str]:
     ]
 
 
-def _enabled_installs(job: dict[str, object]) -> list[dict[str, object]]:
-    """Return one job's `Install Whitaker` steps that can run.
+def _step_dicts(job: dict[str, object]) -> list[dict[str, object]]:
+    """Return one job's steps that are mappings.
 
     Parameters
     ----------
@@ -213,15 +218,40 @@ def _enabled_installs(job: dict[str, object]) -> list[dict[str, object]]:
     Returns
     -------
     list of dict
-        The enabled install steps, in declaration order.
+        The steps, in declaration order.
     """
-    return [
-        step
-        for step in (job.get("steps") or [])
-        if isinstance(step, dict)
-        and step.get("name") == "Install Whitaker"
-        and not is_disabled(step)
-    ]
+    return [step for step in (job.get("steps") or []) if isinstance(step, dict)]
+
+
+def _runs_on_a_leg(
+    job_name: str, job: dict[str, object], step: dict[str, object]
+) -> bool:
+    """Report whether *step* can run on at least one leg of its job.
+
+    `is_disabled` recognises only constant conditions. A condition that tests
+    the matrix, such as `matrix.platform == 'windows'`, excludes the step from
+    some legs and keeps it on others, and which is which depends on the job's
+    matrix. Evaluating it per leg is what stops a gate job from counting an
+    install that only a leg it never reaches would run.
+
+    Parameters
+    ----------
+    job_name : str
+        The job's key, for the leg label.
+    job : dict
+        The parsed job.
+    step : dict
+        The step to evaluate.
+
+    Returns
+    -------
+    bool
+        Whether the step runs on at least one leg.
+    """
+    return any(
+        step_runs_on(step, leg.cell)
+        for leg in legs(WORKFLOW_LABEL, job_name, job)
+    )
 
 
 def test_the_makefile_states_the_windows_target(makefile: str) -> None:
@@ -422,21 +452,32 @@ def test_the_host_pass_is_still_the_one_lint_runs(jobs: dict[str, dict[str, obje
 def test_the_gate_job_installs_whitaker_itself(
     jobs: dict[str, dict[str, object]],
 ) -> None:
-    """The job that runs the pass also installs the suite.
+    """The job that runs the pass also installs the suite, on the same leg.
 
     `whitaker_install_test.py` holds every install step to the pinned action
     on a Linux runner, and `sccache_wiring_test.py` holds the caching wiring.
-    What neither can see is *which* job owns the install: a job that runs the
-    pass without installing the suite borrows another job's, and would fail
-    only when that job stopped running.
+    What neither can see is *which* job, and which leg of it, owns the
+    install: a job that runs the pass without installing the suite borrows
+    another job's, and one whose install is guarded to a leg the pass never
+    reaches has no suite at all. Both would fail only when that job stopped
+    running.
     """
     installing = [
         job_name
         for job_name, job in jobs.items()
-        if f"make {LINT_TARGET}" in " ".join(_run_steps(job))
+        if any(
+            f"make {LINT_TARGET}" in str(step.get("run", ""))
+            and not is_disabled(step)
+            and _runs_on_a_leg(job_name, job, step)
+            for step in _step_dicts(job)
+        )
     ]
     assert installing, f"no job runs `make {LINT_TARGET}`"
     for job_name in installing:
-        assert _enabled_installs(jobs[job_name]), (
-            f"{job_name} runs `make {LINT_TARGET}` without an install that can run"
-        )
+        job = jobs[job_name]
+        assert any(
+            step.get("name") == "Install Whitaker"
+            and not is_disabled(step)
+            and _runs_on_a_leg(job_name, job, step)
+            for step in _step_dicts(job)
+        ), f"{job_name} runs `make {LINT_TARGET}` without an install that can run"

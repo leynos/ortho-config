@@ -4080,11 +4080,11 @@ as `windows_normalized_key` therefore had no complexity gate at all
 
 `make lint-whitaker-windows` restores that coverage without a Windows Whitaker
 lane, which the issue records as not required. It runs the same suite at the
-same target Clippy's Windows leg builds, from a Linux runner:
+same target Clippy's Windows leg builds, from a Linux runner. Its recipe is:
 
-```sh
+```make
 RUSTFLAGS="$(STRICT_RUSTFLAGS)" $(WHITAKER) --all -- \
-  --all-targets --all-features --target $(WINDOWS_TARGET)
+	--all-targets --all-features --target $(WINDOWS_TARGET)
 ```
 
 Three properties are deliberate:
