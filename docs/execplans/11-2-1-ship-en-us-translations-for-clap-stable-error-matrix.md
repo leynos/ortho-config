@@ -1862,19 +1862,20 @@ stopping and reporting.
       (118 files unchanged), `make markdownlint`, `make lint` and the full
       `clap_error_coverage` target (110 tests) pass. Two blockers remain, both
       outside this branch's authority:
-      - **`Publish dry run` (#414).** The step fails with `E0432: unresolved
-        import ortho_config_macros::RequiredConfigSchema`, the published-macro
-        release-ordering class #414 documents. The base already contains that
-        import. Two pre-replay dispatch runs did pass both publish steps —
-        43796595772 on `6d421d5f` and 43815862535 on `18c53fdd` — so the step
-        works when the released macro crate matches the tree, and fails once
-        the tree needs a macro that has not been published. Those heads diverge
-        from this candidate and certify nothing about it; what they establish is
-        that the failure is a release-ordering fact about `RequiredConfigSchema`
-        rather than a defect in this diff. On the current base, pull-request
-        runs skip both publish steps and both dispatch publish dry runs fail.
-        Resolving it needs a published `ortho_config_macros` or a
-        maintainer-approved remedy.
+      - **`Publish dry run`.** The step packages `ortho_config` and verifies the
+        packaged sources, which resolve `ortho_config_macros` from the registry
+        at the declared `0.11.0` requirement. The workspace has not been
+        version-bumped since the 0.11.0 release (`239f53cd`, 2026-11-15), and
+        main's #589 added `#[proc_macro_derive(RequiredConfigSchema, …)]`
+        afterwards, so the verification compiles against a published macro
+        crate that cannot contain it: `error[E0432]: unresolved import
+        ortho_config_macros::RequiredConfigSchema`. This branch changes nothing
+        under `ortho_config_macros/`, and the two pre-replay dispatches that
+        passed the step (43796595772 on `6d421d5f`, 43815862535 on `18c53fdd`)
+        did so because those trees still matched the published crates. The
+        check is therefore red for every branch until the next release bumps
+        the version and publishes both crates in lockstep; making it a
+        per-pull-request signal again is recorded as issue #761.
       - **Standalone `make test` and `make boundary` locally.** `make test`
         fails only at `cargo-orthohelp --test compile_time`'s own 900 s child
         deadline, a file this branch does not touch; `make boundary` fails only
@@ -1894,16 +1895,19 @@ stopping and reporting.
       implementation defect remains on `d1336ba8`. What stops equilibrium is
       outside this branch's authority:
       1. **Publication.** `Publish dry run` fails with `E0432` for
-         `ortho_config_macros::RequiredConfigSchema`, the #414 release-ordering
-         class. Owner: the release maintainer, who must publish the macro crate
-         or approve a remedy; both dispatch publish dry runs then need
-         verifying.
+         `RequiredConfigSchema`, because the packaged 0.11.0 crate is verified
+         against the published 0.11.0 macro crate and the tree has carried an
+         unpublished additive macro since #589. Owner: the release process — a
+         version bump publishes both crates in lockstep — and, separately,
+         issue #761 for making the check meaningful between releases.
       2. **A quieter host.** Standalone `make test` and `make boundary` need
          nested Cargo builds to finish inside main's own 900 s and 440 s
          deadlines. Compile admission has held all four slots with queues of
-         100-640 for two days, and every local failure is a deadline. Owner:
-         whoever can run the gates when the host is idle, or an operator
-         decision to raise those main-owned budgets.
+         100-640 for two days, and every local failure is a deadline. The
+         structural remedy — warming every test-time nested build before the
+         run and keeping those fixtures in the workspace graph — is recorded as
+         issues #759 and #760; until then this needs a host whose admission is
+         not saturated.
       This item stays unchecked until one of those conditions changes; the
       logs under `/tmp` are the evidence.
 
