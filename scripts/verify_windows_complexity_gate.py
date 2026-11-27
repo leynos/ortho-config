@@ -118,6 +118,36 @@ def configured_limit(configuration: str) -> int:
     return int(limits[0])
 
 
+def unquote(word: str) -> str:
+    """Remove one pair of enclosing quotes from a word.
+
+    Non-POSIX splitting keeps the quotes that delimit a Windows path, and
+    `subprocess` would look for a file whose name contains them. Backslashes
+    are untouched, which is the reason the non-POSIX mode is used at all.
+
+    Parameters
+    ----------
+    word : str
+        One word, possibly quoted.
+
+    Returns
+    -------
+    str
+        The word without its enclosing quotes.
+
+    Examples
+    --------
+    >>> unquote('"C:\\\\Program Files\\\\Whitaker\\\\whitaker.exe"')
+    'C:\\\\Program Files\\\\Whitaker\\\\whitaker.exe'
+    >>> unquote("whitaker")
+    'whitaker'
+    """
+    for quote in ('"', "'"):
+        if len(word) >= 2 and word.startswith(quote) and word.endswith(quote):
+            return word[1:-1]
+    return word
+
+
 def split_launcher(launcher: str) -> list[str]:
     """Return the argv for a launcher command, without running a shell.
 
@@ -143,7 +173,7 @@ def split_launcher(launcher: str) -> list[str]:
     >>> split_launcher("env whitaker")
     ['env', 'whitaker']
     """
-    return shlex.split(launcher, posix=os.name != "nt")
+    return [unquote(word) for word in shlex.split(launcher, posix=os.name != "nt")]
 
 
 def gate_command(*, whitaker: str, target: str, over_limit: bool) -> list[str]:

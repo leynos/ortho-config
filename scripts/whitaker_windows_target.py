@@ -73,11 +73,43 @@ class ToolchainLookupError(RuntimeError):
     """Raised when the suite's toolchain cannot be determined."""
 
 
+def unquote(word: str) -> str:
+    """Remove one pair of enclosing quotes from a word.
+
+    Non-POSIX splitting keeps the quotes that delimit a Windows path, and
+    `shutil.which` cannot resolve a path that still carries them. Backslashes
+    are untouched, which is the reason the non-POSIX mode is used at all.
+
+    Parameters
+    ----------
+    word : str
+        One word, possibly quoted.
+
+    Returns
+    -------
+    str
+        The word without its enclosing quotes.
+
+    Examples
+    --------
+    >>> unquote('"C:\\\\Program Files\\\\Whitaker\\\\whitaker.exe"')
+    'C:\\\\Program Files\\\\Whitaker\\\\whitaker.exe'
+    >>> unquote("whitaker")
+    'whitaker'
+    """
+    for quote in ('"', "'"):
+        if len(word) >= 2 and word.startswith(quote) and word.endswith(quote):
+            return word[1:-1]
+    return word
+
+
 def split_launcher(launcher: str) -> list[str]:
     """Return the argv for a launcher command, without running a shell.
 
     `WHITAKER` may name one executable or a command with arguments, such as
     `env whitaker`, so the first word is what names the directory to search.
+    Splitting is POSIX on POSIX and keeps backslashes on Windows, where the
+    enclosing quotes are then removed by `unquote`.
 
     Parameters
     ----------
@@ -96,7 +128,7 @@ def split_launcher(launcher: str) -> list[str]:
     >>> split_launcher("env whitaker")
     ['env', 'whitaker']
     """
-    return shlex.split(launcher, posix=os.name != "nt")
+    return [unquote(word) for word in shlex.split(launcher, posix=os.name != "nt")]
 
 
 def launcher_program(launcher: str) -> pathlib.Path | None:
