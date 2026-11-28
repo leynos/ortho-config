@@ -453,23 +453,73 @@ kept.
 
 The trybuild binaries and the binaries that drive a nested `cargo` build used
 to pay for a cold dependency build inside their own timed bodies, so a cold
-runner failed a sound assertion on its timeout. The `nested-cargo-builds` setup
-script in `.config/nextest.toml` now runs those binaries once, through
-`cargo test --locked --all-features --no-fail-fast`, before nextest starts any
-test whose binary the `[[profile.default.scripts]]` filter names. The script is
-selected by that filter, so it runs only when such a binary is in the run. It
-uses `--all-features`, which matches the coverage run. A failing test in the
-warm-up makes the script exit non-zero, and nextest then runs none of the
-selected tests: the run fails with that test's own output, and `--no-fail-fast`
-makes the warm-up run every binary first so the failure list is complete. The
-script's allowance is 900 s (three warning periods of 300 s). It counts against
-the default profile's 2,300 s `global-timeout`, which covers setup and tests
-together and sits inside the 3,300 s cargo watchdog; the cold builds moved into
-the script rather than being added to the run, so the budget is not raised. The
-filter must name every binary that includes a shared nested-build module, so a
-new binary that builds a nested crate belongs in both the script command and
-the filter. Direct `cargo test` and `make test` do not run the script; they pay
-the cold build in the first test, as before.
+runner failed a sound assertion on its timeout. The Makefile now runs the
+binaries it lists once, through
+`cargo test --locked $WARMUP_FEATURES --no-fail-fast` (`--all-features` by
+default; `WARMUP_FEATURES` overrides it, as a coverage leg does below and as a
+caller or the environment can), before the timed run. The lists cover the
+trybuild, documentation-workspace and BDD binaries; the cargo-orthohelp bridge
+binaries (`golden_tests`, `cli_dispatch` and the agent-context ones) and
+`ortho_l10n --test boundary` are not in them (issues 759 and 700). Two targets
+share two lists, and two entry points call them:
+
+- `make test` depends on `test-warmup`, which runs `NESTED_WARM_TESTS`: the
+  binaries whose cold nested build is the most expensive and whose warm run is
+  short (`boolean_cli_trybuild`, `compile_fail`, `evidence_trybuild`, and the
+  two `compile_time` binaries). By default a contributor's gate warms them
+  under the gate's own compiler flags; a `WARMUP_ENV` inherited from the
+  environment or given on the command line changes the warm-up's flags without
+  changing the workspace run's, so do not set it for `make test`.
+- The `nested-cargo-builds` setup script in `.config/nextest.toml` runs
+  `make test-warmup-full WARMUP_ENV=`, which adds `NESTED_WARM_TESTS_HEAVY`,
+  before nextest starts any test whose binary the `[[profile.default.scripts]]`
+  filter names. The script is selected by that filter, so it runs only when
+  such a binary is in the run. `WARMUP_ENV=` clears the gate flags because the
+  coverage run supplies its own instrumented flags, and a warm-up built under
+  other flags warms nothing. The Makefile lifts its
+  `unexport CARGO_ENCODED_RUSTFLAGS` for that call (`cargo-llvm-cov` passes its
+  flags that way when they cannot be space-encoded), so the warm-up inherits
+  them whole. The exception is defined by the call's shape: `WARMUP_ENV` given
+  empty on the command line and no goal but the two warm-up targets. Any other
+  goal, or a non-empty `WARMUP_ENV` (an inherited encoded value would override
+  its assignment), still drops the variable. `WARMUP_FEATURES` carries the
+  feature selection the same way: it defaults to `--all-features`, and each
+  coverage step in `.github/workflows/ci.yml` sets it to that leg's
+  `--features`, because trybuild derives its scratch build's features from the
+  test binary. Do not clear `WARMUP_ENV` for `make test`: the warm-up would
+  then build under other flags from the gate it warms. The heavy list holds the
+  binaries whose test bodies are long on a warm host (the generated
+  documentation workspaces and the cargo-orthohelp scenarios) or whose cold
+  build is a few seconds; nextest needs them because it terminates a test at
+  its own allowance, and `make test` does not pay to run them twice.
+
+A failing test in the warm-up fails the run with that test's own output, before
+any timed test starts; `--no-fail-fast` makes the warm-up run every binary
+first so the failure list is complete. The nextest script's allowance is 900 s
+(three warning periods of 300 s). It counts against the default profile's 2,300
+s `global-timeout`, which covers setup and tests together and sits inside the
+3,300 s cargo watchdog; the cold builds moved into the script rather than being
+added to the run, so the budget is not raised. The filter must name every
+binary that includes a shared nested-build module, so a new trybuild,
+documentation-workspace or BDD binary that builds a nested crate belongs in a
+Makefile list and in the filter. The cargo-orthohelp bridge binaries are the
+known exception until #759 is finished. Two limits of the feature selection: a
+local `cargo nextest run` with default features warms with `--all-features`
+unless `WARMUP_FEATURES` is set to match it, and make reads the variable from
+the environment, so a stray value there changes `make test`'s warm-up without
+changing its workspace run. Unset it.
+
+`ortho_l10n --test boundary` is in neither list. Its timed body is the nested
+compile, so no cap smaller than its own allowance can warm it (#755).
+
+The warm-up runs the trybuild harnesses rather than only building them, because
+trybuild builds its scratch project when it runs and offers no build-only mode.
+
+`make test` also passes `--no-fail-fast` to its workspace run, so once the
+warm-up has succeeded a single environmental failure inside one trybuild
+scratch build (#643) cannot hide the binaries after it. A failure inside the
+warm-up itself still stops `make test` before the workspace run starts, with
+that failing binary's own output.
 
 #### Packaging must resolve the way a clean runner resolves
 
@@ -5367,11 +5417,15 @@ is caught well inside the whole-run budget.
 
 The trybuild class outgrew its 600 s. It is budgeted apart from the base
 allowance because each of these binaries spawns a child `cargo` in a separate
-target directory, so none shares cargo-llvm-cov's warmed cache and each pays a
-cold dependency build. They also share one package cache and so block on its
-lock while their neighbours build, which the logs show directly: run
-36070786646 recorded four `Blocking waiting for file lock on package cache`
-lines, and run 36068184976 recorded none.
+target directory, so none shares cargo-llvm-cov's warmed cache and, unless
+matching artefacts are already present, each can pay a cold dependency build
+(the setup script described under "The nested builds are warmed before any
+timed test starts" supplies a warm-up for the binaries the Makefile lists, and
+an earlier run may have left them; the allowance was sized from runs that
+predate it). They also share one package cache and so block on its lock while
+their neighbours build, which the logs show directly: run 36070786646 recorded
+four `Blocking waiting for file lock on package cache` lines, and run
+36068184976 recorded none.
 
 Two measurements set the new figure:
 
@@ -5483,13 +5537,16 @@ measure the floor, not the peak, and the cold budget rests on the bound above.
 That the margin is 47 s is the argument for fixing the cause rather than the
 figure.
 
-Raising the figure again would be the wrong repair. The lever is letting the
-nested builds reach `sccache` at all, which cannot happen while
-`ortho_config/tests/documentation_examples/cargo_runner.rs` clears the
-environment and restores no `RUSTC_WRAPPER`
-([issue 614](https://github.com/leynos/ortho-config/issues/614)). A cold cache
-is inherent to a dated nightly that Dependabot moves daily, so the budget has
-to carry it rather than the sample that predates the pin.
+Raising the figure again would be the wrong repair. The lever was letting the
+nested builds reach `sccache` at all, which they could not when this was
+measured: `ortho_config/tests/documentation_examples/cargo_runner.rs` cleared
+the environment and restored no `RUSTC_WRAPPER`. It now forwards the variable
+through an allow-list and drops it only when it names `cargo-llvm-cov`, so the
+lever exists, and
+[issue 614](https://github.com/leynos/ortho-config/issues/614) still tracks
+whether the cold bound holds. A cold cache is inherent to a dated nightly that
+Dependabot moves daily, so the budget has to carry it rather than the sample
+that predates the pin.
 
 [Issue 483](https://github.com/leynos/ortho-config/issues/483) asked for these
 measurements and named the constraint they had to satisfy, that each coverage
@@ -5652,16 +5709,16 @@ though it were the file's fault. The grammar was measured against humantime
 2.3.0, which is what the lockfile of the pinned cargo-nextest release resolves,
 by compiling that parser and running the cases through it. Naming the version
 matters: an earlier note here cited 2.4.0, which is the newest release rather
-than the one the shared coverage action installs, `cargo-nextest@0.9.120`. A
-value may carry a fractional part, and whitespace is tolerated around the
-point, so `1.5m` and `1 . 5 m` are both ninety seconds. Whitespace inside the
-number is ignored too, so `1 0s` is ten seconds and `1 2 . 3 4 s` is 12.34. The
-short spellings `wk`, `wks`, `yr` and `yrs` are units alongside the longer
-ones. The bare `0` is the one duration humantime reads without a unit, and it
-is the exact text: its parser special-cases `0` before reading a character, so
-`" 0 "` is refused and a reader that stripped whitespace first would accept a
-duration nextest rejects. Case is significant, so `m` is minutes and `M` is
-months.
+than the one the shared coverage action installs, `cargo-nextest@0.9.145`,
+whose lockfile resolves the same humantime 2.3.0. A value may carry a
+fractional part, and whitespace is tolerated around the point, so `1.5m` and
+`1 . 5 m` are both ninety seconds. Whitespace inside the number is ignored too,
+so `1 0s` is ten seconds and `1 2 . 3 4 s` is 12.34. The short spellings `wk`,
+`wks`, `yr` and `yrs` are units alongside the longer ones. The bare `0` is the
+one duration humantime reads without a unit, and it is the exact text: its
+parser special-cases `0` before reading a character, so `" 0 "` is refused and
+a reader that stripped whitespace first would accept a duration nextest
+rejects. Case is significant, so `m` is minutes and `M` is months.
 
 The watchdog is resolved at the innermost scope that declares it, blank
 included. GitHub takes the most specific declaration of an environment

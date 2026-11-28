@@ -1,4 +1,4 @@
-.PHONY: help all clean test boundary build release lint lint-clippy lint-whitaker \
+.PHONY: help all clean test test-warmup test-warmup-full boundary build release lint lint-clippy lint-whitaker \
 	docstring-coverage fmt check-fmt markdownlint spellcheck spelling nixie \
 	typecheck msrv-build python-test-deps publish-check powershell-wrapper-validate \
 	test-workflow-contracts install-kani kani-check install-verus \
@@ -37,9 +37,22 @@ BUILD_STANDARD ?= 1
 # that assign `RUSTFLAGS` on purpose and the gates that restate the standard.
 # `unexport` keeps the variable out of the recipes' environment, so the routes
 # this file states are the routes that run.
-# tests/workflow_contracts/build_standard_routing_test.py holds this directive
-# in place.
+#
+# The one exception is the warm-up run as nextest's setup script, and it is
+# defined by its shape, not by who calls it: `WARMUP_ENV` given on the command
+# line and empty, and no goal but the warm-up targets (see `test-warmup`
+# below). There the coverage run supplies the flags, and `cargo-llvm-cov` hands
+# them over as `CARGO_ENCODED_RUSTFLAGS` when they cannot be space-encoded, so
+# dropping the variable would warm a different artefact from the run it warms.
+# Any other goal, alone or beside the warm-up, and any non-empty `WARMUP_ENV`
+# (whose assignment an inherited encoded value would override), still drops it,
+# so the release and MSRV routes keep their own `RUSTFLAGS`.
+# tests/workflow_contracts/build_standard_routing_test.py holds both halves.
+WARMUP_ONLY_GOALS = test-warmup test-warmup-full
+COVERAGE_WARMUP_CALL = $(and $(filter command line,$(origin WARMUP_ENV)),$(if $(strip $(WARMUP_ENV)),,yes),$(MAKECMDGOALS),$(if $(filter-out $(WARMUP_ONLY_GOALS),$(MAKECMDGOALS)),,yes))
+ifeq ($(COVERAGE_WARMUP_CALL),)
 unexport CARGO_ENCODED_RUSTFLAGS
+endif
 STANDARD_THREADS_FLAG ?= -Zthreads=8
 # Cranelift disabled estate-wide on 14 November 2026 (concordat ADR; review 14 May 2027). Uncomment to opt back in.
 # STANDARD_BACKEND_FLAG ?= -Zcodegen-backend=cranelift
@@ -205,10 +218,77 @@ clean: ## Remove build artefacts
 	$(CARGO) clean
 	rm -rf $(PYTHON_VENV)
 
-test: check-build-tools python-test-deps ## Run tests with warnings treated as errors
+test: check-build-tools python-test-deps test-warmup ## Run tests with warnings treated as errors
 	$(GATE_RUSTFLAGS) $(CARGO) fetch --locked
-	$(GATE_RUSTFLAGS) $(CARGO) test --all-targets --all-features $(BUILD_JOBS)
+	$(GATE_RUSTFLAGS) $(CARGO) test --all-targets --all-features --no-fail-fast $(BUILD_JOBS)
 	$(PYTEST) $(PYTEST_FLAGS)
+
+# The test binaries whose timed bodies start a nested Cargo build: trybuild
+# scratch projects, generated documentation workspaces, and the cargo-orthohelp
+# and example harnesses. A nested build is outside `cargo test`'s own
+# dependency graph, so it pays a full dependency compile (and compile-admission
+# queueing) inside the test's own deadline. `test-warmup` runs the cheapest
+# binaries that fill the trybuild scratch trees once, sequentially, before the
+# timed run, so a timed run whose flags and features match the warm-up's finds
+# those target directories warm (see `WARMUP_ENV` and `WARMUP_FEATURES`). The
+# binaries are run rather than only built because trybuild builds its scratch
+# project when it runs and offers no build-only mode.
+#
+# Two lists, because the cost of a warm-up is repeated test time on every
+# warm run. The first holds the binaries whose cold nested build is the most
+# expensive and whose warm run is short; `make test` pays for those alone. The
+# second holds the binaries whose test bodies are heavy (generated workspaces,
+# the cargo-orthohelp scenarios) or whose cold build is a few seconds;
+# nextest's setup script adds them, because nextest terminates a test at its
+# own allowance. These lists cover the trybuild, documentation-workspace and
+# BDD binaries only; the cargo-orthohelp bridge binaries (`golden_tests`,
+# `cli_dispatch` and the agent-context ones) and `ortho_l10n --test boundary`
+# are in neither (#759, #700).
+#
+# `.config/nextest.toml` runs `test-warmup-full` as its setup script, so the
+# lists live in one place. A failure here fails the run with the failing
+# test's own output rather than a later timeout. `--no-fail-fast` runs every
+# warm-up binary first, so the failure list is complete.
+NESTED_WARM_TESTS = \
+	-p ortho_config --test boolean_cli_trybuild --test compile_fail \
+	-p ortho_config_macros --test evidence_trybuild \
+	-p ortho_config_test_helpers --test compile_time \
+	-p cargo-orthohelp --test compile_time
+NESTED_WARM_TESTS_HEAVY = \
+	-p ortho_config \
+	--test crate_path_trybuild --test declarative_merge_trybuild \
+	--test documentation_examples_rust_tests --test env_source_trybuild \
+	--test generated_lint_trybuild --test identifier_artefact_e2e \
+	--test localization_trybuild --test localized_parse_trybuild \
+	--test subcommand_trybuild \
+	-p cargo-orthohelp --test rstest_bdd
+# `WARMUP_ENV` is the compiler-flag assignment the warm-up builds under. It must
+# match the run it warms: a nested build under other flags is a different
+# artefact. By default `make test` passes the gate's flags; nextest's setup
+# script clears it, because the coverage run supplies its own instrumented
+# flags, and then inherits them whole (the `unexport` above is lifted for that
+# case). A value inherited from the environment or given on the command line
+# changes the warm-up's flags without changing the workspace run's, so do not
+# set or clear it for `make test`: the warm-up would build under other flags
+# from the gate it warms.
+WARMUP_ENV ?= $(GATE_RUSTFLAGS)
+# `WARMUP_FEATURES` is the feature selection the warm-up builds with, for the
+# same reason: trybuild derives the features of its scratch build from the test
+# binary, so a warm-up built with other features warms a different artefact. The
+# default is the gate's. A coverage leg that selects features states them to
+# the setup script through this variable (see the `env:` of its step in
+# `.github/workflows/ci.yml`). Two limits follow. A local `cargo nextest run`
+# with default features warms with `--all-features` unless this is set to match
+# it. And make reads this variable from the environment, so a stray value there
+# changes `make test`'s warm-up without changing its workspace run: unset it.
+WARMUP_FEATURES ?= --all-features
+test-warmup: ## Fill the nested Cargo target directories the timed tests start builds in
+	$(WARMUP_ENV) $(CARGO) fetch --locked
+	$(WARMUP_ENV) $(CARGO) test --locked $(WARMUP_FEATURES) --no-fail-fast $(NESTED_WARM_TESTS)
+
+test-warmup-full: ## test-warmup plus the heavier nested builders (nextest's setup script)
+	$(WARMUP_ENV) $(CARGO) fetch --locked
+	$(WARMUP_ENV) $(CARGO) test --locked $(WARMUP_FEATURES) --no-fail-fast $(NESTED_WARM_TESTS) $(NESTED_WARM_TESTS_HEAVY)
 
 # The boundary contracts are the evidence that an application depending on the
 # localization runtime alone never resolves the configuration facade, the derive

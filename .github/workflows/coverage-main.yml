@@ -122,6 +122,11 @@ jobs:
         # (one baseline per job); it writes the authoritative baseline that
         # pull-request runs compare against.
         uses: leynos/shared-actions/.github/actions/generate-coverage@0eabb6bc07148981de5da395e30cd78d83f5c7c2
+        env:
+          # The nextest setup script (`make test-warmup-full`) warms the nested
+          # builds with the features this leg tests, because trybuild derives
+          # its scratch build's features from the test binary.
+          WARMUP_FEATURES: --features 'serde_json toml json5 yaml metrics'
         with:
           output-path: lcov-serde-saphyr.info
           format: lcov
@@ -138,6 +143,8 @@ jobs:
 
       - name: Test and Measure Coverage (without serde_saphyr)
         uses: leynos/shared-actions/.github/actions/generate-coverage@0eabb6bc07148981de5da395e30cd78d83f5c7c2
+        env:
+          WARMUP_FEATURES: --features 'serde_json toml json5'
         with:
           output-path: lcov-no-serde-saphyr.info
           format: lcov
