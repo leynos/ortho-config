@@ -1,4 +1,4 @@
-.PHONY: help all clean test test-warmup test-warmup-full boundary build release lint lint-clippy lint-whitaker \
+.PHONY: help all clean test test-warmup test-warmup-full boundary boundary-prepare build release lint lint-clippy lint-whitaker \
 	docstring-coverage fmt check-fmt markdownlint spellcheck spelling nixie \
 	typecheck msrv-build python-test-deps publish-check powershell-wrapper-validate \
 	test-workflow-contracts install-kani kani-check install-verus \
@@ -205,7 +205,7 @@ clean: ## Remove build artefacts
 	$(CARGO) clean
 	rm -rf $(PYTHON_VENV)
 
-test: check-build-tools python-test-deps test-warmup ## Run tests with warnings treated as errors
+test: check-build-tools python-test-deps test-warmup boundary-prepare ## Run tests with warnings treated as errors
 	$(GATE_RUSTFLAGS) $(CARGO) fetch --locked
 	$(GATE_RUSTFLAGS) $(CARGO) test --all-targets --all-features --no-fail-fast $(BUILD_JOBS)
 	$(PYTEST) $(PYTEST_FLAGS)
@@ -273,8 +273,23 @@ test-warmup-full: ## test-warmup plus the heavier nested builders (nextest's set
 # from crates.io would prove something about the network instead of the shared
 # package cache. The fixture target is deliberately kept between runs, so a
 # warm run is not evidence of a cold download.
-boundary: check-build-tools ## Prove the standalone runtime boundary against foreign consumer roots
+boundary: check-build-tools boundary-prepare ## Prove the standalone runtime boundary against foreign consumer roots
 	$(GATE_RUSTFLAGS) $(CARGO) test -p ortho_l10n --test boundary --offline $(BUILD_JOBS)
+
+# The boundary contracts check a preparation record instead of packaging inside
+# their own allowance. `cargo package --verify` compiles the packaged closure
+# on every run, so a warm target does not shorten it, and on a shared host the
+# compile-admission queue alone outlasted the allowance while the code under
+# test was sound (#700, #755). This target runs the two verified `cargo package`
+# invocations, then builds every consumer shape's tests without running them,
+# under no per-test deadline (a three-hour hang guard stands in), and writes a
+# record binding the result to the sources, the lockfile and the toolchain. The
+# timed contracts refuse a missing or stale record with a message that names
+# this target, so `make test` and `make boundary` depend on it, and nextest's
+# `boundary-prepare` setup script runs it with `WARMUP_ENV=` for the coverage
+# run's own flags. A failure here carries the failing invocation's own output.
+boundary-prepare: check-build-tools ## Package and warm the boundary fixtures outside the timed contracts
+	$(WARMUP_ENV) $(CARGO) test -p ortho_l10n --test boundary --offline $(BUILD_JOBS) -- --ignored prepare_boundary_fixtures
 
 python-test-deps: ## Ensure Python test dependencies are provisioned
 	$(PYTEST) --version > $(NULL_DEVICE)

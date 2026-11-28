@@ -25,6 +25,8 @@
 //! computed only after the wait has ended, so queueing behind a sibling cannot
 //! spend an allowance the child is then measured against.
 
+#[path = "admission.rs"]
+mod admission;
 #[cfg(test)]
 #[path = "deadline_probe_tests.rs"]
 mod deadline_probe_tests;
@@ -160,7 +162,7 @@ fn serialize(budget: Budget, description: &str) -> Result<MutexGuard<'static, ()
             // Reported as an error value rather than through `ensure!`, so the
             // diagnostic keeps its own type instead of being re-wrapped from
             // its display text.
-            return Err(Budget::expired_while_waiting(description));
+            return Err(budget.expired_while_waiting(description));
         }
         std::thread::sleep(POLL_INTERVAL.min(left));
     }
@@ -359,8 +361,10 @@ fn deadline_failure(
     stderr: &StreamEvidence,
 ) -> anyhow::Error {
     anyhow::anyhow!(
-        "{description} exceeded the {} second deadline; its process tree was killed.\n{}\n{}",
+        "{description} exceeded the {} second deadline; its process tree was killed.\n\
+         Cause: {}.\n{}\n{}",
         deadline.as_secs(),
+        stdout.queue().merge(stderr.queue()).verdict(),
         stdout.describe("stdout"),
         stderr.describe("stderr"),
     )

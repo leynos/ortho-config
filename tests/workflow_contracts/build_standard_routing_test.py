@@ -74,13 +74,15 @@ DEVELOPMENT_ROUTES: typ.Final[list[tuple[str, str, str]]] = [
     ("make_boundary", "boundary", "test"),
     ("make_test_warmup", "test-warmup", "test"),
     ("make_test_warmup_full", "test-warmup-full", "test"),
+    ("make_boundary_prepare", "boundary-prepare", "test"),
     ("make_build", "build", "build"),
 ]
 
 #: Prerequisites of a route that run Cargo and are judged as routes of their
 #: own, so expanding the route does not leave two Cargo lines for one subcommand.
 PREREQUISITE_ROUTES: typ.Final[dict[str, tuple[str, ...]]] = {
-    "test": ("test-warmup",),
+    "test": ("test-warmup", "boundary-prepare"),
+    "boundary": ("boundary-prepare",),
 }
 
 #: Routes that deny warnings as well as carrying the standard. ``build`` keeps
@@ -94,6 +96,7 @@ DENIES_WARNINGS: typ.Final[frozenset[str]] = frozenset(
         "make_boundary",
         "make_test_warmup",
         "make_test_warmup_full",
+        "make_boundary_prepare",
     }
 )
 

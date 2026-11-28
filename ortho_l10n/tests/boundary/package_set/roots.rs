@@ -13,7 +13,7 @@
 //! how the archives were produced.
 
 use super::super::fixture_cargo::{BOUNDARY_ROOT, Budget, repository_root};
-use super::{PACKAGING_INVOCATIONS, package_sources};
+use super::{PACKAGING_INVOCATIONS, package_sources, prepared};
 use anyhow::{Context, Result, ensure};
 use camino::Utf8PathBuf;
 use cap_std::fs_utf8::Dir;
@@ -70,52 +70,68 @@ pub(crate) const PACKAGED_CRATES: [(&str, &str); 3] = [
     ("ortho_config", PACKAGED_VERSION),
 ];
 
-/// The packaged set, materialized once per test process by
-/// [`prepare_packaged_set`].
+/// The packaged set, admitted once per test process by [`prepare_packaged_set`].
 ///
 /// This is a *store*, not a lookup, and it is module-private for that reason:
 /// a caller reading it is a caller that cannot spawn packaging or Cargo, which
 /// is what keeps the contracts' own queries free of side effects.
 static PACKAGED: OnceLock<Result<Vec<PackagedCrate>, String>> = OnceLock::new();
 
-/// Package and unpack this release's crates, once per test process.
+/// Admit the packaged set that `make boundary-prepare` produced.
 ///
-/// This is the command half of the module. It runs the packaging invocations
-/// and populates the store; every other function here and in the contract
-/// modules only reads the result. Keeping the two apart is what lets a
-/// contract say "resolve this consumer" without also meaning "package the
-/// workspace", and it means the packaging boundary appears exactly once in the
-/// suite.
+/// This is the command half of the module, and it no longer packages. The two
+/// verified `cargo package` invocations run in the preparation step
+/// ([`package_and_record`]), outside every timed test, because verification
+/// compiles the packaged closure on every run and a warm target does not
+/// shorten it. Here the contract checks the preparation record against the
+/// sources, the lockfile, the toolchain and the archives on disk, and refuses
+/// when it does not match. Nothing is spawned except the two toolchain
+/// version probes, and nothing touches the network.
 ///
-/// The first caller packages and unpacks; every later caller is a no-op that
-/// reads the same directory. A failure is cached too, so a broken packaging
-/// step is reported once rather than retried by every contract.
+/// Because no contract replaces a packaged root, the cross-process hazard that
+/// used to need `binary(boundary)` serialized for packaging (one process
+/// unpacking over a root another was reading) no longer exists. The group
+/// stays, since the consumer builds share a target directory.
 ///
-/// That cache is process-local, and nextest runs each test in its own process,
-/// so in a full run several of these packaged contracts package the same target
-/// directory side by side. Cargo's own lock does not cover that: it does not
-/// hold readers out while a package root is removed and unpacked, so one
-/// process can replace a root another is reading. `binary(boundary)` is
-/// therefore serialized as its own nextest test group; see
-/// `.config/nextest.toml` and "Nextest test-group serialization" in
-/// `docs/developers-guide.md`. Without that entry this function is safe only
-/// under `make boundary`, which runs one process.
-///
-/// The first caller spends `budget` on the two packaging invocations; later
-/// callers in the same process are no-ops that do not consume it.
+/// The first caller checks; every later caller in the process reads the cached
+/// verdict, failures included, so a missing record is reported once.
 ///
 /// # Errors
 ///
-/// Returns an error when either packaging invocation fails, when the
-/// contract's shared allowance is spent before one can start, or when one of
-/// the expected unpacked roots is missing afterwards.
-pub(crate) fn prepare_packaged_set(budget: Budget) -> Result<()> {
+/// Returns an error naming `make boundary-prepare` when the suite has not been
+/// prepared or the preparation is stale.
+pub(crate) fn prepare_packaged_set() -> Result<()> {
     let packaged =
-        PACKAGED.get_or_init(|| build_packaged_set(budget).map_err(|error| format!("{error:#}")));
+        PACKAGED.get_or_init(|| admit_prepared_set().map_err(|error| format!("{error:#}")));
     packaged
         .as_deref()
         .map(|_roots| ())
         .map_err(|error| anyhow::anyhow!("{error}"))
+}
+
+/// Run both verified packaging invocations and record that they passed.
+///
+/// This is the preparation step's half: it runs outside any timed test, under
+/// [`Budget::preparation`]. It discards the old record first and writes the new
+/// one last, so a run that stops half way leaves nothing that vouches for the
+/// roots it was replacing. It then admits the set through the same check a
+/// timed contract uses, so a record that does not round-trip fails here, where
+/// the cause is visible, and not in a later contract.
+///
+/// # Errors
+///
+/// Returns an error when either packaging invocation fails, an expected
+/// archive or root is missing, or the record cannot be written or read back.
+pub(crate) fn package_and_record(budget: Budget) -> Result<()> {
+    let repository = repository_root()?;
+    let target = packaging_target(&repository);
+    prepared::invalidate(&target)?;
+    Dir::create_ambient_dir_all(&target, cap_std::ambient_authority())
+        .with_context(|| format!("create packaging target {target}"))?;
+    run_packaging_invocations(&repository, &target, budget)?;
+    let toolchain = prepared::toolchain_identity(&repository)?;
+    prepared::write(&repository, &target, &toolchain)?;
+    prepare_packaged_set()
 }
 
 /// The materialized packaged set.
@@ -166,13 +182,17 @@ pub(crate) fn unpacked_directory() -> Result<Utf8PathBuf> {
     Ok(parent.to_path_buf())
 }
 
-/// Run both packaging invocations and collect the unpacked roots.
-fn build_packaged_set(budget: Budget) -> Result<Vec<PackagedCrate>> {
+/// The directory the packaging invocations build and unpack into.
+fn packaging_target(repository: &camino::Utf8Path) -> Utf8PathBuf {
+    repository.join(BOUNDARY_ROOT).join("packaging-target")
+}
+
+/// Check the preparation record and collect the unpacked roots it describes.
+fn admit_prepared_set() -> Result<Vec<PackagedCrate>> {
     let repository = repository_root()?;
-    let target = repository.join(BOUNDARY_ROOT).join("packaging-target");
-    Dir::create_ambient_dir_all(&target, cap_std::ambient_authority())
-        .with_context(|| format!("create packaging target {target}"))?;
-    run_packaging_invocations(&repository, &target, budget)?;
+    let target = packaging_target(&repository);
+    let toolchain = prepared::toolchain_identity(&repository)?;
+    prepared::check(&repository, &target, &toolchain)?;
     Ok(packaged_roots(&target.join(PACKAGE_DIRECTORY)))
 }
 

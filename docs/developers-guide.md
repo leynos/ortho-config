@@ -332,13 +332,14 @@ Windows, `cargo build` holds a read lock on `Cargo.toml`; a concurrent
 truncate-and-rewrite from another invocation violates that lock. Keep the whole
 group serialized unless the shared-state access has been eliminated.
 
-The `boundary` binary has a group of its own, `boundary_packaging`. Its
-packaged contracts materialize the release once per *process*, and nextest runs
-each test in its own process, so without the group six of them run
-`cargo package` and unpack `target/localization-boundary/packaging-target` side
-by side. Cargo's package-cache lock does not cover that: it does not hold
-readers out while a package root is removed and unpacked, so one process can
-replace a root another is reading.
+The `boundary` binary has a group of its own, `boundary_packaging`. Before the
+preparation step existed, its packaged contracts materialized the release once
+per *process*, and nextest runs each test in its own process, so six of them ran
+`cargo package` and unpacked `target/localization-boundary/packaging-target`
+side by side, and one process could replace a root another was reading. No
+timed contract packages now (see "The boundary suite is prepared before it is
+timed" below), so that hazard is gone; the group stays because the consumer
+builds share one target directory.
 
 `cargo test` and `make boundary` start one process for the binary but run its
 tests as threads, so the group cannot help there. The fixture's
@@ -356,42 +357,82 @@ child waiting for its turn reads as a hang.
 
 The same override carries the per-test allowance, 960 s (120 s x 8). A
 per-invocation deadline cannot bound a contract that makes several calls: the
-packaged consumer contract packages the set and then builds and resolves each
-of the three shapes, so eight calls at a 440 s cap apiece could spend 3,520 s
-of a 960 s allowance, and nextest would stop the test before any later call
-reported its own deadline. Every contract therefore shares one 900 s
-`SCENARIO_ALLOWANCE` (`fixture_cargo/budget.rs`), passed explicitly from the
-test to every fixture it creates. Each call is bounded by the smaller of its
-own cap and what the allowance has left; a call that starts with nothing left
-fails naming itself and the allowance, and a call clamped by the allowance says
-so in its deadline error. The 60 s outside the budget cover rendering fixture
-roots, reading manifests, and reporting.
+packaged consumer contract builds and resolves each of the three shapes, so six
+calls at a 440 s cap apiece could spend 2,640 s of a 960 s allowance, and
+nextest would stop the test before any later call reported its own deadline.
+Every contract therefore shares one 900 s `SCENARIO_ALLOWANCE`
+(`fixture_cargo/budget.rs`), passed explicitly from the test to every fixture
+it creates. Each call is bounded by the smaller of its own cap and what the
+allowance has left; a call that starts with nothing left fails naming itself
+and the allowance, and a call clamped by the allowance says so in its deadline
+error. The 60 s outside the budget cover rendering fixture roots, reading
+manifests, and reporting.
 
-One packaged test runs both `cargo package` invocations, each bounded at 440 s
-by `PACKAGE_DEADLINE`. A consumer contract resolves and then builds, each call
-bounded at 440 s by `CARGO_DEADLINE`. A bound that did not fit could never
-fire: nextest would stop the test first, and the error naming the invocation
-that hung would never be printed. `boundary_packaging_test.py` reads the group,
-the manifest, the override's allowance, both caps, the shared allowance and the
-consumer shape count, so neither half can drift from the other. It checks that
-the shared allowance expires inside the nextest allowance, that each cap fits
-inside the shared allowance, and that the complete call sequence is longer than
-the shared allowance, which is what makes the shared budget load-bearing rather
-than a restatement of the caps.
-
-The package-set cache is process-local to the packaged boundary contracts. It
-shares successful roots and retains failures from unbounded packaging attempts,
-but does not cache a failure caused by a caller's sequence deadline. A later
-caller with time remaining can retry.
+A consumer contract resolves and then builds, each call bounded at 440 s by
+`CARGO_DEADLINE`. A bound that did not fit could never fire: nextest would stop
+the test first, and the error naming the invocation that hung would never be
+printed. `boundary_packaging_test.py` reads the group, the manifest, the
+override's allowance, the cap, the shared allowance and the consumer shape
+count, so neither half can drift from the other. It checks that the shared
+allowance expires inside the nextest allowance, that the cap fits inside the
+shared allowance, and that the complete call sequence is longer than the shared
+allowance, which is what makes the shared budget load-bearing rather than a
+restatement of the cap.
 
 The earlier bounds were 240 s for packaging and 300 s for a nested call, sized
 against the 600 s base allowance. They were reached on a shared host while the
 children queued behind 340 compile-admission requests, and the timeout error
 discarded the child's output, including the lines that named the queue, so the
 failure could not be attributed. `run_with_deadline` now retains a bounded tail
-of each stream and includes it in the deadline error; the tail is what
-distinguishes compile-admission waiting, package-cache waiting, and a hang from
-one another.
+of each stream and includes it in the deadline error. Because the tail begins
+after the queue lines on a long run, it also counts the
+`waiting for a compile slot` lines over the whole stream, however much of it
+the tail kept, and the error leads with a `Cause:` line: either the number of
+queue lines and the deepest queue the child reported, or that none were seen
+and the child was not waiting for a slot. The reader can tell a queue wait from
+the child's own work or a hang without a second run.
+
+#### The boundary suite is prepared before it is timed
+
+`cargo package --verify` unpacks the archive and compiles the packaged closure
+on every run, so a warm target directory does not shorten it, and on a shared
+host the compile-admission queue alone outlasted the allowance (the pair took
+33 minutes on 2026-11-24, against a 440 s cap and a 960 s test) while every
+assertion held. The timed contracts therefore no longer package.
+
+`make boundary-prepare` runs the two verified `cargo package` invocations
+(patches intact, no `--no-verify`), then builds every consumer shape's tests
+against both sources with `cargo test --no-run --all-targets --all-features`,
+so the shared consumer target holds the dependency closure. It runs under
+`Budget::preparation`, which lifts the per-call caps: preparation is not a
+nextest test body, so there is no allowance to fit under, and a three-hour hang
+guard stands in so a wedged child is still reported with its output. It then
+writes `target/localization-boundary/packaging-target/prepared.json`, last, and
+only after both invocations succeed; it removes any earlier record first, so a
+run that stops half way leaves nothing that vouches for roots being replaced.
+
+The record names each invocation that verified, and binds that to a SHA-256
+fingerprint of the files Cargo packages for each patched member, the workspace
+manifest and lockfile, `rust-toolchain.toml`, `.cargo/config.toml`, the
+identity of the Cargo and compiler (`cargo -V`, `rustc -vV`), and the packaging
+recipe. It also carries the digest of each `.crate` archive and each unpacked
+manifest. A timed contract recomputes the fingerprint and the digests and
+refuses on any difference, so the roots it reads are the ones that passed
+verification, for these sources, under this toolchain. Editing any file under
+`ortho_l10n`, `ortho_config`, `ortho_config_macros` or `test_helpers` therefore
+makes the record stale, as it changes what `cargo package` would produce;
+`make test` and `make boundary` re-prepare automatically.
+
+The contracts still assert on the real packaged roots and on consumers built
+and tested in fresh foreign workspaces: only the compile of the dependency
+closure moved ahead of the clock. A missing or stale record is a refusal that
+names `make boundary-prepare`, not a deadline. `make test` and `make boundary`
+depend on the target; nextest's `boundary-prepare` setup script runs it with
+`WARMUP_ENV=` so the coverage run's own `RUSTFLAGS` apply. A direct
+`cargo test -p ortho_l10n --test boundary` without it fails the six packaged
+contracts that way, which is intended. Nothing reads the network: the
+invocations run offline against the shared package cache, and the record check
+spawns only the two version probes.
 
 A deadline kill terminates the child's whole process tree, not only the Cargo
 process. On Unix the child leads its own process group and the group is killed;
@@ -485,8 +526,10 @@ added to the run, so the budget is not raised. The filter must name every
 binary that includes a shared nested-build module, so a new binary that builds
 a nested crate belongs in a Makefile list and in the filter.
 
-`ortho_l10n --test boundary` is in neither list. Its timed body is the nested
-compile, so no cap smaller than its own allowance can warm it (#755).
+`ortho_l10n --test boundary` is in neither list. Its timed body was the nested
+compile, so no cap smaller than its own allowance could warm it (#755); it has
+its own preparation step, described under "The boundary suite is prepared
+before it is timed".
 
 The warm-up runs the trybuild harnesses rather than only building them, because
 trybuild builds its scratch project when it runs and offers no build-only mode.

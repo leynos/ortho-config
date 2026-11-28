@@ -262,8 +262,8 @@ slow-timeout = { period = "120s", terminate-after = 8 }
 # the coverage run supplies its own instrumented `RUSTFLAGS`, and the warm-up
 # must build under those or it warms nothing. `ortho_l10n --test boundary` is
 # not warmed here. Its work is the nested compiles themselves, so it cannot sit
-# under a cap smaller than its own 960s allowance (#755). Moving that work out
-# of the timed body is tracked in #700.
+# under a cap smaller than its own 960s allowance (#755). The `boundary-prepare`
+# script below owns it.
 #
 # The script's allowance is 900s (three warning periods of 300s). It counts
 # against `[profile.default]`'s 2,300s global-timeout, which covers setup and
@@ -274,6 +274,23 @@ slow-timeout = { period = "120s", terminate-after = 8 }
 command = ["make", "test-warmup-full", "WARMUP_ENV="]
 slow-timeout = { period = "300s", terminate-after = 3 }
 
+# The boundary binary's work is the nested compiles themselves, so it cannot be
+# warmed under the 900s allowance above, which is smaller than the 960s the
+# binary's own tests are granted (#755). Its preparation step runs the two
+# verified `cargo package` invocations and builds every consumer shape's tests
+# under no per-test deadline, then writes the record the timed contracts check
+# (see `boundary-prepare` in the Makefile). It has no `slow-timeout`: the step
+# is bounded by its own hang guard, which reports the failing invocation with
+# its output, and by the job ceiling. It counts against `[profile.default]`'s
+# `global-timeout` like every setup script, so the whole-run budget is still the
+# bound that stops a wedged run.
+[scripts.setup.boundary-prepare]
+command = ["make", "boundary-prepare", "WARMUP_ENV="]
+
 [[profile.default.scripts]]
-filter = 'binary(boolean_cli_trybuild) | binary(compile_fail) | binary(crate_path_trybuild) | binary(declarative_merge_trybuild) | binary(documentation_examples_rust_tests) | binary(env_source_trybuild) | binary(generated_lint_trybuild) | binary(identifier_artefact_e2e) | binary(localization_trybuild) | binary(localized_parse_trybuild) | binary(subcommand_trybuild) | binary(evidence_trybuild) | binary(compile_time) | binary(rstest_bdd) | binary(boundary) | binary(documentation_examples_tests) | binary(documentation_examples_loader_tests) | binary(documentation_installation_tests) | binary(nested_docs_ir) | binary(documented_command) | binary(agent_context_renderer_end_to_end) | binary(agent_context_output_end_to_end)'
+filter = 'binary(boundary)'
+setup = "boundary-prepare"
+
+[[profile.default.scripts]]
+filter = 'binary(boolean_cli_trybuild) | binary(compile_fail) | binary(crate_path_trybuild) | binary(declarative_merge_trybuild) | binary(documentation_examples_rust_tests) | binary(env_source_trybuild) | binary(generated_lint_trybuild) | binary(identifier_artefact_e2e) | binary(localization_trybuild) | binary(localized_parse_trybuild) | binary(subcommand_trybuild) | binary(evidence_trybuild) | binary(compile_time) | binary(rstest_bdd) | binary(documentation_examples_tests) | binary(documentation_examples_loader_tests) | binary(documentation_installation_tests) | binary(nested_docs_ir) | binary(documented_command) | binary(agent_context_renderer_end_to_end) | binary(agent_context_output_end_to_end)'
 setup = "nested-cargo-builds"
