@@ -280,6 +280,9 @@
     plan and implementation record for the Cargo external-subcommand helper.
   - [Derive-friendly Cargo subcommand template](execplans/8-3-2-document-derive-friendly-cargo-subcommand-template.md):
     plan for roadmap item 8.3.2 and its approval-gated documentation examples.
+  - [Cargo subcommand wrapper attribute evaluation](execplans/8-3-3-evaluate-cargo-subcommand-wrappers-macro-attribute.md):
+    approval-gated plan for roadmap item 8.3.3, which decides whether a derive
+    attribute should generate Cargo external-subcommand wrappers.
   - [Address review findings on PR #509](execplans/harden-lint-subcommand-environment-replay-r2-20260923.md):
     plan and review record for the injected subcommand file-discovery sources
     and their documentation.
