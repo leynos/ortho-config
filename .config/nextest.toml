@@ -116,8 +116,9 @@ slow-timeout = { period = "120s", terminate-after = 5 }
 #
 # The names are listed rather than globbed. There is no single pattern for
 # them -- eight end in `trybuild` and `compile_fail` and `compile_time` do
-# not -- and only exact-name matching is proved against the pinned
-# `cargo-nextest@0.9.120` the coverage action installs, where the logs show
+# not -- and only exact-name matching is proved against
+# `cargo-nextest@0.9.120`, the release the coverage action installed when this
+# was measured (the pinned action now installs 0.9.145), where the logs show
 # `binary(crate_path_trybuild)` taking this override and
 # `binary(compile_fail)` not. `trybuild_tier_test.py` reads this filter and
 # the Rust sources and fails when the two sets drift apart, so a new
@@ -242,13 +243,16 @@ filter = 'binary(boundary)'
 test-group = 'boundary_packaging'
 slow-timeout = { period = "120s", terminate-after = 8 }
 
-# Every test binary below compiles something in a nested cargo or trybuild
-# build inside its own timed body. If nothing has filled those build
-# directories first, the first test to reach each pays a cold dependency build
-# and its timeout fails an assertion that is sound. This setup script runs the
-# binaries once, before any of them starts, so the cold builds are paid for
-# here, under the script's own allowance, and every timed body then finds the
-# directories warm. (The same move as mdtablefix #728 and whitaker #518.)
+# Every test binary the Makefile warm-up lists compiles something in a nested
+# cargo or trybuild build inside its own timed body. If nothing has filled
+# those build directories first, the first test to reach each pays a cold
+# dependency build and its timeout fails an assertion that is sound. This setup
+# script runs those binaries once, before any of them starts, so the cold
+# builds are paid for here, under the script's own allowance, and every timed
+# body then finds the directories warm. It does not cover every binary that
+# starts a nested build: the cargo-orthohelp bridge binaries and
+# `ortho_l10n --test boundary` are outside it (#759, #700). (The same move as
+# mdtablefix #728 and whitaker #518.)
 #
 # A failing test in the warm-up makes the script exit non-zero, and nextest
 # then runs none of the selected tests, so the run fails with that test's own
@@ -260,10 +264,14 @@ slow-timeout = { period = "120s", terminate-after = 8 }
 # (`NESTED_WARM_TESTS` and `NESTED_WARM_TESTS_HEAVY`) so the two entry points
 # cannot drift apart. `WARMUP_ENV=` clears the Makefile's gate flags:
 # the coverage run supplies its own instrumented `RUSTFLAGS`, and the warm-up
-# must build under those or it warms nothing. `ortho_l10n --test boundary` is
-# not warmed here. Its work is the nested compiles themselves, so it cannot sit
-# under a cap smaller than its own 960s allowance (#755). The `boundary-prepare`
-# script below owns it.
+# must build under those or it warms nothing; `CARGO_ENCODED_RUSTFLAGS`, which
+# `cargo-llvm-cov` uses when its flags cannot be space-encoded, is inherited
+# too (the Makefile lifts its `unexport` for this call). The feature selection
+# comes from `WARMUP_FEATURES`, which a coverage leg that selects features sets
+# in its step's environment. `ortho_l10n --test boundary` is not warmed here.
+# Its work is the nested compiles themselves, so it cannot sit under a cap
+# smaller than its own 960s allowance (#755). The `boundary-prepare` script
+# below owns it.
 #
 # The script's allowance is 900s (three warning periods of 300s). It counts
 # against `[profile.default]`'s 2,300s global-timeout, which covers setup and

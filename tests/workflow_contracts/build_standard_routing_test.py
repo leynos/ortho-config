@@ -28,8 +28,9 @@ Run via ``make test-workflow-contracts``.
 
 from __future__ import annotations
 
+import os
 import pathlib
-import subprocess  # noqa: S404 - one case runs a real make, which is the subject.
+import subprocess  # noqa: S404 - two cases run a real make, which is the subject.
 import sys
 import typing as typ
 
@@ -178,6 +179,74 @@ def test_the_makefile_unexports_cargo_encoded_rustflags() -> None:
     assert "CARGO_ENCODED_RUSTFLAGS" in unexported_variables(makefile), (
         "the Makefile must `unexport CARGO_ENCODED_RUSTFLAGS`; Cargo ranks it above RUSTFLAGS"
     )
+
+
+def _encoded_flags_seen_by_a_recipe(*variables: str) -> str:
+    """Return what a recipe sees of ``CARGO_ENCODED_RUSTFLAGS`` under *variables*.
+
+    A real Make run, because an ``unexport`` shows in no dry run: the probe
+    recipe prints the variable from its own environment.
+    """
+    environment = {**os.environ, "CARGO_ENCODED_RUSTFLAGS": "-Cprobe"}
+    result = subprocess.run(  # noqa: S603 - the executable is the repository's Make.
+        [
+            make_executable(),
+            "--no-print-directory",
+            "--silent",
+            '--eval=probe: ; @printf %s "$$CARGO_ENCODED_RUSTFLAGS"',
+            "probe",
+            *variables,
+        ],
+        check=True,
+        capture_output=True,
+        cwd=REPOSITORY_ROOT,
+        env=environment,
+        text=True,
+    )
+    return result.stdout
+
+
+def test_the_encoded_flags_are_dropped_from_every_recipe_but_the_coverage_warmup() -> None:
+    """Only the warm-up that nextest runs inherits the coverage run's encoded flags.
+
+    Scenario: ``cargo-llvm-cov`` hands its flags over as
+    ``CARGO_ENCODED_RUSTFLAGS``. Invariant: a recipe started the usual way never
+    sees the variable (it would displace the routes that assign ``RUSTFLAGS``),
+    while the nextest setup script's ``WARMUP_ENV=`` call does, so the warm-up
+    builds under the flags of the run it warms.
+    """
+    assert _encoded_flags_seen_by_a_recipe() == "", (
+        "an ordinary Make run must not pass CARGO_ENCODED_RUSTFLAGS to its recipes"
+    )
+    assert _encoded_flags_seen_by_a_recipe("WARMUP_ENV=") == "-Cprobe", (
+        "the coverage warm-up (`WARMUP_ENV=` on the command line) must inherit the "
+        "encoded flags, or it warms a different artefact from the run it warms"
+    )
+
+
+def test_the_coverage_warmup_assigns_no_flags_of_its_own() -> None:
+    """``WARMUP_ENV=`` leaves the caller's flags alone, and the default restates the gate's."""
+    cleared = cargo_lines(dry_run("test-warmup-full", "WARMUP_ENV=", host=HOSTS["linux_x86_64"]))
+    assert cleared, "test-warmup-full must reach Cargo"
+    assert all(assigned_rustflags(line) is None for line in cleared), cleared
+    default = cargo_lines(dry_run("test-warmup-full", host=HOSTS["linux_x86_64"]))
+    assert all(assigned_rustflags(line) is not None for line in default), default
+
+
+def test_the_warmup_takes_its_features_from_one_variable() -> None:
+    """The warm-up builds with the gate's features unless a coverage leg overrides them."""
+    line = _line_for("test-warmup", "test", host=HOSTS["linux_x86_64"])
+    assert "--all-features" in line, line
+    overridden = cargo_lines(
+        dry_run(
+            "test-warmup",
+            "WARMUP_FEATURES=--features 'serde_json toml json5'",
+            host=HOSTS["linux_x86_64"],
+        )
+    )
+    test_line = next(line for line in overridden if "probe-cargo test " in f"{line} ")
+    assert "--all-features" not in test_line, test_line
+    assert "--features" in test_line, test_line
 
 
 def test_workflow_files_include_both_yaml_extensions(tmp_path: pathlib.Path) -> None:
