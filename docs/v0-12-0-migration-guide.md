@@ -11,13 +11,13 @@ prints when a required input is missing is no longer translated.
 
 ## Impact at a glance
 
-| Priority     | Area                      | What to do                                                               |
-| ------------ | ------------------------- | ------------------------------------------------------------------------ |
-| **Required** | Dependency versions       | Update every OrthoConfig crate requirement to v0.12.0 together.          |
-| **Optional** | `Fluent` isolation marks  | Call `with_use_isolating(false)` in terminals that must not show them.   |
-| **Optional** | Prebuilt consumer bundles | Passing an explicit `true` or `false` now overrides the bundle's choice. |
+| Priority              | Area                        | What to do                                                               |
+| --------------------- | --------------------------- | ------------------------------------------------------------------------ |
+| **Required**          | Dependency versions         | Update every OrthoConfig crate requirement to v0.12.0 together.          |
+| **Optional**          | `Fluent` isolation marks    | Call `with_use_isolating(false)` in terminals that must not show them.   |
+| **Optional**          | Prebuilt consumer bundles   | Passing an explicit `true` or `false` now overrides the bundle's choice. |
 | **Review if matched** | Missing-input help override | A `clap-error-missing-subcommand` override no longer replaces that help. |
-| **Optional** | Translated clap inventory | Enumerate `CLAP_ERROR_IDS` rather than hard-coding identifiers. |
+| **Optional**          | Translated clap inventory   | Enumerate `CLAP_ERROR_IDS` rather than hard-coding identifiers.          |
 
 _Table 1: Application-facing work when moving from v0.11.0 to v0.12.0._
 

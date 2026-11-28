@@ -8,8 +8,8 @@ all in place; M3 is delivered and delivery continues through review and merge.
 The branch was first replayed onto `origin/main` at `0dbd7bd7`, after main
 released v0.11.0 and published its own ADR-0023, so this branch's notes were
 re-versioned to v0.12.0 and its gate ADR was renumbered then to 0024. It now
-sits on `origin/main` at `c2d63075`, and the gate ADR is **ADR-0027**: main has
-since published ADR-0024 through ADR-0026, so the renumbers at each replay
+sits on `origin/main` at `de2e7ae1`, and the gate ADR is **ADR-0028**: main has
+since published ADR-0024 through ADR-0027, so the renumbers at each replay
 followed. Candidate `a0ba5f1b` passed the full nine-gate certificate; its two
 documentation successors `6d421d5f` and `5ab1e7e9` are green in hosted CI and
 were certified for the Markdown gates alone, as Progress records. A whole-plan
@@ -1851,6 +1851,19 @@ stopping and reporting.
       full target passes 110 tests on the replayed head, Clippy is clean, and
       the PR reports `MERGEABLE` again.
 
+- [x] (2026-11-28) Round-50 replay onto `origin/main` `de2e7ae1`. Main advanced
+      six commits, including PR #748 (Fluent isolation marks) which created its
+      own `docs/v0-12-0-migration-guide.md`, and PR #754 which published
+      **ADR-0027 (agent-context summary locale selection)**. The 98-commit
+      series was replayed with the Weave bypass. Conflicts: the contents index
+      (main's ADR entries beside ours), both migration guides, the users' guide
+      and two ExecPlan paragraphs. The two v0.12.0 guides were merged into one:
+      main's dependency-version and isolation-marks sections first, then the
+      clap missing-input-help and inventory sections renumbered, with the intro
+      and impact table widened to cover both changes. The gate ADR is now
+      **ADR-0028**, re-targeted through the file, its H1, every inbound
+      reference and that commit's message. The full target passes 110 tests on
+      the replayed head and the PR reports `MERGEABLE`.
 - [x] (2026-11-26) Round-49 hosted certificate and the two remaining blockers.
       On head `2ef02429`, hosted run 45714124311 passes `msrv`, both Clippy
       legs, all three packaging dry runs, and on both `build-test` legs every
