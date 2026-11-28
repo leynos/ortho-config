@@ -35,7 +35,7 @@ fn implicit_indices_follow_declaration_order() {
         #[arg(value_name = "DESTINATION")]
         destination: String
     });
-    let resolved = resolve_clap_args(&fields, &attrs).expect("declarations should resolve");
+    let resolved = resolve_clap_args(&fields, &attrs, false).expect("declarations should resolve");
     let source = resolved.get("source").expect("source resolves");
     let destination = resolved.get("destination").expect("destination resolves");
     assert_eq!(
@@ -66,7 +66,7 @@ fn explicit_indices_do_not_advance_the_implicit_counter() {
         #[arg(value_name = "SECOND")]
         second: String
     });
-    let resolved = resolve_clap_args(&fields, &attrs).expect("declarations should resolve");
+    let resolved = resolve_clap_args(&fields, &attrs, false).expect("declarations should resolve");
     assert_eq!(
         resolved
             .get("first")
@@ -100,7 +100,7 @@ fn undeclared_fields_become_operands_in_a_declared_struct() {
         #[arg(value_name = "SECOND")]
         second: String
     });
-    let resolved = resolve_clap_args(&fields, &attrs).expect("declarations should resolve");
+    let resolved = resolve_clap_args(&fields, &attrs, false).expect("declarations should resolve");
     let first = resolved.get("first").expect("first resolves");
     assert_eq!(first.long, None, "clap derives no long flag");
     assert_eq!(first.value_name, "FIRST", "clap shouts the field name");
@@ -120,12 +120,28 @@ fn undeclared_fields_become_operands_in_a_declared_struct() {
 }
 
 #[test]
+fn a_container_clap_helper_makes_sibling_fields_arguments() {
+    let (fields, attrs) = declarations(&quote::quote! {
+        proposal: String
+    });
+    let resolved = resolve_clap_args(&fields, &attrs, true).expect("fields should resolve");
+    assert_eq!(
+        resolved
+            .get("proposal")
+            .and_then(|value| value.positional.as_ref())
+            .map(|value| value.index),
+        Some(1),
+        "a struct-level clap helper proves the struct is a clap command"
+    );
+}
+
+#[test]
 fn a_struct_without_declarations_resolves_no_arguments() {
     let (fields, attrs) = declarations(&quote::quote! {
         host: String,
         port: u16
     });
-    let resolved = resolve_clap_args(&fields, &attrs).expect("fields should resolve");
+    let resolved = resolve_clap_args(&fields, &attrs, false).expect("fields should resolve");
     assert!(
         resolved.is_empty(),
         "a configuration-only struct keeps the generated surface"
@@ -141,7 +157,7 @@ fn inferred_operands_follow_claps_type_rules() {
         files: Vec<String>,
         flag: bool
     });
-    let resolved = resolve_clap_args(&fields, &attrs).expect("declarations should resolve");
+    let resolved = resolve_clap_args(&fields, &attrs, false).expect("declarations should resolve");
     let target = resolved.get("target").expect("target resolves");
     assert_eq!(
         target.positional.as_ref().map(|value| value.index),
@@ -178,7 +194,7 @@ fn assert_unreadable_keeps_index(
     index: u16,
 ) {
     let (fields, attrs) = declarations(tokens);
-    let resolved = resolve_clap_args(&fields, &attrs).expect("declarations should resolve");
+    let resolved = resolve_clap_args(&fields, &attrs, false).expect("declarations should resolve");
     assert!(
         !resolved.contains_key(unreadable),
         "an unreadable declaration publishes no CLI metadata"
@@ -235,7 +251,7 @@ fn a_flatten_marker_makes_sibling_fields_clap_arguments() {
         #[command(flatten)]
         shared: Shared
     });
-    let resolved = resolve_clap_args(&fields, &attrs).expect("declarations should resolve");
+    let resolved = resolve_clap_args(&fields, &attrs, false).expect("declarations should resolve");
     assert_eq!(
         resolved
             .get("input")
@@ -259,7 +275,7 @@ fn operands_after_a_flattened_container_have_no_index() {
         shared: Shared,
         input: String
     });
-    let resolved = resolve_clap_args(&fields, &attrs).expect("declarations should resolve");
+    let resolved = resolve_clap_args(&fields, &attrs, false).expect("declarations should resolve");
     assert!(
         resolved.contains_key("verbose"),
         "a named option is unaffected by the flattened child"
@@ -282,7 +298,7 @@ fn operands_before_a_flattened_container_keep_their_index() {
         #[command(flatten)]
         shared: Shared
     });
-    let resolved = resolve_clap_args(&fields, &attrs).expect("declarations should resolve");
+    let resolved = resolve_clap_args(&fields, &attrs, false).expect("declarations should resolve");
     assert_eq!(
         resolved
             .get("input")
@@ -304,7 +320,7 @@ fn subcommand_and_flatten_markers_are_not_arguments() {
         #[command(flatten)]
         shared: Shared
     });
-    let resolved = resolve_clap_args(&fields, &attrs).expect("declarations should resolve");
+    let resolved = resolve_clap_args(&fields, &attrs, false).expect("declarations should resolve");
     assert!(
         !resolved.contains_key("command") && !resolved.contains_key("shared"),
         "markers own no argument of their own"
@@ -327,7 +343,7 @@ fn skipped_fields_receive_no_positional_index() {
         #[arg(value_name = "INPUT")]
         input: String
     });
-    let resolved = resolve_clap_args(&fields, &attrs).expect("declarations should resolve");
+    let resolved = resolve_clap_args(&fields, &attrs, false).expect("declarations should resolve");
     assert!(
         resolved.get("hidden").is_some_and(|value| value.is_skipped),
         "an arg(skip) field should be marked skipped"

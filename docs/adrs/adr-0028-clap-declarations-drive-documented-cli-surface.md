@@ -122,12 +122,14 @@ The documentation IR distinguishes two surfaces per field:
   `CliMetadata.short` are absent for a positional operand, and
   `CliMetadata.positional: Option<PositionalMetadata>` carries the one-based
   index and the variadic, trailing-var-arg, and `--`-only flags.
-- In a struct with no clap helper attribute at all, a field keeps the
-  generated long and short flags, because the configuration loader's hidden
-  parser is the surface it exposes. In a struct with at least one declaration,
-  every field without its own declaration is documented as clap's derived
-  positional operand with the same one-based index. Such a configuration root
-  still has two surfaces: the documentation describes the clap command line, and
+- In a struct with no clap helper attribute at all — no struct-level
+  `#[command(...)]`/`#[clap(...)]`, argument declaration, flattened container,
+  or subcommand selector — a field keeps the generated long and short flags,
+  because the configuration loader's hidden parser is the surface it exposes.
+  In a struct with at least one declaration, every field without its own
+  declaration is documented as clap's derived positional operand with the same
+  one-based index. Such a configuration root still has two surfaces: the
+  documentation describes the clap command line, and
   `OrthoConfig::load_from_iter` continues to accept the hidden parser's
   generated flag form.
 
@@ -202,11 +204,12 @@ additive.
 ## Known risks and limitations
 
 - A struct that derives a clap trait but carries no clap helper attribute at
-  all is indistinguishable from a configuration-only type. Its fields keep the
-  generated long flags even though clap parses them positionally. Declaring any
-  one argument, a flattened container, a subcommand selector, or an explicit
-  `#[arg(skip)]` makes the whole surface readable; the standalone derive in
-  roadmap 12.3.1 removes the ambiguity.
+  all, including no struct-level `#[command(...)]`, is indistinguishable from a
+  configuration-only type. Its fields keep the generated long flags even though
+  clap parses them positionally. Declaring any one argument, a flattened
+  container, a subcommand selector, or an explicit `#[arg(skip)]` makes the
+  whole surface readable; the standalone derive in roadmap 12.3.1 removes the
+  ambiguity.
 - A bare `bool` field without a declaration is left on the generated surface:
   clap derives a value-less switch for it and rejects a positional switch, so
   the struct cannot be a valid clap command.

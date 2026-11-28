@@ -16,9 +16,10 @@ use ortho_config::docs::{
 mod fixtures;
 
 use fixtures::{
-    Commands, FlattenedOperandArgs, GlobalArgs, HostArgs, PartlyDeclaredArgs, PurgeArgs,
-    RawIndexArgs, RawSpellingArgs, SelectorOnlyArgs, SkippedArgs, SnakeCaseArgs, UnnamedArgs,
-    UnnamedCommands, UnreadableArgs, UnreadableOperandArgs, UnreadableOptionArgs, ValidateArgs,
+    Commands, ContainerDeclaredArgs, FlattenedOperandArgs, GlobalArgs, HostArgs,
+    PartlyDeclaredArgs, PlainConfig, PurgeArgs, RawIndexArgs, RawSpellingArgs, SelectorOnlyArgs,
+    SkippedArgs, SnakeCaseArgs, UnnamedArgs, UnnamedCommands, UnreadableArgs,
+    UnreadableOperandArgs, UnreadableOptionArgs, ValidateArgs,
 };
 
 /// Returns one field's metadata by name.
@@ -376,6 +377,34 @@ fn a_subcommand_selector_marks_the_struct_as_a_clap_command() -> Result<()> {
     ensure!(
         clap_positional_index::<SelectorOnlyArgs>("target") == Some(1),
         "clap should place the sibling operand at index 1"
+    );
+    Ok(())
+}
+
+#[test]
+fn a_container_clap_helper_marks_the_struct_as_a_clap_command() -> Result<()> {
+    let metadata = ContainerDeclaredArgs::get_doc_metadata();
+
+    ensure_positional(field(&metadata, "proposal")?, 1, "PROPOSAL")?;
+    ensure!(
+        clap_positional_index::<ContainerDeclaredArgs>("proposal") == Some(1),
+        "clap should place the sibling operand at index 1"
+    );
+    Ok(())
+}
+
+#[test]
+fn a_configuration_only_struct_keeps_the_generated_flag() -> Result<()> {
+    let metadata = PlainConfig::get_doc_metadata();
+    let host = field(&metadata, "host")?;
+    let cli = host
+        .cli
+        .as_ref()
+        .ok_or_else(|| anyhow!("host should have CLI metadata"))?;
+
+    ensure!(
+        cli.long.as_deref() == Some("host") && cli.positional.is_none(),
+        "a struct with no clap helper keeps the generated flag, got {cli:?}"
     );
     Ok(())
 }

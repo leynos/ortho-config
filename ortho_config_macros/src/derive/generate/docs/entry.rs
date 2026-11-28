@@ -134,6 +134,7 @@ impl DocTokens {
             fields: args.fields,
             field_attrs: args.field_attrs,
             serde_deserialize_rename_all: args.serde_deserialize_rename_all,
+            has_clap_container: args.has_clap_container,
             cli_fields: args.cli_fields,
             localization_ids: args.localization_ids,
             krate,

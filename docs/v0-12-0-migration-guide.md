@@ -79,11 +79,12 @@ locale-script default was rejected.
 
 Generated documentation metadata now describes the command line that clap
 parses. A clap helper attribute only compiles when a clap derive registered it,
-so a struct carrying any of `#[arg(...)]`, `#[command(flatten)]`, or
-`#[command(subcommand)]` is a clap command throughout: every field without its
-own declaration is documented as the positional operand clap derives for it,
-with clap's one-based index and value name. A struct that declares no clap
-argument keeps the generated `OrthoConfig` flag surface.
+so a struct carrying any clap helper — a struct-level `#[command(...)]`,
+`#[arg(...)]`, `#[command(flatten)]`, or `#[command(subcommand)]` — is a clap
+command throughout: every field without its own declaration is documented as
+the positional operand clap derives for it, with clap's one-based index and
+value name. A struct that declares no clap argument keeps the generated
+`OrthoConfig` flag surface.
 
 - Add `#[arg(long)]` or `#[arg(short)]` to a field that must remain a named
   option in a clap-declared struct.

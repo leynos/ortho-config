@@ -72,7 +72,7 @@ pub(super) fn build_fields_metadata(args: &FieldDocArgs<'_>) -> syn::Result<Fiel
         .iter()
         .map(|meta| (meta.field_name.as_str(), meta))
         .collect::<HashMap<_, _>>();
-    let clap_lookup = resolve_clap_args(args.fields, args.field_attrs)?;
+    let clap_lookup = resolve_clap_args(args.fields, args.field_attrs, args.has_clap_container)?;
     let documented = args
         .fields
         .iter()

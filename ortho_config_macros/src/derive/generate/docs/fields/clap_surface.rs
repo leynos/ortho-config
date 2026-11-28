@@ -69,9 +69,11 @@ pub(super) struct ResolvedPositional {
 
 /// Resolves every clap argument the source struct describes.
 ///
-/// A field with a readable declaration is described from it. When any field in
-/// the struct declares a clap argument, the struct necessarily derives a clap
-/// trait, so a field with no declaration is a clap-derived argument as well:
+/// A field with a readable declaration is described from it. When the struct
+/// carries a clap helper — a struct-level `#[command(...)]`/`#[clap(...)]`, or a
+/// field-level argument, flattened container, or subcommand selector — the
+/// struct necessarily derives a clap trait, so a field with no declaration is a
+/// clap-derived argument as well:
 /// it is a positional operand unless its type is a bare `bool`, which clap
 /// rejects as a positional switch. A struct with no declaration at all is
 /// indistinguishable from a configuration-only type, so its fields stay absent
@@ -79,10 +81,11 @@ pub(super) struct ResolvedPositional {
 pub(super) fn resolve_clap_args(
     fields: &[syn::Field],
     attrs: &[FieldAttrs],
+    has_clap_container: bool,
 ) -> syn::Result<HashMap<String, ResolvedClapArg>> {
     let mut next_index: u16 = 1;
     let mut resolved = HashMap::new();
-    let declares_arguments = declares_clap_arguments(fields)?;
+    let declares_arguments = has_clap_container || declares_clap_arguments(fields)?;
     // A flattened container contributes operands the derive cannot count, so
     // an implicit index assigned after it would be a guess.
     let mut after_flatten = false;

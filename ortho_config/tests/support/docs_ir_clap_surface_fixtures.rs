@@ -238,3 +238,20 @@ pub(super) struct SelectorOnlyArgs {
     #[command(subcommand)]
     command: SelectorCommands,
 }
+
+/// Arguments whose only clap marker is the struct-level command helper.
+#[derive(Debug, Clone, Default, Parser, Serialize, Deserialize, OrthoConfig)]
+#[command(name = "container")]
+#[ortho_config(prefix = "SPLITTERS")]
+pub(super) struct ContainerDeclaredArgs {
+    /// Undeclared operand; the container helper proves the clap derive.
+    proposal: String,
+}
+
+/// A configuration-only struct with no clap helper at all.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, OrthoConfig)]
+#[ortho_config(prefix = "SPLITTERS")]
+pub(super) struct PlainConfig {
+    /// Configuration value documented with the generated flag.
+    host: String,
+}
