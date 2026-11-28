@@ -148,6 +148,16 @@ pub(crate) fn clap_arg_id_or_field_name(field: &syn::Field) -> syn::Result<Strin
     if let Some(explicit) = clap_arg_id(field)? {
         return Ok(explicit);
     }
+    clap_field_name(field)
+}
+
+/// Returns the field name clap derives an argument id from.
+///
+/// `clap_derive` builds the id from `ident.unraw().to_string()`. This helper
+/// exposes that spelling without resolving an explicit `id` override, so a
+/// declaration whose `id` is not a literal can still describe its argument's
+/// shape.
+pub(crate) fn clap_field_name(field: &syn::Field) -> syn::Result<String> {
     let ident = field
         .ident
         .as_ref()

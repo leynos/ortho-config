@@ -8,8 +8,12 @@
 //! environment route reproduces the key the provider must read.
 
 use anyhow::{Result, anyhow, ensure};
+use clap::Parser;
 use ortho_config::docs::{DocMetadata, FieldMetadata, OrthoConfigDocs as _};
-use ortho_config::{MapEnv, OrthoConfig};
+use ortho_config::subcommand::Prefix;
+use ortho_config::{
+    MapEnv, OrthoConfig, SubcommandFileContext, load_and_merge_subcommand_with_sources_at,
+};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
@@ -50,6 +54,16 @@ struct DirectionalRenameAll {
 struct SerializeOnlyRenameAll {
     /// Key Serde reads as `output_file`.
     output_file: Option<String>,
+}
+
+/// A subcommand payload whose field binds to a hyphenated key.
+#[derive(Debug, Clone, Default, Parser, Serialize, Deserialize, OrthoConfig)]
+#[ortho_config(prefix = "SUB_APP_")]
+#[command(name = "check")]
+struct HyphenatedSubcommand {
+    /// Kebab-case key read from the subcommand environment.
+    #[serde(rename = "verify-mode")]
+    verify_mode: Option<String>,
 }
 
 /// Returns one documented field by name.
@@ -198,6 +212,26 @@ fn directional_rename_all_loads_from_its_documented_route() -> Result<()> {
     ensure!(
         serializing.output_file.as_deref() == Some("out.txt"),
         "a serialization-only container rule must not move the input name"
+    );
+    Ok(())
+}
+
+#[test]
+fn a_hyphenated_rename_loads_through_the_subcommand_merge() -> Result<()> {
+    let fixture = tempfile::tempdir()?;
+    let discovery = MapEnv::new().with_var("XDG_CONFIG_DIRS", fixture.path());
+    let env = MapEnv::new().with_var("SUB_APP_CMDS_CHECK_VERIFY-MODE", "strict");
+    let merged = load_and_merge_subcommand_with_sources_at(
+        &Prefix::new("SUB_APP_"),
+        &HyphenatedSubcommand::default(),
+        SubcommandFileContext::new(fixture.path(), &discovery),
+        Arc::new(env),
+    )
+    .map_err(|err| anyhow!(err))?;
+
+    ensure!(
+        merged.verify_mode.as_deref() == Some("strict"),
+        "the subcommand merge should read the hyphenated variable"
     );
     Ok(())
 }

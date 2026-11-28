@@ -150,3 +150,59 @@ pub(super) struct UnreadableOptionArgs {
     #[arg(value_name = "INPUT")]
     input: String,
 }
+
+/// The long flag clap reads from a constant expression.
+pub(super) const FLAG_NAME: &str = "check";
+
+/// The short flag clap reads from a constant expression.
+pub(super) const FLAG_CHAR: char = 'c';
+
+/// An explicit positional index clap reads from a constant expression.
+pub(super) const FIRST_INDEX: usize = 2;
+
+/// Arguments whose flag spellings are constant expressions.
+#[derive(Debug, Clone, Default, Parser, Serialize, Deserialize, OrthoConfig)]
+#[ortho_config(prefix = "SPLITTERS")]
+pub(super) struct RawSpellingArgs {
+    /// Named option whose spellings the derive cannot read.
+    #[arg(long(FLAG_NAME), short(FLAG_CHAR))]
+    check: Option<String>,
+    /// Operand that follows the named option.
+    #[arg(value_name = "INPUT")]
+    input: String,
+}
+
+/// Arguments whose explicit index is a constant expression.
+#[derive(Debug, Clone, Default, Parser, Serialize, Deserialize, OrthoConfig)]
+#[ortho_config(prefix = "SPLITTERS")]
+pub(super) struct RawIndexArgs {
+    /// Operand whose index the derive cannot read.
+    #[arg(value_name = "FIRST", index(FIRST_INDEX))]
+    first: String,
+    /// Operand that clap numbers from its implicit counter.
+    #[arg(value_name = "SECOND")]
+    second: String,
+}
+
+/// A flattened child that owns an operand.
+#[derive(Debug, Clone, Default, Args, Serialize, Deserialize)]
+pub(super) struct SharedOperandArgs {
+    /// Operand owned by the flattened child.
+    #[arg(value_name = "SHARED")]
+    shared: String,
+}
+
+/// Arguments that flatten a child owning an operand.
+#[derive(Debug, Clone, Default, Parser, Serialize, Deserialize, OrthoConfig)]
+#[ortho_config(prefix = "SPLITTERS")]
+pub(super) struct FlattenedOperandArgs {
+    /// Named option declared before the container.
+    #[arg(long)]
+    verbose: bool,
+    /// Flattened child whose operand shifts later indices.
+    #[command(flatten)]
+    #[ortho_config(skip_cli)]
+    shared: SharedOperandArgs,
+    /// Parent operand whose absolute index only clap knows.
+    input: String,
+}

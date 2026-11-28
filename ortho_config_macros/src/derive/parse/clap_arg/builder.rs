@@ -6,12 +6,11 @@
 //! expressions, and the `OrthoConfig` derive must not reject a valid clap
 //! attribute it cannot interpret.
 
-use syn::ext::IdentExt;
 use syn::meta::ParseNestedMeta;
 use syn::spanned::Spanned;
 use syn::{Expr, Lit, Type};
 
-use super::super::clap_attrs::clap_arg_id;
+use super::super::clap_attrs::{clap_arg_id, clap_field_name};
 use super::super::{ClapRenameAll, discard_unknown};
 use super::resolvers::{self, NameChoice, RepetitionFlags, ShortChoice};
 use super::value_syntax::{
@@ -35,8 +34,12 @@ pub(super) struct ClapArgBuilder {
     short: Option<ShortChoice>,
     /// Explicit value placeholder.
     value_name: Option<String>,
-    /// Explicit positional index.
+    /// Explicit positional index, when its value is readable.
     index: Option<u16>,
+    /// Whether an `index` key was declared, readable or not.
+    index_declared: bool,
+    /// Whether a `long` or `short` key was declared, readable or not.
+    named_declared: bool,
     /// Explicit value-count range.
     num_args: Option<ValueRange>,
     /// Whether a clap default value was declared.
@@ -168,6 +171,7 @@ impl ClapArgBuilder {
 
     /// Records the `long` key and its optional literal spelling.
     fn set_long(&mut self, meta: &ParseNestedMeta) -> syn::Result<()> {
+        self.named_declared = true;
         match argument(meta)? {
             None => self.long = Some(NameChoice::Derived),
             Some(Expr::Lit(lit)) => match lit.lit {
@@ -181,6 +185,7 @@ impl ClapArgBuilder {
 
     /// Records the `short` key and its optional literal character.
     fn set_short(&mut self, meta: &ParseNestedMeta) -> syn::Result<()> {
+        self.named_declared = true;
         match argument(meta)? {
             None => self.short = Some(ShortChoice::Derived),
             Some(Expr::Lit(lit)) => match lit.lit {
@@ -226,6 +231,7 @@ impl ClapArgBuilder {
 
     /// Records an explicit positional index.
     fn set_index(&mut self, meta: &ParseNestedMeta) -> syn::Result<()> {
+        self.index_declared = true;
         match parse_usize(meta)? {
             Some(index) => {
                 self.index = Some(u16::try_from(index).map_err(|_| {
@@ -309,10 +315,7 @@ impl ClapArgBuilder {
         } else {
             clap_arg_id(field)?
         };
-        let field_ident = field.ident.as_ref().ok_or_else(|| {
-            syn::Error::new_spanned(field, "tuple fields cannot declare clap arguments")
-        })?;
-        let raw_field = field_ident.unraw().to_string();
+        let raw_field = clap_field_name(field)?;
         let (long, short) = resolvers::spellings(resolvers::SpellingInputs {
             long: self.long.as_ref(),
             short: self.short.as_ref(),
@@ -325,7 +328,7 @@ impl ClapArgBuilder {
             explicit_id.as_deref(),
             &raw_field,
         );
-        let is_positional = long.is_none() && short.is_none();
+        let is_positional = long.is_none() && short.is_none() && !self.named_declared;
         let is_vec = is_vec_field(&field.ty);
         let num_args = self.num_args;
         let takes_value = self.resolve_takes_value(is_positional, &field.ty);
@@ -361,6 +364,7 @@ impl ClapArgBuilder {
             ),
             is_skipped: self.skipped,
             is_unreadable: self.unparsed || id_unreadable,
+            has_explicit_index: self.index.is_some() || self.index_declared,
         })
     }
 

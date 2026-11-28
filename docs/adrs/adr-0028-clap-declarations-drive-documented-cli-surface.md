@@ -210,8 +210,9 @@ additive.
   clap derives a value-less switch for it and rejects a positional switch, so
   the struct cannot be a valid clap command.
 - A flattened container is not expanded into descendant field metadata. It
-  keeps the generated surface as before, and roadmap 12.3.1 covers the
-  expansion.
+  publishes no CLI metadata of its own, and an implicit positional index
+  assigned after it is suppressed, because the child's operand count is
+  invisible to the parent derive. Roadmap 12.3.1 covers the expansion.
 - A clap key whose value is a non-literal expression is not modelled. That
   field is documented without CLI metadata rather than with a synthesized flag
   that clap would reject.

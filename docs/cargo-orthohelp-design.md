@@ -335,7 +335,9 @@ derive documents every undeclared field as the positional operand clap derives
 for it. A struct with no clap declaration at all keeps the generated parser's
 flags for every field, because the configuration loader is the only surface it
 exposes. A bare `bool` without a declaration is left on that generated surface,
-because clap rejects a value-less positional switch.
+because clap rejects a value-less positional switch. A flattened container
+publishes no CLI metadata of its own, and an implicit positional index after
+one is suppressed because the child's operand count is unknown.
 
 Adding `positional` is an additive optional field: it bumps the IR minor
 version and leaves existing `ir`, `man`, and `ps` output unchanged for command

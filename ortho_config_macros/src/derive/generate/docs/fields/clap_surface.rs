@@ -42,13 +42,23 @@ pub(super) struct ResolvedClapArg {
     pub(super) required: bool,
     /// Whether clap skips the field entirely.
     pub(super) is_skipped: bool,
+    /// Whether the argument must not be published because its absolute
+    /// positional index is unknown.
+    pub(super) is_unpublished: bool,
 }
 
 /// Positional settings with the field's index resolved.
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "Each flag records an independent clap positional property."
+)]
 #[derive(Debug, Clone)]
 pub(super) struct ResolvedPositional {
     /// One-based positional index.
     pub(super) index: u16,
+    /// Whether clap assigned the index implicitly rather than from an
+    /// `index` key.
+    pub(super) implicit: bool,
     /// Whether the operand accepts more than one value.
     pub(super) variadic: bool,
     /// Whether the operand consumes trailing arguments without requiring `--`.
@@ -73,28 +83,59 @@ pub(super) fn resolve_clap_args(
     let mut next_index: u16 = 1;
     let mut resolved = HashMap::new();
     let declares_arguments = declares_clap_arguments(fields)?;
+    // A flattened container contributes operands the derive cannot count, so
+    // an implicit index assigned after it would be a guess.
+    let mut after_flatten = false;
 
     for (field, field_attrs) in fields.iter().zip(attrs) {
         let Some(name) = field.ident.as_ref() else {
             continue;
         };
+        if clap_field_is_flattened(field)? {
+            after_flatten = true;
+            continue;
+        }
         if let Some(decl) = &field_attrs.clap_arg {
             if decl.is_unreadable {
                 advance_unreadable_operand(field, decl, &mut next_index)?;
                 continue;
             }
             let argument = resolve_declared_argument(field, decl, &mut next_index)?;
-            resolved.insert(name.to_string(), argument);
+            resolved.insert(
+                name.to_string(),
+                suppress_if_index_unknown(argument, after_flatten),
+            );
             continue;
         }
         if let Some(argument) =
             infer_if_declared_argument(field, name, declares_arguments, &mut next_index)?
         {
-            resolved.insert(name.to_string(), argument);
+            resolved.insert(
+                name.to_string(),
+                suppress_if_index_unknown(argument, after_flatten),
+            );
         }
     }
 
     Ok(resolved)
+}
+
+/// Marks an argument unpublished when its absolute index is unknown.
+///
+/// A flattened container's own operands are invisible to the parent derive, so
+/// any later implicit index may be short by the child's operand count. Named
+/// options and explicitly indexed operands keep their documented surface.
+fn suppress_if_index_unknown(
+    mut argument: ResolvedClapArg,
+    after_flatten: bool,
+) -> ResolvedClapArg {
+    let index_unknown = after_flatten
+        && argument
+            .positional
+            .as_ref()
+            .is_some_and(|positional| positional.implicit);
+    argument.is_unpublished = index_unknown;
+    argument
 }
 
 /// Resolves one field from its readable clap declaration.
@@ -122,6 +163,7 @@ fn resolve_declared_argument(
         hide_in_help: decl.hide_in_help,
         required: decl.required,
         is_skipped: decl.is_skipped,
+        is_unpublished: false,
     })
 }
 
@@ -136,11 +178,8 @@ fn advance_unreadable_operand(
     decl: &ClapArgDecl,
     next_index: &mut u16,
 ) -> syn::Result<()> {
-    let implicit_operand = !decl.is_skipped
-        && decl
-            .positional
-            .as_ref()
-            .is_some_and(|positional| positional.index.is_none());
+    let implicit_operand =
+        !decl.is_skipped && decl.positional.is_some() && !decl.has_explicit_index;
     if implicit_operand {
         advance_index(field, next_index)?;
     }
@@ -222,6 +261,7 @@ fn infer_undeclared_argument(
         hide_in_help: false,
         required: !shape.is_optional,
         is_skipped: false,
+        is_unpublished: false,
     }))
 }
 
@@ -238,6 +278,7 @@ fn resolve_positional(
 
     Ok(ResolvedPositional {
         index,
+        implicit: positional.index.is_none(),
         variadic: positional.variadic,
         var_arg: positional.var_arg,
         last: positional.last,

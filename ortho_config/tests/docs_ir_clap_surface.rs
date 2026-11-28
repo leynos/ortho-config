@@ -16,9 +16,9 @@ use ortho_config::docs::{
 mod fixtures;
 
 use fixtures::{
-    Commands, GlobalArgs, HostArgs, PartlyDeclaredArgs, PurgeArgs, SkippedArgs, SnakeCaseArgs,
-    UnnamedArgs, UnnamedCommands, UnreadableArgs, UnreadableOperandArgs, UnreadableOptionArgs,
-    ValidateArgs,
+    Commands, FlattenedOperandArgs, GlobalArgs, HostArgs, PartlyDeclaredArgs, PurgeArgs,
+    RawIndexArgs, RawSpellingArgs, SkippedArgs, SnakeCaseArgs, UnnamedArgs, UnnamedCommands,
+    UnreadableArgs, UnreadableOperandArgs, UnreadableOptionArgs, ValidateArgs,
 };
 
 /// Returns one field's metadata by name.
@@ -317,6 +317,53 @@ fn unreadable_declarations_do_not_shift_clap_indices() -> Result<()> {
     ensure!(
         clap_positional_index::<UnreadableOptionArgs>("input") == Some(1),
         "a named option should not consume a positional index"
+    );
+    Ok(())
+}
+
+#[test]
+fn unreadable_flag_spellings_keep_claps_indices() -> Result<()> {
+    let metadata = RawSpellingArgs::get_doc_metadata();
+
+    ensure!(
+        field(&metadata, "check")?.cli.is_none(),
+        "an unreadable spelling publishes no CLI metadata"
+    );
+    ensure_positional(field(&metadata, "input")?, 1, "INPUT")?;
+    ensure!(
+        clap_positional_index::<RawSpellingArgs>("input") == Some(1),
+        "a named option should not consume a positional index"
+    );
+    Ok(())
+}
+
+#[test]
+fn an_unreadable_explicit_index_does_not_shift_claps_indices() -> Result<()> {
+    let metadata = RawIndexArgs::get_doc_metadata();
+
+    ensure!(
+        field(&metadata, "first")?.cli.is_none(),
+        "an unreadable index publishes no CLI metadata"
+    );
+    ensure_positional(field(&metadata, "second")?, 1, "SECOND")?;
+    ensure!(
+        clap_positional_index::<RawIndexArgs>("second") == Some(1),
+        "clap does not advance its counter for an indexed operand"
+    );
+    Ok(())
+}
+
+#[test]
+fn an_operand_after_a_flattened_child_publishes_no_index() -> Result<()> {
+    let metadata = FlattenedOperandArgs::get_doc_metadata();
+
+    ensure!(
+        field(&metadata, "input")?.cli.is_none(),
+        "an implicit index after a flattened child is a guess"
+    );
+    ensure!(
+        clap_positional_index::<FlattenedOperandArgs>("input") == Some(2),
+        "clap numbers the parent operand after the child's operand"
     );
     Ok(())
 }

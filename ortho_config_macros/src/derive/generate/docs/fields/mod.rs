@@ -170,7 +170,7 @@ impl<'a> FieldMetaBuilder<'a> {
         let required = self
             .clap_lookup
             .get(&field_name)
-            .filter(|declaration| !declaration.is_skipped)
+            .filter(|declaration| !declaration.is_skipped && !declaration.is_unpublished)
             .map_or_else(
                 || resolve_required(field, attrs),
                 |declaration| Ok(declaration.required),

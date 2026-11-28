@@ -35,7 +35,7 @@ pub(super) fn build_cli_tokens(
         return Ok(quote! { None });
     }
     if let Some(decl) = clap {
-        if decl.is_skipped {
+        if decl.is_skipped || decl.is_unpublished {
             return Ok(quote! { None });
         }
         return Ok(clap_tokens(decl, context, krate));

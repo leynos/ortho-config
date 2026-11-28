@@ -56,11 +56,17 @@ pub(crate) struct ClapArgDecl {
     /// Whether a clap key could not be read statically.
     ///
     /// The declaration still describes the argument's shape when every
-    /// unreadable key is a value rather than `long` or `short`, so positional
-    /// index accounting remains possible. `is_unreadable` suppresses CLI
-    /// metadata, which would otherwise claim a value name or arity the derive
-    /// has not read.
+    /// unreadable key is a value rather than a marker, so positional index
+    /// accounting remains possible. `is_unreadable` suppresses CLI metadata,
+    /// which would otherwise claim a value name or arity the derive has not
+    /// read.
     pub(crate) is_unreadable: bool,
+    /// Whether the field declares an explicit positional index.
+    ///
+    /// clap does not advance its implicit counter for an indexed operand, so
+    /// an unreadable `index` expression still stops later operands from
+    /// counting this field.
+    pub(crate) has_explicit_index: bool,
 }
 
 /// Positional settings declared for one clap argument.

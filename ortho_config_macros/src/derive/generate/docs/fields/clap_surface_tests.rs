@@ -169,6 +169,108 @@ fn inferred_operands_follow_claps_type_rules() {
     );
 }
 
+/// Asserts an unreadable declaration is unpublished and the next operand keeps
+/// clap's implicit index.
+fn assert_unreadable_keeps_index(
+    tokens: &proc_macro2::TokenStream,
+    unreadable: &str,
+    follow: &str,
+    index: u16,
+) {
+    let (fields, attrs) = declarations(tokens);
+    let resolved = resolve_clap_args(&fields, &attrs).expect("declarations should resolve");
+    assert!(
+        !resolved.contains_key(unreadable),
+        "an unreadable declaration publishes no CLI metadata"
+    );
+    assert_eq!(
+        resolved
+            .get(follow)
+            .and_then(|value| value.positional.as_ref())
+            .map(|value| value.index),
+        Some(index),
+        "{follow} should receive clap's implicit index"
+    );
+}
+
+#[test]
+fn unreadable_spellings_keep_the_argument_named() {
+    for tokens in [
+        quote::quote! {
+            #[arg(long(FLAG_NAME))]
+            check: Option<String>,
+            #[arg(value_name = "INPUT")]
+            input: String
+        },
+        quote::quote! {
+            #[arg(short(FLAG_CHAR))]
+            check: Option<String>,
+            #[arg(value_name = "INPUT")]
+            input: String
+        },
+    ] {
+        assert_unreadable_keeps_index(&tokens, "check", "input", 1);
+    }
+}
+
+#[test]
+fn an_unreadable_explicit_index_does_not_advance_the_counter() {
+    assert_unreadable_keeps_index(
+        &quote::quote! {
+            #[arg(value_name = "FIRST", index(FIRST_INDEX))]
+            first: String,
+            #[arg(value_name = "SECOND")]
+            second: String
+        },
+        "first",
+        "second",
+        1,
+    );
+}
+
+#[test]
+fn operands_after_a_flattened_container_have_no_index() {
+    let (fields, attrs) = declarations(&quote::quote! {
+        #[arg(long)]
+        verbose: bool,
+        #[command(flatten)]
+        shared: Shared,
+        input: String
+    });
+    let resolved = resolve_clap_args(&fields, &attrs).expect("declarations should resolve");
+    assert!(
+        resolved.contains_key("verbose"),
+        "a named option is unaffected by the flattened child"
+    );
+    assert!(
+        resolved
+            .get("input")
+            .is_some_and(|value| value.is_unpublished),
+        "an implicit index after a flattened child is a guess"
+    );
+}
+
+#[test]
+fn operands_before_a_flattened_container_keep_their_index() {
+    let (fields, attrs) = declarations(&quote::quote! {
+        #[arg(long)]
+        verbose: bool,
+        #[arg(value_name = "INPUT")]
+        input: String,
+        #[command(flatten)]
+        shared: Shared
+    });
+    let resolved = resolve_clap_args(&fields, &attrs).expect("declarations should resolve");
+    assert_eq!(
+        resolved
+            .get("input")
+            .and_then(|value| value.positional.as_ref())
+            .map(|value| value.index),
+        Some(1),
+        "an operand before the flattened child is unaffected"
+    );
+}
+
 #[test]
 fn subcommand_and_flatten_markers_are_not_arguments() {
     let (fields, attrs) = declarations(&quote::quote! {
@@ -176,9 +278,9 @@ fn subcommand_and_flatten_markers_are_not_arguments() {
         force: bool,
         #[command(subcommand)]
         command: Commands,
+        target: String,
         #[command(flatten)]
-        shared: Shared,
-        target: String
+        shared: Shared
     });
     let resolved = resolve_clap_args(&fields, &attrs).expect("declarations should resolve");
     assert!(
