@@ -330,16 +330,17 @@ follow:
   configuration surface exposed through environment variables or files rather
   than invocation surface, and agent-facing output omits it.
 
-A struct that declares any clap argument is a clap command throughout: the
-derive documents every undeclared field as the positional operand clap derives
-for it. A struct with no clap declaration at all keeps the generated parser's
-flags for every field, because the configuration loader is the only surface it
-exposes. A bare `bool` without a declaration is left on that generated surface,
-because clap rejects a value-less positional switch. A flattened container
-proves the struct is a clap command, so a sibling field before it keeps its
-clap index; the container publishes no CLI metadata of its own, and an implicit
-positional index after one is suppressed because the child's operand count is
-unknown.
+A struct carrying any clap helper attribute — an argument declaration, a
+flattened container, or a subcommand selector — is a clap command throughout:
+the derive documents every undeclared field as the positional operand clap
+derives for it. A struct with no clap helper attribute at all keeps the
+generated parser's flags for every field, because the configuration loader is
+the only surface it exposes. A bare `bool` without a declaration is left on
+that generated surface, because clap rejects a value-less positional switch. A
+flattened container and a subcommand selector publish no CLI metadata of their
+own. A sibling field before a flattened container keeps its clap index; an
+implicit positional index after one is suppressed because the child's operand
+count is unknown.
 
 Adding `positional` is an additive optional field: it bumps the IR minor
 version and leaves existing `ir`, `man`, and `ps` output unchanged for command

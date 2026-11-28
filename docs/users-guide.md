@@ -2104,15 +2104,16 @@ expression — is documented without CLI metadata rather than with a synthesized
 flag that clap would reject.
 
 A clap helper attribute only compiles when a clap derive registered it, so a
-struct that declares at least one clap argument is a clap command throughout:
-every other field is documented as the positional operand clap derives for it,
-in declaration order. A struct with no clap declaration at all keeps the long
-and short flags generated for the OrthoConfig parser, because `load_from_iter`
-parses that surface. A bare `bool` without a declaration cannot be a positional
-switch, so such a struct is invalid for clap and keeps the generated flag. A
-configuration root that also declares clap arguments has two parsers: the
-metadata describes the declared clap command line, while `load_from_iter`
-continues to accept the generated flag form.
+struct that carries any clap helper attribute — an argument declaration, a
+flattened container, or a subcommand selector — is a clap command throughout:
+every field without its own declaration is documented as the positional operand
+clap derives for it, in declaration order. A struct with no clap declaration at
+all keeps the long and short flags generated for the OrthoConfig parser, because
+`load_from_iter` parses that surface. A bare `bool` without a declaration
+cannot be a positional switch, so such a struct is invalid for clap and keeps
+the generated flag. A configuration root that also declares clap arguments has
+two parsers: the metadata describes the declared clap command line, while
+`load_from_iter` continues to accept the generated flag form.
 
 Subcommand metadata is scoped to the names the subcommand merge reads. A field
 documented through `OrthoConfigSubcommandDocs`, or through a mounted command

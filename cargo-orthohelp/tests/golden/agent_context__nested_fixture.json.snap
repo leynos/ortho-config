@@ -16,11 +16,13 @@ expression: snapshot
       "inputs": [
         {
           "name": "global",
-          "long": "global",
+          "long": null,
           "value_type": "string",
-          "required": false,
+          "required": true,
           "default": "String::from(\"workspace\")",
-          "enum_values": []
+          "enum_values": [],
+          "positional": 1,
+          "value_name": "GLOBAL"
         }
       ],
       "output_modes": [],
@@ -51,11 +53,13 @@ expression: snapshot
       "inputs": [
         {
           "name": "scope",
-          "long": "scope",
+          "long": null,
           "value_type": "string",
-          "required": false,
+          "required": true,
           "default": "String::from(\"local\")",
-          "enum_values": []
+          "enum_values": [],
+          "positional": 1,
+          "value_name": "SCOPE"
         }
       ],
       "output_modes": [],

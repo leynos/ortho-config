@@ -17,8 +17,8 @@ mod fixtures;
 
 use fixtures::{
     Commands, FlattenedOperandArgs, GlobalArgs, HostArgs, PartlyDeclaredArgs, PurgeArgs,
-    RawIndexArgs, RawSpellingArgs, SkippedArgs, SnakeCaseArgs, UnnamedArgs, UnnamedCommands,
-    UnreadableArgs, UnreadableOperandArgs, UnreadableOptionArgs, ValidateArgs,
+    RawIndexArgs, RawSpellingArgs, SelectorOnlyArgs, SkippedArgs, SnakeCaseArgs, UnnamedArgs,
+    UnnamedCommands, UnreadableArgs, UnreadableOperandArgs, UnreadableOptionArgs, ValidateArgs,
 };
 
 /// Returns one field's metadata by name.
@@ -364,6 +364,18 @@ fn an_operand_after_a_flattened_child_publishes_no_index() -> Result<()> {
     ensure!(
         clap_positional_index::<FlattenedOperandArgs>("input") == Some(2),
         "clap numbers the parent operand after the child's operand"
+    );
+    Ok(())
+}
+
+#[test]
+fn a_subcommand_selector_marks_the_struct_as_a_clap_command() -> Result<()> {
+    let metadata = SelectorOnlyArgs::get_doc_metadata();
+
+    ensure_positional(field(&metadata, "target")?, 1, "TARGET")?;
+    ensure!(
+        clap_positional_index::<SelectorOnlyArgs>("target") == Some(1),
+        "clap should place the sibling operand at index 1"
     );
     Ok(())
 }

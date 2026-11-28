@@ -4,7 +4,7 @@
 //! regression tests that assert the generated metadata rather than inside the
 //! test module, which keeps that suite within its line budget.
 
-use clap::{Args, Parser};
+use clap::{Args, Parser, Subcommand};
 use ortho_config::OrthoConfig;
 use serde::{Deserialize, Serialize};
 
@@ -202,4 +202,39 @@ pub(super) struct FlattenedOperandArgs {
     shared: SharedOperandArgs,
     /// Parent operand whose absolute index only clap knows.
     input: String,
+}
+
+/// A subcommand for the selector-only fixture.
+#[derive(Debug, Clone, Subcommand, ortho_config::OrthoConfigSubcommandDocs)]
+pub(super) enum SelectorCommands {
+    /// Runs a token check.
+    Run(SelectorRunArgs),
+}
+
+impl Default for SelectorCommands {
+    /// Supplies the only variant as the default.
+    fn default() -> Self {
+        Self::Run(SelectorRunArgs::default())
+    }
+}
+
+/// Arguments for the selector-only fixture's subcommand.
+#[derive(Debug, Clone, Default, Args, Serialize, Deserialize, OrthoConfig)]
+#[ortho_config(prefix = "SPLITTERS")]
+pub(super) struct SelectorRunArgs {
+    /// Token read by the subcommand.
+    #[arg(long)]
+    token: Option<String>,
+}
+
+/// Arguments whose only clap marker is a subcommand selector.
+#[derive(Debug, Clone, Default, Parser, Serialize, Deserialize, OrthoConfig)]
+#[ortho_config(prefix = "SPLITTERS")]
+pub(super) struct SelectorOnlyArgs {
+    /// Operand beside the selector.
+    target: Option<String>,
+    /// Selected command.
+    #[serde(skip)]
+    #[command(subcommand)]
+    command: SelectorCommands,
 }
