@@ -60,12 +60,15 @@ experimental = ["setup-scripts"]
 # fixed toolchain cost, and none of it bounds the cold case, so the budget
 # still rests on the cold bound above.
 #
-# Raising this figure again would be the wrong repair. The lever is
-# letting the nested builds reach sccache at all, which cannot happen
-# while the documentation tests clear the environment and restore no
-# RUSTC_WRAPPER. Issue 614 records that, and a cold cache is inherent
-# to a dated nightly that Dependabot moves daily, so the budget has to
-# carry it rather than the sample that predates the pin.
+# Raising this figure again would be the wrong repair. The lever was
+# letting the nested builds reach sccache at all, which they could not
+# when this was measured: the documentation tests cleared the
+# environment and restored no RUSTC_WRAPPER. They now forward it through
+# an allow-list and drop it only when it names cargo-llvm-cov, so the
+# lever exists; issue 614 still tracks whether the cold bound holds. A
+# cold cache is inherent to a dated nightly that Dependabot moves
+# daily, so the budget has to carry it rather than the sample that
+# predates the pin.
 #
 # See "Test timeouts" in docs/developers-guide.md, which carries the
 # sample and the arithmetic.

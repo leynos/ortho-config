@@ -5574,13 +5574,16 @@ measure the floor, not the peak, and the cold budget rests on the bound above.
 That the margin is 47 s is the argument for fixing the cause rather than the
 figure.
 
-Raising the figure again would be the wrong repair. The lever is letting the
-nested builds reach `sccache` at all, which cannot happen while
-`ortho_config/tests/documentation_examples/cargo_runner.rs` clears the
-environment and restores no `RUSTC_WRAPPER`
-([issue 614](https://github.com/leynos/ortho-config/issues/614)). A cold cache
-is inherent to a dated nightly that Dependabot moves daily, so the budget has
-to carry it rather than the sample that predates the pin.
+Raising the figure again would be the wrong repair. The lever was letting the
+nested builds reach `sccache` at all, which they could not when this was
+measured: `ortho_config/tests/documentation_examples/cargo_runner.rs` cleared
+the environment and restored no `RUSTC_WRAPPER`. It now forwards the variable
+through an allow-list and drops it only when it names `cargo-llvm-cov`, so the
+lever exists, and
+[issue 614](https://github.com/leynos/ortho-config/issues/614) still tracks
+whether the cold bound holds. A cold cache is inherent to a dated nightly that
+Dependabot moves daily, so the budget has to carry it rather than the sample
+that predates the pin.
 
 [Issue 483](https://github.com/leynos/ortho-config/issues/483) asked for these
 measurements and named the constraint they had to satisfy, that each coverage
