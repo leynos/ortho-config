@@ -183,9 +183,9 @@ fn generated_tokens(
 /// Reports whether a field carries a clap declaration the parser could not
 /// model.
 ///
-/// A flattened container also has no field-local declaration, but it is
-/// excluded here because `clap_field_is_flattened` recognises it; it keeps the
-/// generated surface because the derive cannot expand its descendants.
+/// A flattened container also has no field-local declaration, but the caller
+/// handles it first: [`build_cli_tokens`] publishes no CLI metadata for a
+/// container whose descendants it cannot expand.
 fn has_unreadable_declaration(field: &syn::Field) -> syn::Result<bool> {
     let declared = field.attrs.iter().any(is_clap_attribute);
     Ok(declared && !clap_field_is_flattened(field)?)
