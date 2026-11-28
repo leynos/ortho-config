@@ -10,10 +10,12 @@
 //! This step pays that cost once, outside every timed test:
 //!
 //! 1. both verified `cargo package` invocations, with their patches and
-//!    without `--no-verify`, then the preparation record the contracts check;
+//!    without `--no-verify`, after taking the digest of every source;
 //! 2. `cargo test --no-run --all-targets --all-features` for every consumer
 //!    shape against both sources, so the shared consumer target holds the
-//!    dependency closure and a timed contract compiles only its own crate.
+//!    dependency closure and a timed contract compiles only its own crate;
+//! 3. last, the preparation record the contracts check, so a step that stopped
+//!    at 1 or 2 leaves none.
 //!
 //! The roots are still produced by `cargo package`, and the consumers are still
 //! foreign workspaces rendered afresh for each contract: nothing the contracts
@@ -27,7 +29,7 @@
 
 use crate::boundary::consumer::{Consumer, Dependency, DependencySource};
 use crate::boundary::fixture_cargo::Budget;
-use crate::boundary::package_set::{ConsumerFixture, package_and_record, unpacked_directory};
+use crate::boundary::package_set::{ConsumerFixture, begin_preparation};
 use anyhow::{Context, Result};
 
 /// Package and verify the set, record it, and warm every consumer build.
@@ -38,12 +40,14 @@ use anyhow::{Context, Result};
 #[ignore = "the preparation step: run by `make boundary-prepare`, not by the timed suite"]
 fn prepare_boundary_fixtures() -> Result<()> {
     let budget = Budget::preparation();
-    package_and_record(budget)?;
+    let preparation = begin_preparation(budget)?;
     let packaged = DependencySource::Packaged {
-        unpacked: unpacked_directory()?,
+        unpacked: preparation.unpacked(),
     };
     prepare_consumers(&DependencySource::Workspace, budget)?;
-    prepare_consumers(&packaged, budget)
+    prepare_consumers(&packaged, budget)?;
+    // Last: a step that stopped before here leaves no record.
+    preparation.publish()
 }
 
 /// Build the tests of every consumer shape resolved from `source`.

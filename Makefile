@@ -40,15 +40,16 @@ BUILD_STANDARD ?= 1
 #
 # The one exception is the warm-up run as nextest's setup script, and it is
 # defined by its shape, not by who calls it: `WARMUP_ENV` given on the command
-# line and empty, and no goal but the warm-up targets (see `test-warmup`
-# below). There the coverage run supplies the flags, and `cargo-llvm-cov` hands
+# line and empty, and no goal but the setup-script targets: the two warm-ups
+# (see `test-warmup` below) and `boundary-prepare`, which nextest runs the same
+# way. There the coverage run supplies the flags, and `cargo-llvm-cov` hands
 # them over as `CARGO_ENCODED_RUSTFLAGS` when they cannot be space-encoded, so
 # dropping the variable would warm a different artefact from the run it warms.
 # Any other goal, alone or beside the warm-up, and any non-empty `WARMUP_ENV`
 # (whose assignment an inherited encoded value would override), still drops it,
 # so the release and MSRV routes keep their own `RUSTFLAGS`.
 # tests/workflow_contracts/build_standard_routing_test.py holds both halves.
-WARMUP_ONLY_GOALS = test-warmup test-warmup-full
+WARMUP_ONLY_GOALS = test-warmup test-warmup-full boundary-prepare
 COVERAGE_WARMUP_CALL = $(and $(filter command line,$(origin WARMUP_ENV)),$(if $(strip $(WARMUP_ENV)),,yes),$(MAKECMDGOALS),$(if $(filter-out $(WARMUP_ONLY_GOALS),$(MAKECMDGOALS)),,yes))
 ifeq ($(COVERAGE_WARMUP_CALL),)
 unexport CARGO_ENCODED_RUSTFLAGS

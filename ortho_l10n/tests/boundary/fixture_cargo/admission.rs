@@ -17,14 +17,17 @@ const QUEUE_LINE_MARKER: &str = "waiting for a compile slot";
 const SCAN_LINE_BYTES: usize = 4096;
 
 /// What a child's output said about waiting for a compile slot.
+///
+/// Two streams of one child are combined by summing the waits and keeping the
+/// deepest queue. There is no "last depth": each stream is read on its own
+/// thread, so which stream's last line came later is not recorded, and a
+/// combined figure would report stream priority as observation order.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(super) struct AdmissionQueue {
     /// Lines that said the child was waiting for a slot.
     waits: u64,
     /// The largest number of requests the child reported being ahead of it.
     longest: u64,
-    /// The number ahead on the most recent such line.
-    last: u64,
 }
 
 impl AdmissionQueue {
@@ -35,9 +38,7 @@ impl AdmissionQueue {
             return;
         }
         self.waits = self.waits.saturating_add(1);
-        let ahead = requests_ahead(&text);
-        self.longest = self.longest.max(ahead);
-        self.last = ahead;
+        self.longest = self.longest.max(requests_ahead(&text));
     }
 
     /// Combine the evidence of two streams of the same child.
@@ -45,11 +46,6 @@ impl AdmissionQueue {
         Self {
             waits: self.waits.saturating_add(other.waits),
             longest: self.longest.max(other.longest),
-            last: if other.waits > 0 {
-                other.last
-            } else {
-                self.last
-            },
         }
     }
 
@@ -62,8 +58,8 @@ impl AdmissionQueue {
         }
         format!(
             "the child printed {} compile-admission queue lines (at most {} requests \
-             ahead, {} on the last), so time was spent waiting for a slot, not compiling",
-            self.waits, self.longest, self.last,
+             ahead), so time was spent waiting for a slot, not compiling",
+            self.waits, self.longest,
         )
     }
 }
@@ -93,9 +89,16 @@ pub(super) struct QueueScanner {
 }
 
 impl QueueScanner {
-    /// What the complete lines fed so far said.
-    pub(super) const fn queue(&self) -> AdmissionQueue {
-        self.queue
+    /// What the lines fed so far said, counting an unfinished last line.
+    ///
+    /// A child killed at its deadline may have been cut off mid-line, and its
+    /// last queue line is the one that matters most, so the unterminated line
+    /// is read as well. It is not stored: when its newline arrives it is
+    /// counted once, as a complete line.
+    pub(super) fn queue(&self) -> AdmissionQueue {
+        let mut queue = self.queue;
+        queue.observe(&self.partial_line);
+        queue
     }
 
     /// Scan `chunk`.
@@ -134,14 +137,17 @@ mod tests {
         waiting for a compile slot (3 ahead)\n\
         error: something unrelated\n";
 
+    /// The scanner's reading of `text`, fed as one chunk.
+    fn scan(text: &str) -> AdmissionQueue {
+        let mut scanner = QueueScanner::default();
+        scanner.feed(text.as_bytes());
+        scanner.queue()
+    }
+
     /// A queue line is counted once wherever the read boundary falls.
     #[test]
     fn queue_lines_are_counted_once_however_the_reads_split() {
-        let expected = AdmissionQueue {
-            waits: 2,
-            longest: 12,
-            last: 3,
-        };
+        let expected = scan(QUEUE_OUTPUT);
         for split in 0..=QUEUE_OUTPUT.len() {
             let (head, rest) = QUEUE_OUTPUT.as_bytes().split_at(split);
             let mut scanner = QueueScanner::default();
@@ -158,26 +164,56 @@ mod tests {
     /// Output with no queue line is reported as not queued.
     #[test]
     fn a_stream_without_queue_lines_rules_a_queue_wait_out() {
-        let mut scanner = QueueScanner::default();
-        scanner.feed(b"   Compiling serde v1.0.0\nerror[E0432]: unresolved import\n");
-        assert_eq!(scanner.queue(), AdmissionQueue::default());
+        let queue = scan("   Compiling serde v1.0.0\nerror[E0432]: unresolved import\n");
+        assert_eq!(
+            queue,
+            AdmissionQueue::default(),
+            "a stream with no queue lines must leave the admission counters empty"
+        );
         assert!(
-            scanner.queue().verdict().contains("not waiting for a slot"),
+            queue.verdict().contains("not waiting for a slot"),
             "an unqueued child should be reported as such: {}",
-            scanner.queue().verdict(),
+            queue.verdict(),
         );
     }
 
     /// A queue wait is attributed, with its depth.
     #[test]
     fn a_queued_child_is_attributed_with_its_depth() {
-        let mut scanner = QueueScanner::default();
-        scanner.feed(QUEUE_OUTPUT.as_bytes());
-        let verdict = scanner.queue().verdict();
+        let verdict = scan(QUEUE_OUTPUT).verdict();
         assert!(
             verdict.contains("2 compile-admission queue lines")
                 && verdict.contains("at most 12 requests ahead"),
             "the verdict should name the count and depth: {verdict}",
+        );
+    }
+
+    /// A child cut off mid-line still has its last queue line counted.
+    #[test]
+    fn an_unterminated_final_queue_line_is_counted() {
+        let queue = scan("   Compiling serde v1.0.0\nwaiting for a compile slot (12 ahead)");
+        assert_eq!(
+            queue.verdict(),
+            AdmissionQueue {
+                waits: 1,
+                longest: 12
+            }
+            .verdict(),
+            "a queue line with no newline yet must be counted when the evidence is read",
+        );
+    }
+
+    /// An unterminated line is counted once, not again when its newline arrives.
+    #[test]
+    fn an_unterminated_line_is_not_counted_twice() {
+        let mut scanner = QueueScanner::default();
+        scanner.feed(b"waiting for a compile slot (4 ahead)");
+        let before = scanner.queue();
+        scanner.feed(b"\n");
+        assert_eq!(
+            scanner.queue(),
+            before,
+            "completing a line that was already read must not count it again"
         );
     }
 
@@ -188,30 +224,25 @@ mod tests {
         scanner.feed(&vec![b'x'; 1_000_000]);
         scanner.feed(b"\nwaiting for a compile slot (1 ahead)\n");
         assert_eq!(
-            scanner.queue().merge(AdmissionQueue::default()).verdict(),
+            scanner.queue(),
             AdmissionQueue {
                 waits: 1,
-                longest: 1,
-                last: 1
-            }
-            .verdict(),
+                longest: 1
+            },
             "the queue line after an overlong line should still be counted",
         );
     }
 
-    /// Two streams of one child combine, keeping the depth of the later queue line.
+    /// Two streams of one child combine by summing waits and keeping the deepest queue.
     #[test]
     fn merging_streams_sums_waits_and_keeps_the_deepest_queue() {
-        let mut first = QueueScanner::default();
-        first.feed(b"waiting for a compile slot (40 ahead)\n");
-        let mut second = QueueScanner::default();
-        second.feed(b"waiting for a compile slot (5 ahead)\n");
+        let merged = scan("waiting for a compile slot (40 ahead)\n")
+            .merge(scan("waiting for a compile slot (5 ahead)\n"));
         assert_eq!(
-            first.queue().merge(second.queue()),
+            merged,
             AdmissionQueue {
                 waits: 2,
-                longest: 40,
-                last: 5
+                longest: 40
             },
             "merging should sum the waits and keep the deepest queue",
         );

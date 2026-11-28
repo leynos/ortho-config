@@ -20,7 +20,7 @@
 //! not a timeout, and nothing here reaches the network.
 
 use super::super::fixture_cargo::{cargo_binary, inherited_toolchain};
-use super::fingerprint::{file_digests, sha256_hex};
+use super::fingerprint::{file_digests, sha256_hex, tree_digests};
 use super::{PACKAGED_CRATES, PACKAGING_INVOCATIONS};
 use anyhow::{Context, Result, bail, ensure};
 use camino::{Utf8Path, Utf8PathBuf};
@@ -78,7 +78,7 @@ struct Record {
     files: BTreeMap<String, String>,
     /// One entry per `cargo package --verify` invocation that exited zero.
     verified: Vec<String>,
-    /// SHA-256 of each `.crate` archive and unpacked manifest verification produced.
+    /// SHA-256 of each `.crate` archive and every file of each unpacked root.
     artefacts: BTreeMap<String, String>,
 }
 
@@ -95,27 +95,56 @@ fn invocation_descriptions() -> Vec<String> {
         .collect()
 }
 
-/// Digest of every archive, and of every unpacked manifest, beneath `target/package`.
+/// Digest of every archive, and of every file of every unpacked root, beneath
+/// `target/package`.
 ///
-/// The archives are what verification compiled; the unpacked manifests are what
-/// the contracts read. Digesting both ties the roots a contract reads to the
-/// archives that passed.
+/// The archives are what verification compiled; the unpacked roots are what the
+/// contracts read and what the consumer builds compile, since a consumer's
+/// `[patch]` points at them rather than at the archives. Digesting both ties
+/// the roots a contract reads, sources and resources included, to the archives
+/// that passed.
 fn artefact_digests(target: &Utf8Path) -> Result<BTreeMap<String, String>> {
     let directory = Dir::open_ambient_dir(target.join("package"), cap_std::ambient_authority())
         .with_context(|| format!("open {target}/package"))?;
     let mut digests = BTreeMap::new();
     for (name, version) in PACKAGED_CRATES {
-        for path in [
-            format!("{name}-{version}.crate"),
-            format!("{name}-{version}/Cargo.toml"),
-        ] {
-            let bytes = directory
-                .read(&path)
-                .with_context(|| format!("read packaged artefact {path}"))?;
-            digests.insert(path, sha256_hex(&bytes));
-        }
+        let archive = format!("{name}-{version}.crate");
+        let bytes = directory
+            .read(&archive)
+            .with_context(|| format!("read packaged archive {archive}"))?;
+        digests.insert(archive, sha256_hex(&bytes));
+        let root = Utf8PathBuf::from(format!("{name}-{version}"));
+        digests.extend(tree_digests(&directory, &root)?);
     }
     Ok(digests)
+}
+
+/// What the sources, lockfile and toolchain were when preparation began.
+///
+/// Captured before packaging starts and published after it ends, so a source
+/// edited while `cargo package` runs is recorded as it was *before*: the
+/// archives may hold the edit, the record does not, and the first check
+/// refuses it as stale instead of vouching for an unverified tree.
+#[derive(Debug)]
+pub(super) struct Snapshot {
+    /// The compiler and Cargo in force.
+    toolchain: String,
+    /// Digest of every source, manifest and lock file the recipe reads.
+    files: BTreeMap<String, String>,
+}
+
+impl Snapshot {
+    /// Digest the sources now.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when a source cannot be read.
+    pub(super) fn capture(repository: &Utf8Path, toolchain: &str) -> Result<Self> {
+        Ok(Self {
+            toolchain: toolchain.to_owned(),
+            files: file_digests(repository)?,
+        })
+    }
 }
 
 /// Discard the record before packaging starts.
@@ -138,29 +167,32 @@ pub(super) fn invalidate(target: &Utf8Path) -> Result<()> {
     Ok(())
 }
 
-/// Write the record for a packaging run that has just succeeded.
+/// Publish the record for a preparation that has just succeeded.
 ///
-/// The record is written to a temporary name and renamed, so a reader never
-/// sees half of it.
+/// Call it last: after both packaging invocations and every consumer build, so
+/// that a preparation that stopped early leaves no record. `snapshot` was taken
+/// before packaging began. The record is written to a temporary name of this
+/// process's own and renamed, so a reader never sees half of it and two runs
+/// in one checkout do not write the same file.
 ///
 /// # Errors
 ///
-/// Returns an error when the archives, sources or record cannot be read or
-/// written.
-pub(super) fn write(repository: &Utf8Path, target: &Utf8Path, toolchain: &str) -> Result<()> {
+/// Returns an error when the archives or unpacked roots, or the record, cannot
+/// be read or written.
+pub(super) fn write(snapshot: Snapshot, target: &Utf8Path) -> Result<()> {
     let record = Record {
         format: RECORD_FORMAT,
         version: super::PACKAGED_VERSION.to_owned(),
         recipe: recipe(),
-        toolchain: toolchain.to_owned(),
-        files: file_digests(repository)?,
+        toolchain: snapshot.toolchain,
+        files: snapshot.files,
         verified: invocation_descriptions(),
         artefacts: artefact_digests(target)?,
     };
     let text = serde_json::to_string_pretty(&record).context("render the preparation record")?;
     let directory = Dir::open_ambient_dir(target, cap_std::ambient_authority())
         .with_context(|| format!("open packaging target {target}"))?;
-    let temporary = format!("{RECORD_FILE}.partial");
+    let temporary = format!("{RECORD_FILE}.{}.partial", std::process::id());
     directory
         .write(&temporary, text)
         .with_context(|| format!("write {target}/{temporary}"))?;
@@ -282,9 +314,11 @@ fn matches_current(
         changes.is_empty(),
         "files the packaging reads changed since it was written ({changes})",
     );
+    let artefact_changes = describe_changes(&record.artefacts, &artefact_digests(target)?);
     ensure!(
-        record.artefacts == artefact_digests(target)?,
-        "a packaged archive or manifest differs from the one that passed verification",
+        artefact_changes.is_empty(),
+        "the packaged archives or unpacked roots differ from those that passed verification \
+         ({artefact_changes})",
     );
     Ok(())
 }

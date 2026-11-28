@@ -8,9 +8,10 @@
 //! lockfile, the pinned toolchain file, and the Cargo configuration. One digest
 //! per file, not one over all of them, so a stale record can name what changed.
 //!
-//! The walk skips `target` and hidden entries, which Cargo does not package
-//! either. It reads bytes through `cap_std`, so a symlink cannot lead it out of
-//! the repository.
+//! The walk skips `target`, `.git` and coverage profile data, which Cargo does
+//! not package or which is run output, and covers hidden files, which Cargo
+//! does package. It reads bytes through `cap_std`, so a symlink cannot lead it
+//! out of the repository.
 
 use anyhow::{Context, Result};
 use camino::{Utf8Path, Utf8PathBuf};
@@ -62,10 +63,30 @@ pub(super) fn sha256_hex(bytes: &[u8]) -> String {
 pub(super) fn file_digests(repository: &Utf8Path) -> Result<BTreeMap<String, String>> {
     let root = Dir::open_ambient_dir(repository, cap_std::ambient_authority())
         .with_context(|| format!("open repository {repository}"))?;
-    listed_files(&root)?
+    digest_files(&root, listed_files(&root)?)
+}
+
+/// The digest of every file beneath `directory` of `root`, packaged or not.
+///
+/// For the unpacked package roots, which the consumer builds read directly:
+/// whatever is in them is what gets compiled, so none of it is skipped.
+///
+/// # Errors
+///
+/// Returns an error when a directory cannot be listed or a file cannot be read.
+pub(super) fn tree_digests(root: &Dir, directory: &Utf8Path) -> Result<BTreeMap<String, String>> {
+    let mut files = Vec::new();
+    collect(root, directory, &mut files, |_name| false)?;
+    files.sort();
+    digest_files(root, files)
+}
+
+/// Digest each of `files`, keyed by path spelled with `/` on every platform.
+fn digest_files(root: &Dir, files: Vec<Utf8PathBuf>) -> Result<BTreeMap<String, String>> {
+    files
         .into_iter()
         .map(|path| {
-            let digest = read_if_present(&root, &path)?
+            let digest = read_if_present(root, &path)?
                 .map_or_else(|| ABSENT.to_owned(), |bytes| sha256_hex(&bytes));
             // One spelling on every platform: a record names paths with `/`,
             // and Windows joins them with `\`.
@@ -81,14 +102,19 @@ const ABSENT: &str = "absent";
 fn listed_files(root: &Dir) -> Result<Vec<Utf8PathBuf>> {
     let mut files: Vec<Utf8PathBuf> = ROOT_FILES.iter().map(Utf8PathBuf::from).collect();
     for member in MEMBER_DIRECTORIES {
-        collect(root, Utf8Path::new(member), &mut files)?;
+        collect(root, Utf8Path::new(member), &mut files, is_skipped)?;
     }
     files.sort();
     Ok(files)
 }
 
-/// Add every packageable file beneath `directory` to `files`.
-fn collect(root: &Dir, directory: &Utf8Path, files: &mut Vec<Utf8PathBuf>) -> Result<()> {
+/// Add every file beneath `directory` that `skip` does not exclude to `files`.
+fn collect(
+    root: &Dir,
+    directory: &Utf8Path,
+    files: &mut Vec<Utf8PathBuf>,
+    skip: fn(&str) -> bool,
+) -> Result<()> {
     for listed in root
         .read_dir(directory)
         .with_context(|| format!("list {directory}"))?
@@ -97,7 +123,7 @@ fn collect(root: &Dir, directory: &Utf8Path, files: &mut Vec<Utf8PathBuf>) -> Re
         let name = entry
             .file_name()
             .with_context(|| format!("name an entry of {directory}"))?;
-        if is_skipped(&name) {
+        if skip(&name) {
             continue;
         }
         let path = directory.join(&name);
@@ -105,7 +131,7 @@ fn collect(root: &Dir, directory: &Utf8Path, files: &mut Vec<Utf8PathBuf>) -> Re
             .file_type()
             .with_context(|| format!("inspect {path}"))?;
         if kind.is_dir() {
-            collect(root, &path, files)?;
+            collect(root, &path, files, skip)?;
         } else if kind.is_file() {
             files.push(path);
         }
@@ -123,9 +149,13 @@ fn collect(root: &Dir, directory: &Utf8Path, files: &mut Vec<Utf8PathBuf>) -> Re
 const COVERAGE_ARTEFACT_SUFFIXES: [&str; 2] = [".profraw", ".profdata"];
 
 /// Whether a directory entry is outside what Cargo packages, or is run output.
+///
+/// Hidden entries are covered: Cargo packages a tracked hidden file, and a
+/// source such as `src/.catalogue.ftl` that a build embeds is still a source.
+/// Only `.git`, which is version-control state, is left out.
 fn is_skipped(name: &str) -> bool {
     name == "target"
-        || name.starts_with('.')
+        || name == ".git"
         || COVERAGE_ARTEFACT_SUFFIXES
             .iter()
             .any(|suffix| name.ends_with(suffix))

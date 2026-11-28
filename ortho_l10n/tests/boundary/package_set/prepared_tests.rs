@@ -5,13 +5,21 @@
 //! toolchain identity, so nothing spawns Cargo and nothing reads the process
 //! environment.
 
-use super::{check, invalidate, write};
-use crate::boundary::package_set::{PACKAGED_CRATES, PACKAGED_VERSION};
+use super::{Snapshot, check, invalidate, write};
+use crate::boundary::package_set::PACKAGED_CRATES;
 use anyhow::{Context, Result, ensure};
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::fs_utf8::Dir;
 
 const TOOLCHAIN: &str = "cargo 1.0.0; rustc 1.0.0";
+
+/// The packaged members the stand-in repository holds.
+const MEMBERS: [&str; 4] = [
+    "ortho_l10n",
+    "ortho_config",
+    "ortho_config_macros",
+    "test_helpers",
+];
 
 /// A stand-in repository with a prepared packaging target beside it.
 struct Scene {
@@ -36,34 +44,42 @@ impl Scene {
     }
 
     fn populate(&self) -> Result<()> {
-        for member in [
-            "ortho_l10n",
-            "ortho_config",
-            "ortho_config_macros",
-            "test_helpers",
-        ] {
-            self.put(&format!("{member}/Cargo.toml"), "[package]\n")?;
-            self.put(&format!("{member}/src/lib.rs"), "// source\n")?;
+        for member in MEMBERS {
+            self.put(
+                &Utf8PathBuf::from(member).join("Cargo.toml"),
+                b"[package]\n",
+            )?;
+            self.put(
+                &Utf8PathBuf::from(member).join("src/lib.rs"),
+                b"// source\n",
+            )?;
         }
-        self.put("Cargo.toml", "[workspace]\n")?;
-        self.put("Cargo.lock", "# lock\n")?;
+        self.put(Utf8Path::new("Cargo.toml"), b"[workspace]\n")?;
+        self.put(Utf8Path::new("Cargo.lock"), b"# lock\n")?;
         for (name, version) in PACKAGED_CRATES {
-            self.put_in_target(&format!("package/{name}-{version}.crate"), "archive")?;
-            self.put_in_target(&format!("package/{name}-{version}/Cargo.toml"), "manifest")?;
+            let package = Utf8PathBuf::from("package");
+            self.put_in_target(&package.join(format!("{name}-{version}.crate")), b"archive")?;
+            let root = package.join(format!("{name}-{version}"));
+            self.put_in_target(&root.join("Cargo.toml"), b"manifest")?;
+            self.put_in_target(&root.join("src/lib.rs"), b"// packaged source\n")?;
         }
         Ok(())
     }
 
-    fn put(&self, relative: &str, contents: &str) -> Result<()> {
+    fn put(&self, relative: &Utf8Path, contents: &[u8]) -> Result<()> {
         write_under(&self.repository, relative, contents)
     }
 
-    fn put_in_target(&self, relative: &str, contents: &str) -> Result<()> {
+    fn put_in_target(&self, relative: &Utf8Path, contents: &[u8]) -> Result<()> {
         write_under(&self.target, relative, contents)
     }
 
+    fn snapshot(&self) -> Result<Snapshot> {
+        Snapshot::capture(&self.repository, TOOLCHAIN)
+    }
+
     fn prepare(&self) -> Result<()> {
-        write(&self.repository, &self.target, TOOLCHAIN)
+        write(self.snapshot()?, &self.target)
     }
 
     fn check(&self, toolchain: &str) -> Result<()> {
@@ -72,15 +88,24 @@ impl Scene {
 }
 
 /// Write `contents` to `relative` beneath `root`, creating parents.
-fn write_under(root: &Utf8Path, relative: &str, contents: &str) -> Result<()> {
+fn write_under(root: &Utf8Path, relative: &Utf8Path, contents: &[u8]) -> Result<()> {
     Dir::create_ambient_dir_all(root, cap_std::ambient_authority())?;
     let directory = Dir::open_ambient_dir(root, cap_std::ambient_authority())?;
-    if let Some(parent) = Utf8Path::new(relative).parent() {
+    if let Some(parent) = relative.parent() {
         directory.create_dir_all(parent)?;
     }
     directory
         .write(relative, contents)
         .with_context(|| format!("write {relative}"))
+}
+
+/// The packaged root of the first crate, beneath the packaging target.
+fn first_packaged_root() -> Result<Utf8PathBuf> {
+    let (name, version) = PACKAGED_CRATES
+        .first()
+        .copied()
+        .context("the packaged set is empty")?;
+    Ok(Utf8PathBuf::from("package").join(format!("{name}-{version}")))
 }
 
 /// The error text of a refused check, or a failure if it was accepted.
@@ -116,7 +141,7 @@ fn a_record_for_unchanged_inputs_is_accepted() -> Result<()> {
 fn a_changed_source_makes_the_record_stale() -> Result<()> {
     let scene = Scene::new()?;
     scene.prepare()?;
-    scene.put("ortho_l10n/src/lib.rs", "// edited\n")?;
+    scene.put(Utf8Path::new("ortho_l10n/src/lib.rs"), b"// edited\n")?;
     let message = refusal(scene.check(TOOLCHAIN))?;
     ensure!(
         message.contains("stale")
@@ -127,12 +152,37 @@ fn a_changed_source_makes_the_record_stale() -> Result<()> {
     Ok(())
 }
 
+/// A source edited while packaging ran is recorded as it was before.
+///
+/// The snapshot is taken before packaging and published after, so an edit in
+/// between leaves archives that may hold it and a record that does not: the
+/// first check must refuse, not vouch for an unverified tree.
+#[test]
+fn a_source_edited_while_packaging_ran_is_refused() -> Result<()> {
+    let scene = Scene::new()?;
+    let snapshot = scene.snapshot()?;
+    scene.put(
+        Utf8Path::new("ortho_l10n/src/lib.rs"),
+        b"// edited during\n",
+    )?;
+    write(snapshot, &scene.target)?;
+    let message = refusal(scene.check(TOOLCHAIN))?;
+    ensure!(
+        message.contains("changed ortho_l10n/src/lib.rs"),
+        "an edit made between capture and publication should be named: {message}",
+    );
+    Ok(())
+}
+
 /// A new file in a packaged member invalidates the record: Cargo would package it.
 #[test]
 fn a_new_packaged_file_makes_the_record_stale() -> Result<()> {
     let scene = Scene::new()?;
     scene.prepare()?;
-    scene.put("ortho_config/locales/en/extra.ftl", "key = value\n")?;
+    scene.put(
+        Utf8Path::new("ortho_config/locales/en/extra.ftl"),
+        b"key = value\n",
+    )?;
     let message = refusal(scene.check(TOOLCHAIN))?;
     ensure!(
         message.contains("added ortho_config/locales/en/extra.ftl"),
@@ -147,7 +197,8 @@ fn a_long_list_of_changes_is_summarized() -> Result<()> {
     let scene = Scene::new()?;
     scene.prepare()?;
     for index in 0..20 {
-        scene.put(&format!("ortho_config/extra/file-{index}.txt"), "new\n")?;
+        let path = Utf8PathBuf::from(format!("ortho_config/extra/file-{index}.txt"));
+        scene.put(&path, b"new\n")?;
     }
     let message = refusal(scene.check(TOOLCHAIN))?;
     ensure!(
@@ -162,7 +213,7 @@ fn a_long_list_of_changes_is_summarized() -> Result<()> {
 fn a_changed_lockfile_makes_the_record_stale() -> Result<()> {
     let scene = Scene::new()?;
     scene.prepare()?;
-    scene.put("Cargo.lock", "# another lock\n")?;
+    scene.put(Utf8Path::new("Cargo.lock"), b"# another lock\n")?;
     refusal(scene.check(TOOLCHAIN)).map(|_message| ())
 }
 
@@ -179,14 +230,38 @@ fn a_different_toolchain_makes_the_record_stale() -> Result<()> {
     Ok(())
 }
 
-/// Build output and hidden entries are not packaged, so they do not count.
+/// Build output is not packaged, so it does not count.
 #[test]
-fn build_output_and_hidden_entries_do_not_change_the_fingerprint() -> Result<()> {
+fn build_output_does_not_change_the_digests() -> Result<()> {
     let scene = Scene::new()?;
     scene.prepare()?;
-    scene.put("ortho_l10n/target/debug/artefact", "output\n")?;
-    scene.put("ortho_l10n/.hidden/state", "state\n")?;
+    scene.put(
+        Utf8Path::new("ortho_l10n/target/debug/artefact"),
+        b"output\n",
+    )?;
+    scene.put(Utf8Path::new("ortho_l10n/.git/state"), b"state\n")?;
     scene.check(TOOLCHAIN)
+}
+
+/// Cargo packages a tracked hidden file, and a build can embed one, so it counts.
+#[test]
+fn a_hidden_source_is_covered() -> Result<()> {
+    let scene = Scene::new()?;
+    scene.put(
+        Utf8Path::new("ortho_l10n/src/.catalogue.ftl"),
+        b"key = one\n",
+    )?;
+    scene.prepare()?;
+    scene.put(
+        Utf8Path::new("ortho_l10n/src/.catalogue.ftl"),
+        b"key = two\n",
+    )?;
+    let message = refusal(scene.check(TOOLCHAIN))?;
+    ensure!(
+        message.contains("changed ortho_l10n/src/.catalogue.ftl"),
+        "an edited hidden source should be named: {message}",
+    );
+    Ok(())
 }
 
 /// Profile data a coverage run writes into a member directory is run output.
@@ -195,11 +270,14 @@ fn build_output_and_hidden_entries_do_not_change_the_fingerprint() -> Result<()>
 /// instrumented test binary leaves in its working directory after the record
 /// was written.
 #[test]
-fn coverage_profile_data_does_not_change_the_fingerprint() -> Result<()> {
+fn coverage_profile_data_does_not_change_the_digests() -> Result<()> {
     let scene = Scene::new()?;
     scene.prepare()?;
-    scene.put("ortho_config/default_123_0_456.profraw", "raw\n")?;
-    scene.put("ortho_config/merged.profdata", "merged\n")?;
+    scene.put(
+        Utf8Path::new("ortho_config/default_123_0_456.profraw"),
+        b"raw\n",
+    )?;
+    scene.put(Utf8Path::new("ortho_config/merged.profdata"), b"merged\n")?;
     scene.check(TOOLCHAIN)
 }
 
@@ -212,10 +290,11 @@ fn a_replaced_archive_makes_the_record_stale() -> Result<()> {
         .first()
         .copied()
         .context("the packaged set is empty")?;
-    scene.put_in_target(&format!("package/{name}-{version}.crate"), "replaced")?;
+    let archive = Utf8PathBuf::from("package").join(format!("{name}-{version}.crate"));
+    scene.put_in_target(&archive, b"replaced")?;
     let message = refusal(scene.check(TOOLCHAIN))?;
     ensure!(
-        message.contains("archive"),
+        message.contains(&format!("changed {name}-{version}.crate")),
         "a replaced archive should be named: {message}",
     );
     Ok(())
@@ -226,10 +305,36 @@ fn a_replaced_archive_makes_the_record_stale() -> Result<()> {
 fn a_replaced_unpacked_manifest_makes_the_record_stale() -> Result<()> {
     let scene = Scene::new()?;
     scene.prepare()?;
+    let root = first_packaged_root()?;
+    scene.put_in_target(&root.join("Cargo.toml"), b"replaced")?;
+    refusal(scene.check(TOOLCHAIN)).map(|_message| ())
+}
+
+/// An unpacked source is what the consumer builds compile, so it is bound too.
+#[test]
+fn a_replaced_unpacked_source_makes_the_record_stale() -> Result<()> {
+    let scene = Scene::new()?;
+    scene.prepare()?;
+    let root = first_packaged_root()?;
     scene.put_in_target(
-        &format!("package/ortho_l10n-{PACKAGED_VERSION}/Cargo.toml"),
-        "replaced",
+        &root.join("src/lib.rs"),
+        b"// replaced after verification\n",
     )?;
+    let message = refusal(scene.check(TOOLCHAIN))?;
+    ensure!(
+        message.contains("src/lib.rs") && message.contains("make boundary-prepare"),
+        "an edited unpacked source should be named: {message}",
+    );
+    Ok(())
+}
+
+/// A file added to an unpacked root is compiled too, so it is bound as well.
+#[test]
+fn a_file_added_to_an_unpacked_root_makes_the_record_stale() -> Result<()> {
+    let scene = Scene::new()?;
+    scene.prepare()?;
+    let root = first_packaged_root()?;
+    scene.put_in_target(&root.join("src/extra.rs"), b"// added\n")?;
     refusal(scene.check(TOOLCHAIN)).map(|_message| ())
 }
 

@@ -236,6 +236,10 @@ def test_the_encoded_flags_are_dropped_from_every_recipe_but_the_coverage_warmup
     assert _encoded_flags_seen_by_a_recipe("test-warmup-full", "WARMUP_ENV=") == "-Cprobe", (
         "the nextest setup script's target must inherit the encoded flags"
     )
+    assert _encoded_flags_seen_by_a_recipe("boundary-prepare", "WARMUP_ENV=") == "-Cprobe", (
+        "the boundary preparation runs as a nextest setup script too and must inherit "
+        "the encoded flags, or its builds differ from the timed boundary build"
+    )
     assert _encoded_flags_seen_by_a_recipe("test-warmup", "WARMUP_ENV=RUSTFLAGS=-Cx") == "", (
         "a non-empty `WARMUP_ENV` assigns the flags itself, and an inherited encoded "
         "value would override that assignment"

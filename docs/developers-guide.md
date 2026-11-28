@@ -406,22 +406,33 @@ against both sources with `cargo test --no-run --all-targets --all-features`,
 so the shared consumer target holds the dependency closure. It runs under
 `Budget::preparation`, which lifts the per-call caps: preparation is not a
 nextest test body, so there is no allowance to fit under, and a three-hour hang
-guard stands in so a wedged child is still reported with its output. It then
-writes `target/localization-boundary/packaging-target/prepared.json`, last, and
-only after both invocations succeed; it removes any earlier record first, so a
-run that stops half way leaves nothing that vouches for roots being replaced.
+guard stands in so a wedged child is still reported with its output. It removes
+any earlier record first, digests every source before packaging starts, and
+writes `target/localization-boundary/packaging-target/prepared.json` last,
+after both invocations and every consumer build have succeeded, so a run that
+stops at any point leaves nothing that vouches for roots being replaced.
+Because the source digests are taken before packaging, a source edited while
+`cargo package` runs is recorded as it was before and the first check refuses
+it as stale. The record is written to a temporary name of the writing process's
+own and renamed, so two runs in one checkout do not write the same file.
 
 The record names each invocation that verified, and binds that to a SHA-256
-fingerprint of the files Cargo packages for each patched member, the workspace
-manifest and lockfile, `rust-toolchain.toml`, `.cargo/config.toml`, the
-identity of the Cargo and compiler (`cargo -V`, `rustc -vV`), and the packaging
-recipe. It also carries the digest of each `.crate` archive and each unpacked
-manifest. A timed contract recomputes the fingerprint and the digests and
-refuses on any difference, so the roots it reads are the ones that passed
-verification, for these sources, under this toolchain. Editing any file under
-`ortho_l10n`, `ortho_config`, `ortho_config_macros` or `test_helpers` therefore
-makes the record stale, as it changes what `cargo package` would produce;
-`make test` and `make boundary` re-prepare automatically.
+digest per file of: every file Cargo packages for each patched member (hidden
+files included, since Cargo packages a tracked one; `target`, `.git` and
+`.profraw`/`.profdata` coverage output excluded, the last because an
+instrumented test binary writes it into its member directory after the record
+exists), the workspace manifest and lockfile, `rust-toolchain.toml` and
+`.cargo/config.toml`; the identity of the Cargo and compiler (`cargo -V`,
+`rustc -vV`); and the packaging recipe. It also carries the digest of each
+`.crate` archive and of every file of each unpacked root, because the consumer
+builds compile the unpacked roots, not the archives. A timed contract
+recomputes the digests and refuses on any difference, naming the recipe, the
+toolchain, or the changed, added and removed paths (eight named, the rest
+counted by directory and extension), so the roots it reads are the ones that
+passed verification, for these sources, under this toolchain. Editing any file
+under `ortho_l10n`, `ortho_config`, `ortho_config_macros` or `test_helpers`
+therefore makes the record stale, as it changes what `cargo package` would
+produce; `make test` and `make boundary` re-prepare automatically.
 
 The contracts still assert on the real packaged roots and on consumers built
 and tested in fresh foreign workspaces: only the compile of the dependency

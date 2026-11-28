@@ -129,7 +129,7 @@ mod roots;
 
 // Re-exported so the contracts keep naming one module for the packaged set.
 pub(crate) use roots::{
-    PACKAGED_CRATES, PACKAGED_VERSION, assert_packaged_set_complete, package_and_record,
+    PACKAGED_CRATES, PACKAGED_VERSION, assert_packaged_set_complete, begin_preparation,
     packaged_crate, prepare_packaged_set, unpacked_directory,
 };
 
