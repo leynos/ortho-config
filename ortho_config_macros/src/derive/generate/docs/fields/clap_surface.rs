@@ -202,13 +202,13 @@ fn infer_if_declared_argument(
     infer_undeclared_argument(field, name, next_index)
 }
 
-/// Reports whether any field declares a clap argument.
+/// Reports whether the struct is a clap command with fields of its own.
 ///
 /// A clap helper attribute only compiles when a clap derive registered it, so
 /// one readable or unreadable argument declaration proves the struct is a clap
-/// command. `#[command(subcommand)]` and `#[command(flatten)]` markers register
-/// the same derive in their `#[command(...)]` spelling but do not declare an
-/// argument of their own, so they are not evidence for the per-field rule.
+/// command. A flattened container is evidence too: its arguments join this
+/// command's own argument list. A subcommand selector only names a child
+/// command, so it does not establish that this struct's fields are arguments.
 fn declares_clap_arguments(fields: &[syn::Field]) -> syn::Result<bool> {
     for field in fields {
         if field_declares_clap_argument(field)? {
@@ -218,11 +218,13 @@ fn declares_clap_arguments(fields: &[syn::Field]) -> syn::Result<bool> {
     Ok(false)
 }
 
-/// Reports whether one field declares a clap argument rather than a marker.
+/// Reports whether one field proves the struct is a clap command.
 fn field_declares_clap_argument(field: &syn::Field) -> syn::Result<bool> {
+    if clap_field_is_subcommand(field)? {
+        return Ok(false);
+    }
     let declares = field.attrs.iter().any(is_clap_attribute);
-    let is_marker = clap_field_is_subcommand(field)? || clap_field_is_flattened(field)?;
-    Ok(declares && !is_marker)
+    Ok(declares || clap_field_is_flattened(field)?)
 }
 
 /// Describes a field that clap derives an argument for without a declaration.

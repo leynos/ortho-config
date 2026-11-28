@@ -229,6 +229,28 @@ fn an_unreadable_explicit_index_does_not_advance_the_counter() {
 }
 
 #[test]
+fn a_flatten_marker_makes_sibling_fields_clap_arguments() {
+    let (fields, attrs) = declarations(&quote::quote! {
+        input: String,
+        #[command(flatten)]
+        shared: Shared
+    });
+    let resolved = resolve_clap_args(&fields, &attrs).expect("declarations should resolve");
+    assert_eq!(
+        resolved
+            .get("input")
+            .and_then(|value| value.positional.as_ref())
+            .map(|value| value.index),
+        Some(1),
+        "a field before the flattened child keeps clap's first index"
+    );
+    assert!(
+        !resolved.contains_key("shared"),
+        "the container itself owns no argument"
+    );
+}
+
+#[test]
 fn operands_after_a_flattened_container_have_no_index() {
     let (fields, attrs) = declarations(&quote::quote! {
         #[arg(long)]

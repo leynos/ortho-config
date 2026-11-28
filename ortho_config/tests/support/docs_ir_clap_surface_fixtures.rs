@@ -192,13 +192,10 @@ pub(super) struct SharedOperandArgs {
     shared: String,
 }
 
-/// Arguments that flatten a child owning an operand.
+/// Arguments whose only clap marker is a flattened child owning an operand.
 #[derive(Debug, Clone, Default, Parser, Serialize, Deserialize, OrthoConfig)]
 #[ortho_config(prefix = "SPLITTERS")]
 pub(super) struct FlattenedOperandArgs {
-    /// Named option declared before the container.
-    #[arg(long)]
-    verbose: bool,
     /// Flattened child whose operand shifts later indices.
     #[command(flatten)]
     #[ortho_config(skip_cli)]
