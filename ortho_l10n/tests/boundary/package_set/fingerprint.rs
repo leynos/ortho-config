@@ -67,7 +67,9 @@ pub(super) fn file_digests(repository: &Utf8Path) -> Result<BTreeMap<String, Str
         .map(|path| {
             let digest = read_if_present(&root, &path)?
                 .map_or_else(|| ABSENT.to_owned(), |bytes| sha256_hex(&bytes));
-            Ok((path.into_string(), digest))
+            // One spelling on every platform: a record names paths with `/`,
+            // and Windows joins them with `\`.
+            Ok((path.as_str().replace('\\', "/"), digest))
         })
         .collect()
 }
