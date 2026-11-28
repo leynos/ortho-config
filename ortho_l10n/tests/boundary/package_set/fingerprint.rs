@@ -111,9 +111,22 @@ fn collect(root: &Dir, directory: &Utf8Path, files: &mut Vec<Utf8PathBuf>) -> Re
     Ok(())
 }
 
-/// Whether a directory entry is outside what Cargo packages.
+/// Suffixes of the profile data an instrumented test binary writes.
+///
+/// A coverage run leaves `default_*.profraw` files in the working directory of
+/// the tests it runs, which is a member directory. They appear while the suite
+/// is running, after the preparation step has written its record, and they are
+/// run output, not a source: a stale-record failure on the first of them
+/// (found on CI) says nothing about what was verified.
+const COVERAGE_ARTEFACT_SUFFIXES: [&str; 2] = [".profraw", ".profdata"];
+
+/// Whether a directory entry is outside what Cargo packages, or is run output.
 fn is_skipped(name: &str) -> bool {
-    name == "target" || name.starts_with('.')
+    name == "target"
+        || name.starts_with('.')
+        || COVERAGE_ARTEFACT_SUFFIXES
+            .iter()
+            .any(|suffix| name.ends_with(suffix))
 }
 
 /// Read a file, or `None` when it does not exist.

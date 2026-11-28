@@ -151,7 +151,7 @@ fn a_long_list_of_changes_is_summarized() -> Result<()> {
     }
     let message = refusal(scene.check(TOOLCHAIN))?;
     ensure!(
-        message.contains("and 12 more"),
+        message.contains("and 12 more: 12 x added ortho_config/extra/*.txt"),
         "twenty added files should name eight and count twelve: {message}",
     );
     Ok(())
@@ -186,6 +186,20 @@ fn build_output_and_hidden_entries_do_not_change_the_fingerprint() -> Result<()>
     scene.prepare()?;
     scene.put("ortho_l10n/target/debug/artefact", "output\n")?;
     scene.put("ortho_l10n/.hidden/state", "state\n")?;
+    scene.check(TOOLCHAIN)
+}
+
+/// Profile data a coverage run writes into a member directory is run output.
+///
+/// The first CI run of the preparation failed on exactly these files, which an
+/// instrumented test binary leaves in its working directory after the record
+/// was written.
+#[test]
+fn coverage_profile_data_does_not_change_the_fingerprint() -> Result<()> {
+    let scene = Scene::new()?;
+    scene.prepare()?;
+    scene.put("ortho_config/default_123_0_456.profraw", "raw\n")?;
+    scene.put("ortho_config/merged.profdata", "merged\n")?;
     scene.check(TOOLCHAIN)
 }
 

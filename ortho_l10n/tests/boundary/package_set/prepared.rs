@@ -301,11 +301,11 @@ fn describe_changes(
     recorded: &BTreeMap<String, String>,
     current: &BTreeMap<String, String>,
 ) -> String {
-    let mut changes: Vec<String> = Vec::new();
+    let mut changes: Vec<(&str, &str)> = Vec::new();
     for (path, digest) in current {
         match recorded.get(path) {
-            None => changes.push(format!("added {path}")),
-            Some(before) if before != digest => changes.push(format!("changed {path}")),
+            None => changes.push(("added", path)),
+            Some(before) if before != digest => changes.push(("changed", path)),
             Some(_unchanged) => {}
         }
     }
@@ -313,14 +313,49 @@ fn describe_changes(
         recorded
             .keys()
             .filter(|path| !current.contains_key(*path))
-            .map(|path| format!("removed {path}")),
+            .map(|path| ("removed", path.as_str())),
     );
-    let more = changes.len().saturating_sub(NAMED_CHANGES);
-    changes.truncate(NAMED_CHANGES);
-    if more > 0 {
-        changes.push(format!("and {more} more"));
+    let (named, rest) = changes.split_at(changes.len().min(NAMED_CHANGES));
+    let mut parts: Vec<String> = named
+        .iter()
+        .map(|(verb, path)| format!("{verb} {path}"))
+        .collect();
+    if !rest.is_empty() {
+        parts.push(format!(
+            "and {} more: {}",
+            rest.len(),
+            summarize_by_pattern(rest)
+        ));
     }
-    changes.join(", ")
+    parts.join(", ")
+}
+
+/// How many kinds of change the summary of the unnamed ones lists.
+const SUMMARIZED_KINDS: usize = 5;
+
+/// Count `changes` by what they did and where, as `3 x added dir/*.ext`.
+///
+/// A stale record caused by a process that wrote hundreds of files names its
+/// cause once rather than eight paths of it.
+fn summarize_by_pattern(changes: &[(&str, &str)]) -> String {
+    let mut counts: BTreeMap<String, usize> = BTreeMap::new();
+    for (verb, path) in changes {
+        let location = Utf8Path::new(path);
+        let directory = location.parent().map_or("", Utf8Path::as_str);
+        let pattern = location.extension().map_or_else(
+            || (*path).to_owned(),
+            |extension| format!("{directory}/*.{extension}"),
+        );
+        *counts.entry(format!("{verb} {pattern}")).or_default() += 1;
+    }
+    let mut kinds: Vec<(usize, String)> = counts.into_iter().map(|(kind, n)| (n, kind)).collect();
+    kinds.sort_by(|left, right| right.0.cmp(&left.0).then_with(|| left.1.cmp(&right.1)));
+    kinds
+        .iter()
+        .take(SUMMARIZED_KINDS)
+        .map(|(count, kind)| format!("{count} x {kind}"))
+        .collect::<Vec<_>>()
+        .join("; ")
 }
 
 #[cfg(test)]
