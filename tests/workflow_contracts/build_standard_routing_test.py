@@ -72,8 +72,16 @@ DEVELOPMENT_ROUTES: typ.Final[list[tuple[str, str, str]]] = [
     ("make_lint_clippy_doc", "lint-clippy", "doc"),
     ("make_lint_clippy_clippy", "lint-clippy", "clippy"),
     ("make_boundary", "boundary", "test"),
+    ("make_test_warmup", "test-warmup", "test"),
+    ("make_test_warmup_full", "test-warmup-full", "test"),
     ("make_build", "build", "build"),
 ]
+
+#: Prerequisites of a route that run Cargo and are judged as routes of their
+#: own, so expanding the route does not leave two Cargo lines for one subcommand.
+PREREQUISITE_ROUTES: typ.Final[dict[str, tuple[str, ...]]] = {
+    "test": ("test-warmup",),
+}
 
 #: Routes that deny warnings as well as carrying the standard. ``build`` keeps
 #: the caller's warning policy and imposes none.
@@ -84,6 +92,8 @@ DENIES_WARNINGS: typ.Final[frozenset[str]] = frozenset(
         "make_lint_clippy_doc",
         "make_lint_clippy_clippy",
         "make_boundary",
+        "make_test_warmup",
+        "make_test_warmup_full",
     }
 )
 
@@ -106,8 +116,17 @@ def _line_for(
     Exactly one is required: zero would mean the route no longer reaches Cargo
     (a vacuous pass for every assertion after it), and two would mean the case
     cannot say which it judged.
+
+    A target's prerequisites that run Cargo themselves are skipped with
+    ``--old-file`` (``-o``) and judged as routes of their own, so each Cargo
+    line is held to the standard by exactly one case.
     """
-    lines = dry_run(target, *variables, host=host)
+    skipped = [
+        argument
+        for prerequisite in PREREQUISITE_ROUTES.get(target, ())
+        for argument in ("-o", prerequisite)
+    ]
+    lines = dry_run(target, *variables, *skipped, host=host)
     matching = [line for line in cargo_lines(lines) if f"probe-cargo {subcommand} " in f"{line} "]
     assert len(matching) == 1, (
         f"`make {target}` has {len(matching)} Cargo lines running {subcommand!r}: {lines}"
