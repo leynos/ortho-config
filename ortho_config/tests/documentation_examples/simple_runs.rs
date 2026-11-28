@@ -63,6 +63,11 @@ const SIMPLE_RUNS: &[SimpleRun] = &[
         stdout: "format=Some(\"json\")\n",
     },
     SimpleRun {
+        id: "guide-clap-error-matrix",
+        args: &[],
+        stdout: "translated=14 display_only=3\n",
+    },
+    SimpleRun {
         id: "guide-nested-requirements",
         args: &[],
         stdout: "missing=database.host\n",

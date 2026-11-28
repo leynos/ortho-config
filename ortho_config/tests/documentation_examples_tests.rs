@@ -33,6 +33,7 @@ const EXPECTED_EXAMPLE_IDS: &[&str] = &[
     "guide-cargo-external-subcommand",
     "guide-check-command",
     "guide-check-report",
+    "guide-clap-error-matrix",
     "guide-clap-only-parse",
     "guide-collection-file",
     "guide-collections",

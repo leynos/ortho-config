@@ -3,7 +3,7 @@ source: examples/hello_world/tests/localised_help.rs
 expression: output
 ---
 Error: 
-   0: [91mfailed to parse command line: error: ワークフローを選択してください: ⁨context, greet, take-leave, help⁩
+   0: [91mfailed to parse command line: ローカライズされたヘルプを示す挨拶デモ
 
       Usage: 使用方法:
       ⁨hello-world⁩ [オプション] <コマンド>
@@ -23,8 +23,9 @@ Error:
             --is-excited         Enables an enthusiastic delivery mode from the CLI
             --is-quiet           Enables a quiet delivery mode from the CLI
         -h, --help               Print help (see more with '--help')
-        -V, --version            Print version[0m
-   1: [91merror: ワークフローを選択してください: ⁨context, greet, take-leave, help⁩
+        -V, --version            Print version
+      [0m
+   1: [91mローカライズされたヘルプを示す挨拶デモ
 
       Usage: 使用方法:
       ⁨hello-world⁩ [オプション] <コマンド>
@@ -44,7 +45,8 @@ Error:
             --is-excited         Enables an enthusiastic delivery mode from the CLI
             --is-quiet           Enables a quiet delivery mode from the CLI
         -h, --help               Print help (see more with '--help')
-        -V, --version            Print version[0m
+        -V, --version            Print version
+      [0m
 
 Location:
    <rust-src>/library/core/src/ops/function.rs[0m:[35m250[0m

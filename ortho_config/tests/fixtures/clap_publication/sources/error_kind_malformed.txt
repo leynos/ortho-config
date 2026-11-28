@@ -1,0 +1,10 @@
+// Malformed inventory: the enum body is truncated.
+//
+// The gate must fail on a parse error rather than counting the variants it
+// managed to read. The fixture uses a `.txt` extension so editors and language
+// servers do not report a deliberate syntax error in the source tree.
+
+/// Kinds of error produced while parsing command-line arguments.
+pub enum ErrorKind {
+    /// A value was supplied that failed validation.
+    InvalidValue,

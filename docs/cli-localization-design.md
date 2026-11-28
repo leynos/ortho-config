@@ -456,60 +456,201 @@ The crate ships en-US translations for every raisable variant in stable clap
 are recorded but **not** translated — clap renders the help or version text
 itself, and the matrix marks them with a `DisplayOnly` sentinel.
 
-For each supported `clap_builder` package identity, the intended matrix has one
-entry for every declared variant, either with a translated Fluent identifier or
-with the `DisplayOnly` sentinel. The matrix shape permits a single
-`len() == ORTHO_CONFIG_CLAP_ERROR_KIND_COUNT` comparison once the gate's source
-identity contract below is enforced.
+For each supported `clap_builder` package identity, the matrix has one entry
+for every declared variant, either with a translated Fluent identifier or with
+the `DisplayOnly` sentinel. The matrix shape permits a single length comparison
+against the reviewed total described in §6.1.1.
 
-#### 6.1.1 Proposed coverage gate
+#### 6.1.1 Pre-publication coverage gate
 
-`clap::error::ErrorKind` is `#[non_exhaustive]`; the proposed gate is intended
-to detect coverage gaps rather than rely solely on a release-time audit. A
-checked-in or generated count manifest must bind each count to an explicitly
-supported `clap_builder` package identity: package version, registry or source
-identity, and checksum. `ErrorKind` is defined by `clap_builder` and
-re-exported by the `clap` facade. In this workspace, the lockfile identifies
-`clap_builder` `4.6.0` from
+`clap::error::ErrorKind` is `#[non_exhaustive]`, so a clap release can add a
+variant the matrix does not cover. The gate that detects this is a test-only
+pre-publication check in this repository. It is not a build script, and it
+makes no claim about consumer builds. A dependency's build script cannot
+observe its dependent's dependency resolution, so the build-time variant
+originally proposed here cannot be implemented; see
+[ADR-0027](adrs/adr-0028-pre-publication-clap-coverage-gate.md) for the
+evidence and the rejected alternatives.
+
+The check reads the root workspace `Cargo.lock` and selects the unique locked
+`clap` that `ortho_config` uses as a normal production dependency for the
+configured target and features, recording that package's version, source
+identity, and checksum. It follows the `clap` → `clap_builder` normal
+dependency edge to exactly one `clap_builder` identity and cross-checks both
+package identities and the edge against `cargo metadata --locked --offline` for
+the same target and feature selection. Lock and metadata disagreement, a source
+override, multiple candidates, a missing or unexpected edge, or an unsupported
+identity fails the check before any count is compared.
+
+For the supported registry identity the check locates the source defining
+`ErrorKind` through metadata: the crate root is the `src_path` reported for the
+package's unique library target — never a path inferred from registry directory
+names, and never the `src/lib.rs` default — and the walk starts there, follows
+unconditional `mod` declarations, parses every file it reaches with `syn`, and
+counts every top-level variant without assigning meaning to any of them.
+Attributes and `cfg` conditions are audited for the supported source, and a
+declaration shape whose compiled inventory cannot be established exhaustively
+fails closed. The declaration must also be the crate's only one and must sit at
+file level: an `ErrorKind` declared inside an inline module is refused, because
+the file-level scan cannot bind it to the inventory the crate exports, and a
+compiled file-level decoy beside it would otherwise let the count describe the
+wrong enum. A condition on the module does not exempt it. The compiler decides
+whether a conditional module is present, and a condition can hold, so refusing
+only the unconditional shape would let a decoy pass behind a condition that is
+true.
+
+Two further shapes hide the same way and are refused rather than followed. Rust
+substitutes the items a macro produces after parsing, so an item-level macro
+invocation can declare the exported inventory while a decoy beside it is the
+only declaration the parse shows; `include!` is the plausible form, because its
+payload is a file the source walk does not read. The gate establishes an
+expansion only for a macro the declaring file defines with `macro_rules!`,
+whose transcription and call arguments it scans for the inventory's name, and
+it refuses every other invocation, including imported macros and `include!`. A
+definition counts only where it is in scope at the call: Rust resolves an
+unqualified `macro_rules!` invocation against the definitions textually
+preceding it, so an item list is read in source order and a later redefinition
+does not describe an earlier call. The arguments are a second route into the
+expansion, because an item-position parameter pastes them into the item list,
+so the macro names the arguments invoke are resolved exactly as those in a
+transcription are. That refusal applies to a macro a transcription invokes as
+well as to one at item level: a locally defined wrapper can call `include!`
+while its own transcription spells no `ErrorKind`, so trusting an unresolved
+nested name would hide the same splice one level down. A nested name must
+resolve to a transcription in the file or be a standard macro that expands only
+to an expression, statement, or literal. A rendered name can carry `r#`,
+because a raw identifier keeps its prefix, and Rust resolves `r#include` to
+`include`; the prefix is therefore removed before the name is resolved, rather
+than the invocation left unrecognized. Those standard names are consulted only
+where nothing else in the module claims them: Rust lets a `macro_rules!`
+definition shadow a prelude or `std` macro, so a local `assert_eq!` or
+`compile_error!` is a splice of its own rather than the macro its name
+suggests, and a `use` item binds the same way.
+`use crate::error_inject as compile_error;` gives an imported body the name of
+the diagnostic-only macro, so an inert name is trusted only where nothing that
+reaches the call could have bound it. An explicit import is matched exactly,
+including an `as` rename. A glob needs the crate's help: `use crate::…::*`,
+`self` and `super` forms can only re-export a name the crate already declares,
+so they are judged against the macro and import names collected from every
+file, while any other glob may name an external crate and refuses every
+unresolved name in its module. A `#[macro_use]` module is a third route that
+needs no `use` item at the call at all: the attribute imports every
+`macro_rules!` name its target declares into the enclosing scope and the
+modules below it, so a crate carrying one is trusted only for names it declares
+no macro of. A `cfg_attr` can apply the attribute as well, directly or through
+a further `cfg_attr`, and the compiler applies it before the import happens, so
+the attribute is resolved recursively rather than by its immediate spelling.
+`#[macro_use] extern crate` imports names from another crate entirely, so it
+refuses every unresolved name. `compile_error!` is allowed where those
+conditions hold, because it produces no item. Separately, a `mod` declaration
+whose file the walk cannot read is refused: the walk reads regular `.rs` files
+only, so that a symlink alias is not counted as a second declaration, which
+also means a declared module file that is a symlink leaves the compiler loading
+source the walk never parses. Each symlink control stages its link with a
+target relative to the link's own directory and reads the link back before the
+walk runs, so the inventory it hides is one the compiler would really load
+rather than a dangling name. A condition does not exempt that check either, for
+the same reason it does not exempt the declaration itself: the gate resolves
+the file before it sets a conditional module aside. A conditional module is
+inspected rather than skipped for the same reason. It cannot supply the count,
+but its body and its file are still walked, because a condition that holds
+would compile them, and a declaration inside it could name a module file the
+walk never reads. So neither a conditional `mod error;` whose file is a
+symlink, nor a `mod` declaration nested inside a conditional inline module, can
+hide an inventory behind a condition that is true.
+
+A third shape is not recoverable from the parse at all. An attribute path is
+either one of the compiler's annotations or an invocation of a procedural
+macro, and a macro receives the annotated item and returns the items that
+replace it: `#[inject] mod error {}` parses as an empty module while the build
+contains whatever the macro returned, and a derive macro appends its output to
+the item's scope. A gate that must decide before publishing cannot expand one,
+so it bounds every path it cannot bind to the compiler's own names. A
+multi-segment path names a procedural macro or a tool attribute, and is
+refused. A single identifier is trusted only when the compiler owns that name:
+a macro of the same spelling makes the attribute ambiguous (`E0659`), so a
+crate that compiles has already resolved every one-segment attribute path to
+the compiler's meaning. `derive` is the compiler attribute whose arguments
+reach a procedural macro, so its list is read and only the nine built-in
+derives are trusted. `cfg_attr` applies its attributes when its condition
+holds, so the audit recurses into it and judges the attributes it would apply.
+The lists are closed: refusing a compiler attribute they omit costs one review,
+while trusting a name the compiler does not own is the failure this bounds.
+
+A derive name needs one resolution step more than an attribute path, because
+the name alone does not decide what the compiler invokes. An explicit `use`
+binding shadows the prelude's built-in derive, so
+`use inventory_macros::Inject as Debug;` makes `#[derive(Debug)]` run the
+imported procedural macro and append its output to the annotated item's scope.
+A binding rooted at `std`, `core` or `alloc` cannot name a procedural derive,
+because the standard library exports none, so the reviewed
+`use std::fmt::Debug;` stays trusted; a module that rebinds the root itself,
+through `mod std` or `extern crate … as std`, voids that exemption.
+
+Every binding of the name decides the outcome, not only the last one written. A
+type and a derive macro occupy different namespaces, so
+`use inventory_macros::Inject as Debug;` and `use std::fmt::Debug as Debug;`
+compile together in one module; the `std` root says nothing about the macro
+namespace, which the procedural derive still owns. The audit therefore keeps
+every root bound to a name and trusts it only when all of them are compiler
+roots, in either source order.
+
+The count is bound to a declaration rather than to the path a consumer
+resolves, so every other way of giving the name `ErrorKind` to something the
+walk does not count is refused: a renamed re-export such as
+`pub use crate::real::ActualErrorKind as ErrorKind;`, a type alias such as
+`pub type ErrorKind = crate::real::ActualErrorKind;`, and a struct, union,
+trait or module declared under the name. A path is accepted only when its root
+is one of this crate's modules, so an external
+`pub use inventory_provider::ErrorKind;`, the same import renamed to itself,
+and an external glob such as `pub use inventory_provider::*;` are refused as
+well. The plain `pub use kind::ErrorKind;` names the declaration itself and
+stays accepted.
+
+One exception is reviewed rather than refused: the resolved source's own
+`pub use anstyle::*;`. Its crate is a reviewed identity — name, version, source
+and checksum, checked against `Cargo.lock` — and the gate refuses it if any
+name it declares is `ErrorKind`, so the exception is bounded by the artefact a
+reviewer accepted rather than by its spelling. A different or changed glob root
+fails the gate until it is reviewed.
+
+The count is the total declared variant count for that builder package, not
+only the raisable variants; classification as translated or `DisplayOnly`
+remains in `CLAP_ERROR_IDS`. The reviewed identity and its total are explicit
+test data beside the matrix test, in
+`ortho_config/tests/support/clap_reviewed.rs` and
+`ortho_config/tests/support/clap_publication/identity.rs`; the
+[developers' guide](developers-guide.md#the-pre-publication-clap-coverage-gate)
+owns the operating procedure. As reviewed on 2026-11-09 the workspace resolves
+`clap_builder` `4.6.7` from
 `registry+https://github.com/rust-lang/crates.io-index` with checksum
-`714a53001bf66416adb0e2ef5ac857140e7dc3a0c48fb28b2f10762fc4b5069f`; this is an
-example supported identity, not proof of the dependency resolved for every
-consumer.
+`ec0797fb7aeb1406c84efac526901f7ec3ead2124f946b494e72879d4b54704d`, and that
+`ErrorKind` declares seventeen variants; the test data, not this paragraph,
+remains authoritative.
 
-The implementation must obtain the identity of the `clap_builder` package
-actually used to compile OrthoConfig and verify that it exactly matches a
-supported manifest entry before emitting
-`cargo:rustc-env=ORTHO_CONFIG_CLAP_ERROR_KIND_COUNT=<n>`. It must also verify
-that the compiled `clap` facade exposes `ErrorKind` from that same resolved
-`clap_builder` package. The facade's resolved dependency edge is part of this
-check, not the source identity to which the variant count is bound. The count
-is the total declared variant count for that builder package, not only the
-raisable variants; classification as translated or `DisplayOnly` remains in
-`CLAP_ERROR_IDS`. The implementation must fail closed for unsupported package
-identities, source overrides, or resolutions whose identity cannot be
-established. Its mechanism must be deterministic and account for every
-supported Cargo source.
+The publication test compares the parsed source count with the reviewed total,
+and the matrix test compares the matrix length with it at compile time:
 
-The workspace's `Cargo.lock` does not prove this contract for downstream
-consumers, which resolve dependencies in their own workspaces and may apply
-source overrides. Until the implementation verifies that the count manifest
-entry describes the `clap_builder` source defining the compiled facade's
-`ErrorKind`, the following const assertion is not a mechanical coverage gate.
-Once the identity contract is enforced, a const-evaluated test can compare the
-matrix length with the count:
+```rust
+// In ortho_config's test suite.
+const CLAP_ERROR_KIND_COUNT: usize = 17;
+const_assert_eq!(CLAP_ERROR_IDS.len(), CLAP_ERROR_KIND_COUNT);
+```
 
-   ```rust
-   // In ortho_config's test suite.
-   const CLAP_ERROR_KIND_COUNT: usize =
-       env!("ORTHO_CONFIG_CLAP_ERROR_KIND_COUNT").parse().unwrap();
-   const_assert_eq!(CLAP_ERROR_IDS.len(), CLAP_ERROR_KIND_COUNT);
-   ```
-
-When a supported Clap source adds a variant, its count manifest entry and the
-matrix must be updated together; the assertion detects a length mismatch. A new
+The two comparisons answer different questions. A new upstream variant changes
+the parsed count, so the publication test fails until the total is reviewed and
+updated. Once the total is updated, a matrix that omits the new variant, or
+duplicates another to preserve its length, fails the const assertion or the
+semantic inventory test. Neither comparison parses source on its own. A new
 matrix entry points at a Fluent identifier for a raisable variant or marks the
 variant `DisplayOnly` for a new display shape. Roadmap §11.2.1 references this
-section rather than restating the proposed mechanism.
+section rather than restating the mechanism.
+
+**Limit of the guarantee.** The gate validates this repository's configured
+publication graph only. A consumer that resolves a different `clap_builder`
+receives no identity assurance from it, keeps the shipped matrix, and relies on
+the §6.3 fallback for an unmapped kind. Consumers are not required to run the
+gate, and no consumer build fails because of it.
 
 ### 6.2 Canonical mapping constant
 
@@ -551,6 +692,26 @@ The constant lets consumers:
 A `ClapErrorCoverage` builder consumes the constant, filters to `Translated`
 entries, and returns a report listing identifiers the consumer's `Localizer`
 fails to resolve.
+
+#### 6.2.1 Contextual arguments
+
+Each translated message is rendered with the context `clap` supplies for its
+kind, plus two details `clap` keeps outside the context map. A value parser's
+rejection reason is carried on the error's `std::error::Error::source`, so
+`clap-error-value-validation` receives it as `reason`; without it the
+translation would drop the reason the user needs and say only that a parser
+declined the value. An `ArgumentConflict` distinguishes a repeated flag from a
+collision between distinct arguments only by whether the offending argument is
+also the prior one, so the extractor adds `prior` and sets `conflict_kind` to
+`repeated` or `conflict`. The embedded messages select on that value, because a
+single message blaming "another argument" would misdescribe a flag supplied
+twice.
+
+A Fluent pattern with an unbound variable does not format, so an override
+catalogue that omits one of these arguments resolves to no message and takes
+the §6.3 fallback to `clap`'s own text. That is the intended direction: a
+catalogue written against an earlier release degrades to a usable stock
+diagnostic rather than printing a half-formed sentence.
 
 ### 6.3 Observable fallback
 
@@ -941,11 +1102,12 @@ never the block itself.
 ## 12. Failure modes and risks
 
 - **clap patch releases adding `ErrorKind` variants.** `ErrorKind` is
-  `#[non_exhaustive]` and clap may add variants in a patch release. Once the
-  §6.1.1 identity contract is implemented, its const assertion can catch a
-  matrix/count mismatch in CI; the §6.3 `warn`-level tracing event catches an
-  unmapped kind in production. Until then, the count comparison is not an
-  exhaustive gate.
+  `#[non_exhaustive]` and clap may add variants in a patch release. The §6.1.1
+  pre-publication gate catches the growth in this repository's CI before a
+  release, and the §6.3 `warn`-level tracing event catches an unmapped kind in
+  production. The gate covers the configured publication graph only, so a
+  consumer resolving a different `clap_builder` relies on that fallback rather
+  than on an identity guarantee.
 - **`BootHandle` non-finalization.** A consumer who drops a
   `BootHandle<Boot>` without calling `finalize` loses the merge-phase locale.
   The typestate prevents extraction of a long-lived `Arc<dyn Localizer>` for

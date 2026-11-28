@@ -710,25 +710,40 @@ later progressively add opinion.
   matrix.
   - Requires 11.1.1.
   - See cli-localization-design.md §6.1 and §6.2.
-  - [ ] Add Fluent strings for `NoEquals`, `ValueValidation`, `TooManyValues`,
+  - Unchecked pending a passing final-candidate certificate. The
+    implementation, its documentation and the publication gate are complete and
+    the whole-plan assessment reports no in-scope implementation defect, but
+    the ordinary gates have not all passed on the final candidate: `make test`
+    and standalone `make boundary` hit their own deadline-bounded nested Cargo
+    builds under sustained compile-admission saturation (nested-build work is
+    tracked by #759 and #760), and `Publish dry run` cannot pass until the next
+    release bumps the version and publishes the library and macro crate
+    together (#761). Recheck this box once PR #588 carries that certificate.
+  - [x] Add Fluent strings for `NoEquals`, `ValueValidation`, `TooManyValues`,
     `TooFewValues`, `WrongNumberOfValues`, `ArgumentConflict`,
     `InvalidUtf8`, `Io`, and `Format` (alongside the four existing
     identifiers).
-  - [ ] Define `pub enum ClapErrorTranslation { Translated(&'static str),
+  - [x] Define `pub enum ClapErrorTranslation { Translated(&'static str),
     DisplayOnly }` and expose `pub const CLAP_ERROR_IDS:
     &[(clap::error::ErrorKind, ClapErrorTranslation)]`. The matrix is
     **exhaustive** over `ErrorKind`: display-only variants
     (`DisplayHelp`, `DisplayHelpOnMissingArgumentOrSubcommand`,
     `DisplayVersion`) appear with the `DisplayOnly` sentinel, so the gate
     reduces to a simple length comparison.
-  - [ ] Implement the mechanical coverage gate (build script plus
-    `const_assert_eq!`) as specified in
-    [cli-localization-design.md §6.1.1](cli-localization-design.md). The
-    design document owns the mechanism; this task implements it. The
-    build script emits the **total** `ErrorKind` variant count without
-    classifying display-only variants, because the exhaustive matrix
-    pairs each variant with either a translated identifier or the
-    sentinel.
+  - [x] Implement the mechanical coverage gate (a test-only pre-publication
+    check plus `const_assert_eq!`) as specified in
+    [cli-localization-design.md §6.1.1](cli-localization-design.md#611-pre-publication-coverage-gate).
+    The design document owns the mechanism; this task implements it. No build
+    script, `rustc-env` value, or generated build output is introduced, and no
+    consumer build is required to run the check. The gate counts the **total**
+    `ErrorKind` variants of this workspace's resolved `clap_builder` without
+    classifying display-only variants, because the exhaustive matrix pairs each
+    variant with either a translated identifier or the sentinel.
+  - Finding: the gate lives in `ortho_config/tests/clap_error_coverage.rs`; the
+    developers' guide owns its operating procedure, and the users' guide lists
+    the shipped identifiers.
+  - Validation: `make check-fmt`, `make typecheck`, `make lint`, `make test`,
+    `make markdownlint`, and `make nixie` passed on 2026-11-15.
 
 - [ ] 11.2.2. Switch error localization to clap's mutation surface.
   - Requires 11.2.1.

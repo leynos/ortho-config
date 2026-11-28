@@ -1112,8 +1112,10 @@ fn main() {
 
 Preserve `clap`'s display-only exits for `--help` and `--version`; use
 `is_display_request` when a wider application error layer needs to distinguish
-them. `OrthoError::try_aggregate` combines independent validation failures
-without inventing an error for an empty collection. The result extension traits
+them. Help rendered because a required argument or subcommand is missing is
+also left untranslated, but keeps `clap`'s error exit status.
+`OrthoError::try_aggregate` combines independent validation failures without
+inventing an error for an empty collection. The result extension traits
 `OrthoResultExt`, `OrthoMergeExt`, and `ResultIntoFigment` keep conversions
 explicit at integration boundaries.
 
@@ -1503,6 +1505,89 @@ directory:
 
 These files explain a build and never fail one, and none of them is part of the
 identifier inventory.
+
+### Translate or override clap parse errors
+
+The crate ships en-US text for every `clap` error kind it classifies and
+publishes that classification as `CLAP_ERROR_IDS`. Each row pairs an
+`ErrorKind` with either a Fluent identifier or the `DisplayOnly` sentinel, so a
+coverage test or a translator brief can read the matrix instead of hard-coding
+identifiers:
+
+<!-- tested-example: guide-clap-error-matrix -->
+```rust
+use ortho_config::{CLAP_ERROR_IDS, ClapErrorTranslation};
+
+fn main() {
+    let translated = CLAP_ERROR_IDS
+        .iter()
+        .filter(|(_, outcome)| matches!(outcome, ClapErrorTranslation::Translated(_)))
+        .count();
+    let display_only = CLAP_ERROR_IDS.len() - translated;
+    println!("translated={translated} display_only={display_only}");
+}
+```
+
+The program prints `translated=14 display_only=3`. The table lists every row
+this release ships.
+
+| `ErrorKind`                                | Outcome                             |
+| ------------------------------------------ | ----------------------------------- |
+| `InvalidValue`                             | `clap-error-invalid-value`          |
+| `UnknownArgument`                          | `clap-error-unknown-argument`       |
+| `InvalidSubcommand`                        | `clap-error-invalid-subcommand`     |
+| `NoEquals`                                 | `clap-error-no-equals`              |
+| `ValueValidation`                          | `clap-error-value-validation`       |
+| `TooManyValues`                            | `clap-error-too-many-values`        |
+| `TooFewValues`                             | `clap-error-too-few-values`         |
+| `WrongNumberOfValues`                      | `clap-error-wrong-number-of-values` |
+| `ArgumentConflict`                         | `clap-error-argument-conflict`      |
+| `MissingRequiredArgument`                  | `clap-error-missing-argument`       |
+| `MissingSubcommand`                        | `clap-error-missing-subcommand`     |
+| `InvalidUtf8`                              | `clap-error-invalid-utf8`           |
+| `Io`                                       | `clap-error-io`                     |
+| `Format`                                   | `clap-error-format`                 |
+| `DisplayHelp`                              | `DisplayOnly`                       |
+| `DisplayHelpOnMissingArgumentOrSubcommand` | `DisplayOnly`                       |
+| `DisplayVersion`                           | `DisplayOnly`                       |
+
+Four identifiers predate this matrix and keep their earlier spelling, so an
+override catalogue written against an older release keeps resolving:
+`clap-error-invalid-value`, `clap-error-unknown-argument`,
+`clap-error-missing-argument` (for `MissingRequiredArgument`), and
+`clap-error-missing-subcommand`.
+
+To replace any of this text, layer your own Fluent resource with
+`FluentLocalizer::with_en_us_defaults`. A consumer resource that defines the
+same identifier takes precedence over the embedded catalogue, so an override
+catalogue needs to define only the identifiers it changes.
+
+`ClapErrorTranslation::DisplayOnly` marks a kind whose text `clap` renders
+itself. The localization pipeline never substitutes a translated body for one
+of these kinds, so an override resource for it has no effect. Three kinds carry
+the sentinel: `DisplayHelp`, `DisplayVersion`, and
+`DisplayHelpOnMissingArgumentOrSubcommand`. The last is the help `clap` prints
+when a required argument or subcommand is missing; it stays untranslated and
+keeps `clap`'s error exit status. A translated identifier that neither the
+embedded catalogue nor an override defines falls back to `clap`'s own text and
+emits a warning event, so an incomplete catalogue still produces a usable error.
+
+Two rows carry detail `clap` keeps outside its context map, and an override
+resource must use the same placeholder names:
+
+- `clap-error-value-validation` receives `reason`, the text the value parser
+  returned for the rejected value, alongside `argument` and `value`.
+- `clap-error-argument-conflict` receives `argument`, `prior` (the argument it
+  collided with, as `clap` itself names it) and `conflict_kind`. The last is
+  `repeated` when a flag was supplied more than once and `conflict` when two
+  distinct arguments collide. Both are the same `ErrorKind`, so the embedded
+  message selects on it rather than blaming a second argument for a repeat.
+
+The matrix describes the `clap_builder` this release resolved. The test-only
+check that keeps it aligned with that dependency runs in this repository, not
+in consumer builds; the
+[developers' guide](developers-guide.md#the-pre-publication-clap-coverage-gate)
+records how to run it and what to do when `clap` adds a variant.
 
 ## Test discovery without changing the process environment
 
@@ -3048,7 +3133,10 @@ required changes from improvements that can be adopted later:
 - [v0.12.0 migration guide](v0-12-0-migration-guide.md) — from v0.11.0. No
   code changes are required; the guide covers the opt-in
   `with_use_isolating(false)` option for removing Unicode isolation marks from
-  localized output.
+  localized output, re-checking an override of `clap-error-missing-subcommand`,
+  which no longer restyles the help `clap` prints for a missing required
+  argument or subcommand, and iterating `CLAP_ERROR_IDS` rather than
+  hard-coding the translated error kinds.
 - [v0.11.0 migration guide](v0-11-0-migration-guide.md) — from v0.10.0. Only
   Rust code that builds documentation IR or `AgentCommand` literals needs a
   change; JSON, Fluent catalogues, and derived configuration do not.

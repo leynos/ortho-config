@@ -186,7 +186,7 @@ fn localize_clap_error_step(context: &LocalizerContext) -> Result<()> {
 }
 
 /// Executes an assertion against the last resolved message, optionally restoring it.
-fn with_resolved<R, F>(context: &LocalizerContext, preserve: bool, f: F) -> Result<R>
+pub(super) fn with_resolved<R, F>(context: &LocalizerContext, preserve: bool, f: F) -> Result<R>
 where
     F: FnOnce(&str) -> Result<R>,
 {
@@ -270,7 +270,7 @@ fn localized_text_includes_argument(context: &LocalizerContext) -> Result<()> {
 /// Arrangement is fallible, so the builder error propagates to the calling step
 /// rather than panicking here: this helper is not a test, and a failure to build
 /// the localizer is a setup fault the step should report.
-fn install_fluent_localizer(
+pub(super) fn install_fluent_localizer(
     context: &LocalizerContext,
     resources: &[&'static str],
     capture_errors: bool,

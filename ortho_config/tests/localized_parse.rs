@@ -4,8 +4,8 @@ use clap::{Args, CommandFactory, Parser, Subcommand};
 use ortho_config::LanguageIdentifier;
 use ortho_config::{
     ArgLocalizationIds, LocalizationArgs, LocalizeCmd, LocalizedParse, Localizer, NoOpLocalizer,
-    OrthoConfig, OrthoConfigLocalization, OrthoConfigSubcommandDocs, langid, message_id_for,
-    parse_localized_command,
+    OrthoConfig, OrthoConfigLocalization, OrthoConfigSubcommandDocs, langid, localize_clap_error,
+    message_id_for, parse_localized_command,
 };
 use rstest::{fixture, rstest};
 use serde::{Deserialize, Serialize};
@@ -330,14 +330,25 @@ fn from_arg_matches_error_retains_valid_subcommands(
 fn missing_clap_error_translation_emits_warning_fields(fallback_localizer: TranslatedLocalizer) {
     let events = Arc::new(CapturedEvents::default());
 
+    // `Io` is a translated kind with no fr-FR message in this localizer, so it
+    // exercises the catalogue-gap path without being a display-only kind that
+    // the matrix now passes straight through.
     let err = capture_events_during(Arc::clone(&events), || {
-        Fixture::try_parse_localized_from(["fixture"], &fallback_localizer)
-            .expect_err("missing subcommand should fail")
+        localize_clap_error(
+            clap::Error::raw(clap::error::ErrorKind::Io, "stock body"),
+            &fallback_localizer,
+        )
     });
 
     assert_eq!(
         err.kind(),
-        clap::error::ErrorKind::DisplayHelpOnMissingArgumentOrSubcommand
+        clap::error::ErrorKind::Io,
+        "the catalogue gap must not change the reported error kind"
+    );
+    assert_eq!(
+        err.to_string(),
+        "error: stock body",
+        "the catalogue gap must retain clap's stock diagnostic"
     );
     let captured_events = events.events();
     let warning = captured_events
@@ -346,15 +357,18 @@ fn missing_clap_error_translation_emits_warning_fields(fallback_localizer: Trans
         .expect("missing translation warning should be emitted");
     assert_eq!(
         warning.fields.get("identifier").map(String::as_str),
-        Some("clap-error-missing-subcommand")
+        Some("clap-error-io"),
+        "the warning should name the missing translation identifier"
     );
     assert_eq!(
         warning.fields.get("error_kind").map(String::as_str),
-        Some("DisplayHelpOnMissingArgumentOrSubcommand")
+        Some("Io"),
+        "the warning should name the clap error kind"
     );
     assert_eq!(
         warning.fields.get("locale").map(String::as_str),
-        Some("fr-FR")
+        Some("fr-FR"),
+        "the warning should name the locale that lacked the message"
     );
 }
 

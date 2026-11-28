@@ -14,6 +14,7 @@ pub mod extends_steps;
 #[cfg(feature = "serde_json")]
 pub mod flatten_steps;
 pub mod ignore_steps;
+pub mod localizer_clap_steps;
 pub mod localizer_steps;
 #[cfg(feature = "serde_json")]
 pub mod merge_composer_steps;
