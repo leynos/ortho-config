@@ -453,23 +453,47 @@ kept.
 
 The trybuild binaries and the binaries that drive a nested `cargo` build used
 to pay for a cold dependency build inside their own timed bodies, so a cold
-runner failed a sound assertion on its timeout. The `nested-cargo-builds` setup
-script in `.config/nextest.toml` now runs those binaries once, through
-`cargo test --locked --all-features --no-fail-fast`, before nextest starts any
-test whose binary the `[[profile.default.scripts]]` filter names. The script is
-selected by that filter, so it runs only when such a binary is in the run. It
-uses `--all-features`, which matches the coverage run. A failing test in the
-warm-up makes the script exit non-zero, and nextest then runs none of the
-selected tests: the run fails with that test's own output, and `--no-fail-fast`
-makes the warm-up run every binary first so the failure list is complete. The
-script's allowance is 900 s (three warning periods of 300 s). It counts against
-the default profile's 2,300 s `global-timeout`, which covers setup and tests
-together and sits inside the 3,300 s cargo watchdog; the cold builds moved into
-the script rather than being added to the run, so the budget is not raised. The
-filter must name every binary that includes a shared nested-build module, so a
-new binary that builds a nested crate belongs in both the script command and
-the filter. Direct `cargo test` and `make test` do not run the script; they pay
-the cold build in the first test, as before.
+runner failed a sound assertion on its timeout. The Makefile now runs those
+binaries once, through `cargo test --locked --all-features --no-fail-fast`,
+before the timed run. Two targets share two lists, and two entry points call
+them:
+
+- `make test` depends on `test-warmup`, which runs `NESTED_WARM_TESTS`: the
+  binaries whose cold nested build is the most expensive and whose warm run is
+  short (`boolean_cli_trybuild`, `compile_fail`, `evidence_trybuild`, and the
+  two `compile_time` binaries). A contributor's gate warms them under the
+  gate's own compiler flags.
+- The `nested-cargo-builds` setup script in `.config/nextest.toml` runs
+  `make test-warmup-full WARMUP_ENV=`, which adds `NESTED_WARM_TESTS_HEAVY`,
+  before nextest starts any test whose binary the `[[profile.default.scripts]]`
+  filter names. The script is selected by that filter, so it runs only when
+  such a binary is in the run. `WARMUP_ENV=` clears the gate flags because the
+  coverage run supplies its own instrumented `RUSTFLAGS`, and a warm-up built
+  under other flags warms nothing. The heavy list holds the binaries whose test
+  bodies are long on a warm host (the generated documentation workspaces and
+  the cargo-orthohelp scenarios) or whose cold build is a few seconds; nextest
+  needs them because it terminates a test at its own allowance, and `make test`
+  does not pay to run them twice.
+
+A failing test in the warm-up fails the run with that test's own output, before
+any timed test starts; `--no-fail-fast` makes the warm-up run every binary
+first so the failure list is complete. The nextest script's allowance is 900 s
+(three warning periods of 300 s). It counts against the default profile's 2,300
+s `global-timeout`, which covers setup and tests together and sits inside the
+3,300 s cargo watchdog; the cold builds moved into the script rather than being
+added to the run, so the budget is not raised. The filter must name every
+binary that includes a shared nested-build module, so a new binary that builds
+a nested crate belongs in a Makefile list and in the filter.
+
+`ortho_l10n --test boundary` is in neither list. Its timed body is the nested
+compile, so no cap smaller than its own allowance can warm it (#755).
+
+The warm-up runs the trybuild harnesses rather than only building them, because
+trybuild builds its scratch project when it runs and offers no build-only mode.
+
+`make test` also passes `--no-fail-fast` to its workspace run, so a single
+environmental failure inside one trybuild scratch build (#643) cannot hide the
+binaries after it.
 
 #### Packaging must resolve the way a clean runner resolves
 

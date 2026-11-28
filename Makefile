@@ -1,4 +1,4 @@
-.PHONY: help all clean test boundary build release lint lint-clippy lint-whitaker \
+.PHONY: help all clean test test-warmup test-warmup-full boundary build release lint lint-clippy lint-whitaker \
 	docstring-coverage fmt check-fmt markdownlint spellcheck spelling nixie \
 	typecheck msrv-build python-test-deps publish-check powershell-wrapper-validate \
 	test-workflow-contracts install-kani kani-check install-verus \
@@ -205,10 +205,59 @@ clean: ## Remove build artefacts
 	$(CARGO) clean
 	rm -rf $(PYTHON_VENV)
 
-test: check-build-tools python-test-deps ## Run tests with warnings treated as errors
+test: check-build-tools python-test-deps test-warmup ## Run tests with warnings treated as errors
 	$(GATE_RUSTFLAGS) $(CARGO) fetch --locked
-	$(GATE_RUSTFLAGS) $(CARGO) test --all-targets --all-features $(BUILD_JOBS)
+	$(GATE_RUSTFLAGS) $(CARGO) test --all-targets --all-features --no-fail-fast $(BUILD_JOBS)
 	$(PYTEST) $(PYTEST_FLAGS)
+
+# The test binaries whose timed bodies start a nested Cargo build: trybuild
+# scratch projects, generated documentation workspaces, and the cargo-orthohelp
+# and example harnesses. A nested build is outside `cargo test`'s own
+# dependency graph, so it pays a full dependency compile (and compile-admission
+# queueing) inside the test's own deadline. `test-warmup` runs the cheapest
+# binaries that fill the trybuild scratch trees once, sequentially, before the
+# timed run, so the timed run finds those target directories warm. The
+# binaries are run rather than only built because trybuild builds its scratch
+# project when it runs and offers no build-only mode.
+#
+# Two lists, because the cost of a warm-up is repeated test time on every
+# warm run. The first holds the binaries whose cold nested build is the most
+# expensive and whose warm run is short; `make test` pays for those alone. The
+# second holds the binaries whose test bodies are heavy (generated workspaces,
+# the cargo-orthohelp scenarios) or whose cold build is a few seconds;
+# nextest's setup script adds them, because nextest terminates a test at its
+# own allowance. `ortho_l10n --test boundary` is in neither: it has its own
+# preparation step.
+#
+# `.config/nextest.toml` runs `test-warmup-full` as its setup script, so the
+# lists live in one place. A failure here fails the run with the failing
+# test's own output rather than a later timeout. `--no-fail-fast` runs every
+# binary first, so the failure list is complete.
+NESTED_WARM_TESTS = \
+	-p ortho_config --test boolean_cli_trybuild --test compile_fail \
+	-p ortho_config_macros --test evidence_trybuild \
+	-p ortho_config_test_helpers --test compile_time \
+	-p cargo-orthohelp --test compile_time
+NESTED_WARM_TESTS_HEAVY = \
+	-p ortho_config \
+	--test crate_path_trybuild --test declarative_merge_trybuild \
+	--test documentation_examples_rust_tests --test env_source_trybuild \
+	--test generated_lint_trybuild --test identifier_artefact_e2e \
+	--test localization_trybuild --test localized_parse_trybuild \
+	--test subcommand_trybuild \
+	-p cargo-orthohelp --test rstest_bdd
+# `WARMUP_ENV` is the compiler-flag assignment the warm-up builds under. It must
+# match the run it warms: a nested build under other flags is a different
+# artefact. `make test` passes the gate's flags; nextest's setup script clears
+# it, because the coverage run supplies its own instrumented `RUSTFLAGS`.
+WARMUP_ENV ?= $(GATE_RUSTFLAGS)
+test-warmup: ## Fill the nested Cargo target directories the timed tests start builds in
+	$(WARMUP_ENV) $(CARGO) fetch --locked
+	$(WARMUP_ENV) $(CARGO) test --locked --all-features --no-fail-fast $(NESTED_WARM_TESTS)
+
+test-warmup-full: ## test-warmup plus the heavier nested builders (nextest's setup script)
+	$(WARMUP_ENV) $(CARGO) fetch --locked
+	$(WARMUP_ENV) $(CARGO) test --locked --all-features --no-fail-fast $(NESTED_WARM_TESTS) $(NESTED_WARM_TESTS_HEAVY)
 
 # The boundary contracts are the evidence that an application depending on the
 # localization runtime alone never resolves the configuration facade, the derive

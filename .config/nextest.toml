@@ -255,61 +255,23 @@ slow-timeout = { period = "120s", terminate-after = 8 }
 # output. `--no-fail-fast` makes the warm-up run every binary before it fails,
 # so the failure list is complete.
 #
+# The script is `make test-warmup-full`: the `make test` warm-up plus the heavier
+# nested builders. The lists of binaries live in the Makefile
+# (`NESTED_WARM_TESTS` and `NESTED_WARM_TESTS_HEAVY`) so the two entry points
+# cannot drift apart. `WARMUP_ENV=` clears the Makefile's gate flags:
+# the coverage run supplies its own instrumented `RUSTFLAGS`, and the warm-up
+# must build under those or it warms nothing. `ortho_l10n --test boundary` is
+# not warmed here. Its work is the nested compiles themselves, so it cannot sit
+# under a cap smaller than its own 960s allowance (#755). Moving that work out
+# of the timed body is tracked in #700.
+#
 # The script's allowance is 900s (three warning periods of 300s). It counts
 # against `[profile.default]`'s 2,300s global-timeout, which covers setup and
 # tests together and sits inside the 3,300s cargo watchdog. The cold builds
 # moved here from the test bodies rather than being added to the run, so the
 # 2,300s budget is not raised; the rest is left for the tests.
 [scripts.setup.nested-cargo-builds]
-command = [
-  "cargo",
-  "test",
-  "--locked",
-  "--all-features",
-  "--no-fail-fast",
-  "-p",
-  "ortho_config",
-  "--test",
-  "boolean_cli_trybuild",
-  "--test",
-  "compile_fail",
-  "--test",
-  "crate_path_trybuild",
-  "--test",
-  "declarative_merge_trybuild",
-  "--test",
-  "documentation_examples_rust_tests",
-  "--test",
-  "env_source_trybuild",
-  "--test",
-  "generated_lint_trybuild",
-  "--test",
-  "identifier_artefact_e2e",
-  "--test",
-  "localization_trybuild",
-  "--test",
-  "localized_parse_trybuild",
-  "--test",
-  "subcommand_trybuild",
-  "-p",
-  "ortho_config_macros",
-  "--test",
-  "evidence_trybuild",
-  "-p",
-  "ortho_config_test_helpers",
-  "--test",
-  "compile_time",
-  "-p",
-  "cargo-orthohelp",
-  "--test",
-  "compile_time",
-  "--test",
-  "rstest_bdd",
-  "-p",
-  "ortho_l10n",
-  "--test",
-  "boundary",
-]
+command = ["make", "test-warmup-full", "WARMUP_ENV="]
 slow-timeout = { period = "300s", terminate-after = 3 }
 
 [[profile.default.scripts]]
