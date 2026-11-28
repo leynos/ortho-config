@@ -499,8 +499,9 @@ binaries it lists once, through
 `cargo test --locked --all-features --no-fail-fast`, before the timed run. The
 lists cover the trybuild, documentation-workspace and BDD binaries; the
 cargo-orthohelp bridge binaries (`golden_tests`, `cli_dispatch` and the
-agent-context ones) and `ortho_l10n --test boundary` are not in them (issues
-759 and 700). Two targets share two lists, and two entry points call them:
+agent-context ones) are not in them (issue 759), and
+`ortho_l10n --test boundary` has a step of its own, described below. Two
+targets share two lists, and two entry points call them:
 
 - `make test` depends on `test-warmup`, which runs `NESTED_WARM_TESTS`: the
   binaries whose cold nested build is the most expensive and whose warm run is

@@ -236,8 +236,8 @@ test: check-build-tools python-test-deps test-warmup boundary-prepare ## Run tes
 # nextest's setup script adds them, because nextest terminates a test at its
 # own allowance. These lists cover the trybuild, documentation-workspace and
 # BDD binaries only; the cargo-orthohelp bridge binaries (`golden_tests`,
-# `cli_dispatch` and the agent-context ones) and `ortho_l10n --test boundary`
-# are in neither (#759, #700).
+# `cli_dispatch` and the agent-context ones) are in neither (#759).
+# `ortho_l10n --test boundary` has its own step, `boundary-prepare`, below.
 #
 # `.config/nextest.toml` runs `test-warmup-full` as its setup script, so the
 # lists live in one place. A failure here fails the run with the failing
