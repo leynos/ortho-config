@@ -1079,10 +1079,12 @@ cargo-orthohelp-design.md §3.1.
     the field identifier in `resolve_cli_field`, and which never invents the
     short flag that `resolve_short_flag` derives from the field name.
   - [ ] Emit environment and file metadata only where explicitly declared,
-    replacing the unconditional `env: Some(..), file: Some(..)` that
-    `render_io_block` produces today.
+    replacing the generated `env` and `file` values that `render_io_block`
+    produces for every field today.
   - [ ] Emit no runtime loaders, no `DeserializeOwned` bound assertion, and no
     merge machinery.
+  - [ ] Expand a flattened container into its descendant field metadata, so
+    child operands contribute their indices to later parent operands.
   - [ ] Success: a `#[derive(clap::Args)]` struct with required fields, no
     `Default`, and no `Deserialize` derives documentation metadata and appears
     in generated IR, and a field declared `#[arg(long = "endpoint")]` documents
