@@ -178,11 +178,15 @@ def test_the_makefile_unexports_cargo_encoded_rustflags() -> None:
     )
 
 
-def _encoded_flags_seen_by_a_recipe(*variables: str) -> str:
-    """Return what a recipe sees of ``CARGO_ENCODED_RUSTFLAGS`` under *variables*.
+def _encoded_flags_seen_by_a_recipe(goal: str, *variables: str, goals_beside: str = "") -> str:
+    """Return what the recipe of *goal* sees of ``CARGO_ENCODED_RUSTFLAGS``.
 
-    A real Make run, because an ``unexport`` shows in no dry run: the probe
-    recipe prints the variable from its own environment.
+    A real Make run, because an ``unexport`` shows in no dry run: a second
+    makefile, read from standard input after the repository's own, replaces the
+    recipe of *goal* with a probe that prints the variable from its own
+    environment. Make warns about the replaced recipe on standard error, which
+    this does not read. (``--eval`` would not do: it is evaluated first, so the
+    repository's own recipe would replace the probe.)
     """
     environment = {**os.environ, "CARGO_ENCODED_RUSTFLAGS": "-Cprobe"}
     result = subprocess.run(  # noqa: S603 - the executable is the repository's Make.
@@ -190,14 +194,21 @@ def _encoded_flags_seen_by_a_recipe(*variables: str) -> str:
             make_executable(),
             "--no-print-directory",
             "--silent",
-            '--eval=probe: ; @printf %s "$$CARGO_ENCODED_RUSTFLAGS"',
-            "probe",
+            "--file=Makefile",
+            "--file=-",
+            *([goals_beside] if goals_beside else []),
+            goal,
             *variables,
         ],
         check=True,
         capture_output=True,
         cwd=REPOSITORY_ROOT,
         env=environment,
+        input="".join(
+            f'{name}: ; @printf %s "$$CARGO_ENCODED_RUSTFLAGS"\n'
+            for name in (goals_beside, goal)
+            if name
+        ),
         text=True,
     )
     return result.stdout
@@ -212,12 +223,22 @@ def test_the_encoded_flags_are_dropped_from_every_recipe_but_the_coverage_warmup
     while the nextest setup script's ``WARMUP_ENV=`` call does, so the warm-up
     builds under the flags of the run it warms.
     """
-    assert _encoded_flags_seen_by_a_recipe() == "", (
+    assert _encoded_flags_seen_by_a_recipe("test-warmup") == "", (
         "an ordinary Make run must not pass CARGO_ENCODED_RUSTFLAGS to its recipes"
     )
-    assert _encoded_flags_seen_by_a_recipe("WARMUP_ENV=") == "-Cprobe", (
+    assert _encoded_flags_seen_by_a_recipe("test-warmup", "WARMUP_ENV=") == "-Cprobe", (
         "the coverage warm-up (`WARMUP_ENV=` on the command line) must inherit the "
         "encoded flags, or it warms a different artefact from the run it warms"
+    )
+    assert _encoded_flags_seen_by_a_recipe("test-warmup-full", "WARMUP_ENV=") == "-Cprobe", (
+        "the nextest setup script's target must inherit the encoded flags"
+    )
+    assert _encoded_flags_seen_by_a_recipe("other-goal", "WARMUP_ENV=") == "", (
+        "`WARMUP_ENV=` must not lift the exclusion for another goal: the release "
+        "recipe assigns its own RUSTFLAGS and an inherited encoded value would override it"
+    )
+    assert _encoded_flags_seen_by_a_recipe("other-goal", "WARMUP_ENV=", goals_beside="test-warmup") == "", (
+        "a warm-up goal beside another goal must not lift the exclusion either"
     )
 
 

@@ -455,11 +455,12 @@ The trybuild binaries and the binaries that drive a nested `cargo` build used
 to pay for a cold dependency build inside their own timed bodies, so a cold
 runner failed a sound assertion on its timeout. The Makefile now runs the
 binaries it lists once, through
-`cargo test --locked --all-features --no-fail-fast`, before the timed run. The
-lists cover the trybuild, documentation-workspace and BDD binaries; the
-cargo-orthohelp bridge binaries (`golden_tests`, `cli_dispatch` and the
-agent-context ones) and `ortho_l10n --test boundary` are not in them (issues
-759 and 700). Two targets share two lists, and two entry points call them:
+`cargo test --locked $WARMUP_FEATURES --no-fail-fast` (`--all-features` unless
+a coverage leg overrides it, below), before the timed run. The lists cover the
+trybuild, documentation-workspace and BDD binaries; the cargo-orthohelp bridge
+binaries (`golden_tests`, `cli_dispatch` and the agent-context ones) and
+`ortho_l10n --test boundary` are not in them (issues 759 and 700). Two targets
+share two lists, and two entry points call them:
 
 - `make test` depends on `test-warmup`, which runs `NESTED_WARM_TESTS`: the
   binaries whose cold nested build is the most expensive and whose warm run is
@@ -493,8 +494,14 @@ first so the failure list is complete. The nextest script's allowance is 900 s
 s `global-timeout`, which covers setup and tests together and sits inside the
 3,300 s cargo watchdog; the cold builds moved into the script rather than being
 added to the run, so the budget is not raised. The filter must name every
-binary that includes a shared nested-build module, so a new binary that builds
-a nested crate belongs in a Makefile list and in the filter.
+binary that includes a shared nested-build module, so a new trybuild,
+documentation-workspace or BDD binary that builds a nested crate belongs in a
+Makefile list and in the filter. The cargo-orthohelp bridge binaries are the
+known exception until #759 is finished. Two limits of the feature selection: a
+local `cargo nextest run` with default features warms with `--all-features`
+unless `WARMUP_FEATURES` is set to match it, and make reads the variable from
+the environment, so a stray value there changes `make test`'s warm-up without
+changing its workspace run. Unset it.
 
 `ortho_l10n --test boundary` is in neither list. Its timed body is the nested
 compile, so no cap smaller than its own allowance can warm it (#755).
