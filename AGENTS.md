@@ -252,9 +252,10 @@ project:
     nested trybuild builds use so that no timed test pays a cold dependency
     compile, and `make boundary-prepare`, which runs the verified
     `cargo package` calls and consumer builds behind the `ortho_l10n` boundary
-    suite and writes the record that suite checks, then fetching the locked dependencies, so that nested builds the
-    tests start find the package cache warm (the offline-tests rule; it needs
-    `Cargo.lock` to be current), and then running the Rust workspace tests for
+    suite and writes the record that suite checks, then fetching the locked
+    dependencies, so that nested builds the tests start find the package cache
+    warm (the offline-tests rule; it needs `Cargo.lock` to be current), and
+    then running the Rust workspace tests for
     every target and feature under `GATE_RUSTFLAGS`, which restates the build
     standard alongside `-D warnings`. `--no-fail-fast` lets one failing binary
     leave the rest certified. It then runs the Python tests with pytest. The
