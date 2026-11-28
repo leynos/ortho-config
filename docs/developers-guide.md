@@ -5415,11 +5415,15 @@ is caught well inside the whole-run budget.
 
 The trybuild class outgrew its 600 s. It is budgeted apart from the base
 allowance because each of these binaries spawns a child `cargo` in a separate
-target directory, so none shares cargo-llvm-cov's warmed cache and each pays a
-cold dependency build. They also share one package cache and so block on its
-lock while their neighbours build, which the logs show directly: run
-36070786646 recorded four `Blocking waiting for file lock on package cache`
-lines, and run 36068184976 recorded none.
+target directory, so none shares cargo-llvm-cov's warmed cache and, without a
+warm-up that matches the run's flags and features, each pays a cold dependency
+build (the setup script described under "The nested builds are warmed before
+any timed test starts" supplies one for the binaries the Makefile lists; the
+allowance was sized from runs that predate it). They also share one package
+cache and so block on its lock while their neighbours build, which the logs
+show directly: run 36070786646 recorded four
+`Blocking waiting for file lock on package cache` lines, and run 36068184976
+recorded none.
 
 Two measurements set the new figure:
 
