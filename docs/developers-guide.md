@@ -455,8 +455,9 @@ The trybuild binaries and the binaries that drive a nested `cargo` build used
 to pay for a cold dependency build inside their own timed bodies, so a cold
 runner failed a sound assertion on its timeout. The Makefile now runs the
 binaries it lists once, through
-`cargo test --locked $WARMUP_FEATURES --no-fail-fast` (`--all-features` unless
-a coverage leg overrides it, below), before the timed run. The lists cover the
+`cargo test --locked $WARMUP_FEATURES --no-fail-fast` (`--all-features` by
+default; `WARMUP_FEATURES` overrides it, as a coverage leg does below and as a
+caller or the environment can), before the timed run. The lists cover the
 trybuild, documentation-workspace and BDD binaries; the cargo-orthohelp bridge
 binaries (`golden_tests`, `cli_dispatch` and the agent-context ones) and
 `ortho_l10n --test boundary` are not in them (issues 759 and 700). Two targets

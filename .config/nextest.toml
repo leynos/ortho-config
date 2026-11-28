@@ -248,11 +248,14 @@ slow-timeout = { period = "120s", terminate-after = 8 }
 # those build directories first, the first test to reach each pays a cold
 # dependency build and its timeout fails an assertion that is sound. This setup
 # script runs those binaries once, before any of them starts, so the cold
-# builds are paid for here, under the script's own allowance, and every timed
-# body then finds the directories warm. It does not cover every binary that
-# starts a nested build: the cargo-orthohelp bridge binaries and
-# `ortho_l10n --test boundary` are outside it (#759, #700). (The same move as
-# mdtablefix #728 and whitaker #518.)
+# builds are paid for here, under the script's own allowance, and the timed
+# bodies of the binaries it runs then find their directories warm, provided the
+# run's compiler flags and features match the warm-up's (`WARMUP_ENV` and
+# `WARMUP_FEATURES`; a local nextest run with default features needs
+# `WARMUP_FEATURES` set to match, or it warms with `--all-features`). It does
+# not cover every binary that starts a nested build: the cargo-orthohelp bridge
+# binaries and `ortho_l10n --test boundary` are outside it (#759, #700). (The
+# same move as mdtablefix #728 and whitaker #518.)
 #
 # A failing test in the warm-up makes the script exit non-zero, and nextest
 # then runs none of the selected tests, so the run fails with that test's own
