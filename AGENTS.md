@@ -251,9 +251,9 @@ project:
     first running `make test-warmup`, which fills the target directories the
     nested trybuild builds use, so that the binaries it lists do not pay a cold
     dependency compile inside a timed test when the flags and features match
-    (a `WARMUP_FEATURES` in the environment breaks the match; the
-    cargo-orthohelp bridge binaries and the `ortho_l10n` boundary suite are
-    not covered by it), then fetching
+    (a `WARMUP_FEATURES` in the environment that differs from the workspace
+    run's features breaks the match; the cargo-orthohelp bridge binaries and
+    the `ortho_l10n` boundary suite are not covered by it), then fetching
     the locked dependencies, so that nested builds the tests start find the
     package cache warm (the offline-tests rule; it needs `Cargo.lock` to be
     current), and then running the Rust workspace tests for
