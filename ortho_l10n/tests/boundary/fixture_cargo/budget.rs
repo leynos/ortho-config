@@ -26,6 +26,18 @@ use std::time::{Duration, Instant};
 /// hung.
 pub(crate) const SCENARIO_ALLOWANCE: Duration = Duration::from_secs(900);
 
+/// How long the preparation step may run before it is reported as hung.
+///
+/// Preparation (`make boundary-prepare`) runs outside every timed test: the
+/// verified `cargo package` calls and the consumer dependency builds that the
+/// timed contracts used to pay for inside their own allowance. It has no
+/// nextest allowance to fit under, so its calls are not capped one by one. This
+/// figure is a hang guard, not a budget: it is longer than any queue observed
+/// on a shared host (33 minutes for the packaging pair on 2026-11-24) and
+/// shorter than a CI job ceiling, so a wedged child is still reported, with its
+/// output, rather than left for the job to cancel.
+pub(crate) const PREPARATION_HANG_GUARD: Duration = Duration::from_secs(3 * 60 * 60);
+
 /// A deadline shared by the nested Cargo calls in one contract.
 ///
 /// Copy rather than borrowed, so a fixture can hold one without a lifetime
@@ -34,19 +46,39 @@ pub(crate) const SCENARIO_ALLOWANCE: Duration = Duration::from_secs(900);
 pub(crate) struct Budget {
     /// Instant at which the contract's shared allowance is spent.
     deadline: Instant,
+    /// The whole allowance, for messages that say how much was granted.
+    allowance: Duration,
+    /// Whether this is the preparation step, whose calls have no per-call cap.
+    preparation: bool,
 }
 
 impl Budget {
     /// Start a contract's shared allowance now.
     pub(crate) fn new() -> Self {
-        Self::expiring_in(SCENARIO_ALLOWANCE)
+        Self::with_allowance(SCENARIO_ALLOWANCE, false)
+    }
+
+    /// Start the preparation step's allowance, and lift the per-call caps.
+    ///
+    /// The caps exist so a timed contract reports the invocation that hung
+    /// before nextest stops the test. Preparation is not a nextest test body,
+    /// so each call is bounded by the [`PREPARATION_HANG_GUARD`] alone.
+    pub(crate) fn preparation() -> Self {
+        Self::with_allowance(PREPARATION_HANG_GUARD, true)
     }
 
     /// Start an allowance of `allowance`, for regressions that cannot wait.
     #[cfg(test)]
     pub(crate) fn expiring_in(allowance: Duration) -> Self {
+        Self::with_allowance(allowance, false)
+    }
+
+    /// Start an allowance of `allowance` now.
+    fn with_allowance(allowance: Duration, preparation: bool) -> Self {
         Self {
             deadline: Instant::now() + allowance,
+            allowance,
+            preparation,
         }
     }
 
@@ -65,11 +97,11 @@ impl Budget {
     /// This is a distinct failure from a call that starts with nothing left:
     /// here the invocation did wait, and the diagnostic says so rather than
     /// suggesting it simply arrived too late.
-    pub(crate) fn expired_while_waiting(description: &str) -> anyhow::Error {
+    pub(crate) fn expired_while_waiting(&self, description: &str) -> anyhow::Error {
         anyhow::anyhow!(
             "the boundary contract's {} second allowance was exhausted while {description} \
              waited for a sibling nested Cargo invocation to finish",
-            SCENARIO_ALLOWANCE.as_secs(),
+            self.allowance.as_secs(),
         )
     }
 
@@ -84,11 +116,18 @@ impl Budget {
             left > Duration::ZERO,
             "the boundary contract's {} second allowance was exhausted before \
              {description} could start; an earlier nested Cargo invocation used it",
-            SCENARIO_ALLOWANCE.as_secs(),
+            self.allowance.as_secs(),
         );
-        let limited_by_allowance = left < cap;
+        // The preparation step is not a timed test body, so the call's own cap
+        // (sized to fit nextest's per-test allowance) does not apply to it.
+        let applicable_cap = if self.preparation { left } else { cap };
+        let limited_by_allowance = left < applicable_cap;
         Ok(Bound {
-            deadline: if limited_by_allowance { left } else { cap },
+            deadline: if limited_by_allowance {
+                left
+            } else {
+                applicable_cap
+            },
             limited_by_allowance,
         })
     }
@@ -145,6 +184,18 @@ mod tests {
         ensure!(
             bound.limited_by_allowance,
             "a clamped bound should report the allowance as its limit",
+        );
+        Ok(())
+    }
+
+    /// The preparation budget is not clamped by a timed contract's per-call cap.
+    #[test]
+    fn the_preparation_budget_lifts_the_per_call_cap() -> Result<()> {
+        let bound = Budget::preparation().bound(Duration::from_secs(5), "a build")?;
+        ensure!(
+            bound.deadline > Duration::from_secs(60 * 60),
+            "preparation should be bounded by the hang guard, not the call's cap, got {:?}",
+            bound.deadline,
         );
         Ok(())
     }

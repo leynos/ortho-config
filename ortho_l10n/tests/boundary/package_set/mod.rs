@@ -35,13 +35,18 @@
 //! and manifest contract reads. `--no-verify` skips the unpacking along with
 //! the compile, so the archives would be written and nothing would unpack them.
 //!
-//! # Cost
+//! # Cost, and where it is paid
 //!
-//! The two invocations verify what they package, so they compile the closure:
-//! about 35 seconds from warm caches on this host, and a few hundred megabytes
-//! of target directory. The result is shared across the contract tests and
-//! reused between runs, because the validation is a property of the sources,
-//! not of the test that reads it.
+//! The two invocations verify what they package, so they compile the closure
+//! on every run: a warm target directory does not shorten it, because
+//! verification unpacks the archive afresh. On a shared host the
+//! compile-admission queue alone has outlasted any per-test allowance (the pair
+//! took 33 minutes on 2026-11-24). They therefore do not run inside a timed
+//! contract at all. `make boundary-prepare` runs them once, under no per-test
+//! deadline, and writes a record (see [`prepared`]); the contracts check the
+//! record and read the unpacked roots. The record binds the verification to
+//! the sources, the lockfile and the toolchain, so a stale one is refused by
+//! name rather than trusted.
 //!
 //! # Why the patch list is per invocation
 //!
@@ -52,35 +57,13 @@
 //! declares by path under *its package name*, which is not always its
 //! directory name (`ortho_config_test_helpers` lives in `test_helpers`).
 
+use super::fixture_cargo::budget::PREPARATION_HANG_GUARD;
 use super::fixture_cargo::{
     Budget, FixtureCargo, cargo_binary, inherited_toolchain, run_with_deadline, toml_string,
 };
 use anyhow::{Result, bail, ensure};
 use camino::Utf8Path;
 use std::process::Command;
-use std::time::Duration;
-
-/// Longest either packaging invocation may run.
-///
-/// Each invocation is bounded on its own, and every entry in
-/// [`PACKAGING_INVOCATIONS`] shares one test, so all of them have to fit
-/// inside nextest's per-test allowance with room for the root checks around
-/// them: 2 x 440 s is 880 s of the 960 s the `boundary_packaging` override
-/// grants, leaving 80 s. The figure is derived from the allowance rather than
-/// chosen for comfort, because a bound that does not fit never fires: nextest
-/// stops the test first, and the error naming the invocation that hung is
-/// never printed.
-///
-/// The second invocation reuses the first's target directory and is much
-/// shorter. The pair took 244 s on this host with the packaging target removed,
-/// which is an upper bound rather than a build time: it includes waiting for
-/// compile-admission slots, which the child inherits. The bounds were 240 s
-/// when six packaged contracts timed out on a shared host with 340 compile
-/// requests queued behind them; the failure named the deadline but discarded
-/// the queue lines the child had printed, so the wait could not be told apart
-/// from a hang. The tail is now reported with the error, and the bound leaves
-/// room for the admission queue that a shared host produces.
-const PACKAGE_DEADLINE: Duration = Duration::from_secs(440);
 
 /// The `cargo package` invocations that together produce all three roots.
 ///
@@ -90,11 +73,10 @@ const PACKAGE_DEADLINE: Duration = Duration::from_secs(440);
 /// patch is keyed by package name, so spelling the directory there would
 /// silently patch nothing.
 ///
-/// They are data rather than two call statements because the per-test
-/// allowance is shared between them: `boundary_packaging_test.py` reads this
-/// array's length and [`PACKAGE_DEADLINE`] to check that the whole set can
-/// reach its own deadlines before nextest stops the test. The array length is
-/// part of the type, so rustc checks it against the initializers.
+/// They are data rather than two call statements so the preparation record can
+/// name each invocation it verified, and so a change to the recipe changes the
+/// fingerprint the record is bound to. The array length is part of the type, so
+/// rustc checks it against the initializers.
 pub(super) const PACKAGING_INVOCATIONS: [PackageInvocation; 2] = [
     PackageInvocation {
         crates: ORTHO_L10N_AND_CONFIG,
@@ -141,18 +123,21 @@ const ORTHO_CONFIG_DEPENDENCIES: &[(&str, &str)] = &[
     ("ortho_config_test_helpers", "test_helpers"),
 ];
 
+mod fingerprint;
+mod prepared;
 mod roots;
 
 // Re-exported so the contracts keep naming one module for the packaged set.
 pub(crate) use roots::{
-    PACKAGED_CRATES, PACKAGED_VERSION, assert_packaged_set_complete, packaged_crate,
-    prepare_packaged_set, unpacked_directory,
+    PACKAGED_CRATES, PACKAGED_VERSION, assert_packaged_set_complete, begin_preparation,
+    packaged_crate, prepare_packaged_set, unpacked_directory,
 };
 
 /// Run one `cargo package` invocation.
 ///
-/// The invocation is bounded by [`PACKAGE_DEADLINE`] or by what the contract's
-/// shared [`Budget`] has left, whichever is sooner.
+/// Only the preparation step calls this. Its [`Budget`] lifts the per-call cap,
+/// so the invocation is bounded by [`PREPARATION_HANG_GUARD`] alone; a timed
+/// contract never packages.
 pub(super) fn package_sources(
     repository: &Utf8Path,
     target: &Utf8Path,
@@ -187,7 +172,7 @@ pub(super) fn package_sources(
         .envs(inherited_toolchain())
         .env("CARGO_TARGET_DIR", target);
     let description = format!("cargo package for {}", invocation.crates.join(", "));
-    let output = run_with_deadline(command, budget, PACKAGE_DEADLINE, &description)?;
+    let output = run_with_deadline(command, budget, PREPARATION_HANG_GUARD, &description)?;
     if !output.status.success() {
         bail!(
             "{description} failed with {}\nstderr:\n{}",
@@ -270,6 +255,22 @@ impl ConsumerFixture {
     pub(crate) fn test(&self) -> Result<()> {
         self.cargo
             .cargo_checked(&["test", "--all-targets", "--all-features"])
+            .map(|_stdout| ())
+    }
+
+    /// Build the consumer's test targets without running them.
+    ///
+    /// The preparation step calls this so the shared consumer target holds the
+    /// dependency closure before a timed contract starts. The arguments are
+    /// [`Self::test`]'s with `--no-run`, so the fingerprints agree and the
+    /// timed `test` compiles only the consumer's own crate.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error carrying both streams when the build fails.
+    pub(crate) fn build(&self) -> Result<()> {
+        self.cargo
+            .cargo_checked(&["test", "--no-run", "--all-targets", "--all-features"])
             .map(|_stdout| ())
     }
 }

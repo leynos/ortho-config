@@ -252,11 +252,13 @@ project:
     nested trybuild builds use, so that the binaries it lists do not pay a cold
     dependency compile inside a timed test when the flags and features match
     (a `WARMUP_FEATURES` in the environment that differs from the workspace
-    run's features breaks the match; the cargo-orthohelp bridge binaries and
-    the `ortho_l10n` boundary suite are not covered by it), then fetching
-    the locked dependencies, so that nested builds the tests start find the
-    package cache warm (the offline-tests rule; it needs `Cargo.lock` to be
-    current), and then running the Rust workspace tests for
+    run's features breaks the match; the cargo-orthohelp bridge binaries are
+    not covered by it), and `make boundary-prepare`, which runs the verified
+    `cargo package` calls and consumer builds behind the `ortho_l10n` boundary
+    suite and writes the record that suite checks, then fetching the locked
+    dependencies, so that nested builds the tests start find the package cache
+    warm (the offline-tests rule; it needs `Cargo.lock` to be current), and
+    then running the Rust workspace tests for
     every target and feature under `GATE_RUSTFLAGS`, which restates the build
     standard alongside `-D warnings`. `--no-fail-fast` lets one failing binary
     leave the rest certified. It then runs the Python tests with pytest. The

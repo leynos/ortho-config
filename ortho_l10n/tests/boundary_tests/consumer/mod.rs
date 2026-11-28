@@ -72,11 +72,12 @@ fn workspace_mixed_consumer_builds_and_tests() -> Result<()> {
 /// exactly this graph.
 #[test]
 fn every_packaged_consumer_shape_builds_and_tests() -> Result<()> {
-    // One budget for the whole sequence. The two packaging calls and the six
-    // consumer calls cannot each reach a 440 s cap inside one 960 s test, so
-    // the shared allowance is what keeps a late call reportable.
+    // One budget for the whole sequence. The six consumer builds and the six
+    // resolves cannot each reach a 440 s cap inside one 960 s test, so the
+    // shared allowance is what keeps a late call reportable. The packaging
+    // itself ran in `make boundary-prepare`; here the record is only checked.
     let budget = Budget::new();
-    prepare_packaged_set(budget)?;
+    prepare_packaged_set()?;
     assert_packaged_set_complete()?;
     let source = DependencySource::Packaged {
         unpacked: unpacked_directory()?,

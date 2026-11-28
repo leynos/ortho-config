@@ -17,6 +17,7 @@
 //! waiting for that descendant is the same hang by another route.
 
 use super::POLL_INTERVAL;
+use super::admission::{AdmissionQueue, QueueScanner};
 use anyhow::{Context, Result, anyhow};
 use std::collections::VecDeque;
 use std::io::{self, Read};
@@ -47,6 +48,8 @@ struct StreamTail {
     bytes: VecDeque<u8>,
     /// Every byte the stream produced, retained or not.
     bytes_seen: u64,
+    /// Counts compile-admission queue lines over the whole stream.
+    scanner: QueueScanner,
 }
 
 impl StreamTail {
@@ -60,6 +63,7 @@ impl StreamTail {
         if excess > 0 {
             self.bytes.drain(..excess);
         }
+        self.scanner.feed(chunk);
     }
 }
 
@@ -69,9 +73,16 @@ pub(super) struct StreamEvidence {
     bytes: Vec<u8>,
     /// Every byte the stream produced.
     bytes_seen: u64,
+    /// Queue lines seen over the whole stream, retained or not.
+    queue: AdmissionQueue,
 }
 
 impl StreamEvidence {
+    /// The compile-admission queue lines this stream printed.
+    pub(super) const fn queue(&self) -> AdmissionQueue {
+        self.queue
+    }
+
     /// Render the stream, saying when only its tail was retained.
     pub(super) fn describe(&self, label: &str) -> String {
         let text = String::from_utf8_lossy(&self.bytes);
@@ -112,6 +123,7 @@ impl StreamCapture {
         StreamEvidence {
             bytes: tail.bytes.iter().copied().collect(),
             bytes_seen: tail.bytes_seen,
+            queue: tail.scanner.queue(),
         }
     }
 
@@ -225,6 +237,22 @@ mod tests {
 
     use super::{DIAGNOSTIC_TAIL_BYTES, StreamTail};
     use proptest::prelude::*;
+
+    /// The queue count survives the tail window evicting the lines themselves.
+    #[test]
+    fn the_queue_count_outlives_the_retained_window() {
+        let mut tail = StreamTail::default();
+        tail.publish(b"waiting for a compile slot (12 ahead)\n");
+        tail.publish(&vec![b'x'; 2 * DIAGNOSTIC_TAIL_BYTES]);
+        assert!(
+            tail.scanner
+                .queue()
+                .verdict()
+                .contains("1 compile-admission queue lines"),
+            "an evicted queue line must still be counted: {}",
+            tail.scanner.queue().verdict(),
+        );
+    }
 
     proptest! {
         /// The retained bytes are the end of the stream, however it arrived.

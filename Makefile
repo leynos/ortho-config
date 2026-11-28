@@ -1,4 +1,4 @@
-.PHONY: help all clean test test-warmup test-warmup-full boundary build release lint lint-clippy lint-whitaker \
+.PHONY: help all clean test test-warmup test-warmup-full boundary boundary-prepare build release lint lint-clippy lint-whitaker \
 	docstring-coverage fmt check-fmt markdownlint spellcheck spelling nixie \
 	typecheck msrv-build python-test-deps publish-check powershell-wrapper-validate \
 	test-workflow-contracts install-kani kani-check install-verus \
@@ -40,15 +40,16 @@ BUILD_STANDARD ?= 1
 #
 # The one exception is the warm-up run as nextest's setup script, and it is
 # defined by its shape, not by who calls it: `WARMUP_ENV` given on the command
-# line and empty, and no goal but the warm-up targets (see `test-warmup`
-# below). There the coverage run supplies the flags, and `cargo-llvm-cov` hands
+# line and empty, and no goal but the setup-script targets: the two warm-ups
+# (see `test-warmup` below) and `boundary-prepare`, which nextest runs the same
+# way. There the coverage run supplies the flags, and `cargo-llvm-cov` hands
 # them over as `CARGO_ENCODED_RUSTFLAGS` when they cannot be space-encoded, so
 # dropping the variable would warm a different artefact from the run it warms.
 # Any other goal, alone or beside the warm-up, and any non-empty `WARMUP_ENV`
 # (whose assignment an inherited encoded value would override), still drops it,
 # so the release and MSRV routes keep their own `RUSTFLAGS`.
 # tests/workflow_contracts/build_standard_routing_test.py holds both halves.
-WARMUP_ONLY_GOALS = test-warmup test-warmup-full
+WARMUP_ONLY_GOALS = test-warmup test-warmup-full boundary-prepare
 COVERAGE_WARMUP_CALL = $(and $(filter command line,$(origin WARMUP_ENV)),$(if $(strip $(WARMUP_ENV)),,yes),$(MAKECMDGOALS),$(if $(filter-out $(WARMUP_ONLY_GOALS),$(MAKECMDGOALS)),,yes))
 ifeq ($(COVERAGE_WARMUP_CALL),)
 unexport CARGO_ENCODED_RUSTFLAGS
@@ -218,7 +219,7 @@ clean: ## Remove build artefacts
 	$(CARGO) clean
 	rm -rf $(PYTHON_VENV)
 
-test: check-build-tools python-test-deps test-warmup ## Run tests with warnings treated as errors
+test: check-build-tools python-test-deps test-warmup boundary-prepare ## Run tests with warnings treated as errors
 	$(GATE_RUSTFLAGS) $(CARGO) fetch --locked
 	$(GATE_RUSTFLAGS) $(CARGO) test --all-targets --all-features --no-fail-fast $(BUILD_JOBS)
 	$(PYTEST) $(PYTEST_FLAGS)
@@ -242,8 +243,8 @@ test: check-build-tools python-test-deps test-warmup ## Run tests with warnings 
 # nextest's setup script adds them, because nextest terminates a test at its
 # own allowance. These lists cover the trybuild, documentation-workspace and
 # BDD binaries only; the cargo-orthohelp bridge binaries (`golden_tests`,
-# `cli_dispatch` and the agent-context ones) and `ortho_l10n --test boundary`
-# are in neither (#759, #700).
+# `cli_dispatch` and the agent-context ones) are in neither (#759).
+# `ortho_l10n --test boundary` has its own step, `boundary-prepare`, below.
 #
 # `.config/nextest.toml` runs `test-warmup-full` as its setup script, so the
 # lists live in one place. A failure here fails the run with the failing
@@ -304,8 +305,23 @@ test-warmup-full: ## test-warmup plus the heavier nested builders (nextest's set
 # from crates.io would prove something about the network instead of the shared
 # package cache. The fixture target is deliberately kept between runs, so a
 # warm run is not evidence of a cold download.
-boundary: check-build-tools ## Prove the standalone runtime boundary against foreign consumer roots
+boundary: check-build-tools boundary-prepare ## Prove the standalone runtime boundary against foreign consumer roots
 	$(GATE_RUSTFLAGS) $(CARGO) test -p ortho_l10n --test boundary --offline $(BUILD_JOBS)
+
+# The boundary contracts check a preparation record instead of packaging inside
+# their own allowance. `cargo package --verify` compiles the packaged closure
+# on every run, so a warm target does not shorten it, and on a shared host the
+# compile-admission queue alone outlasted the allowance while the code under
+# test was sound (#700, #755). This target runs the two verified `cargo package`
+# invocations, then builds every consumer shape's tests without running them,
+# under no per-test deadline (a three-hour hang guard stands in), and writes a
+# record binding the result to the sources, the lockfile and the toolchain. The
+# timed contracts refuse a missing or stale record with a message that names
+# this target, so `make test` and `make boundary` depend on it, and nextest's
+# `boundary-prepare` setup script runs it with `WARMUP_ENV=` for the coverage
+# run's own flags. A failure here carries the failing invocation's own output.
+boundary-prepare: check-build-tools ## Package and warm the boundary fixtures outside the timed contracts
+	$(WARMUP_ENV) $(CARGO) test -p ortho_l10n --test boundary --offline $(BUILD_JOBS) -- --ignored prepare_boundary_fixtures
 
 python-test-deps: ## Ensure Python test dependencies are provisioned
 	$(PYTEST) --version > $(NULL_DEVICE)

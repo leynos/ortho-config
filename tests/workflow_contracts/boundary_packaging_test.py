@@ -61,9 +61,6 @@ CRATE: typ.Final[str] = "ortho_l10n"
 
 #: The manifest declaring the binary, and the fixtures declaring its deadlines.
 MANIFEST: typ.Final[pathlib.Path] = REPOSITORY_ROOT / CRATE / "Cargo.toml"
-PACKAGE_SET: typ.Final[pathlib.Path] = (
-    REPOSITORY_ROOT / CRATE / "tests" / "boundary" / "package_set" / "mod.rs"
-)
 ENVIRONMENT: typ.Final[pathlib.Path] = (
     REPOSITORY_ROOT / CRATE / "tests" / "boundary" / "fixture_cargo" / "environment.rs"
 )
@@ -176,18 +173,6 @@ def _seconds_declaration(path: pathlib.Path, name: str) -> int:
     return int(_single_match(pattern, source, f"{name} declaration", path)[1])
 
 
-def _packaging_invocations() -> int:
-    """Read the number of packaging invocations one test makes."""
-    return int(
-        _single_match(
-            r"PACKAGING_INVOCATIONS:\s*\[PackageInvocation;\s*(\d+)\]",
-            PACKAGE_SET.read_text(encoding="utf-8"),
-            "PACKAGING_INVOCATIONS array length",
-            PACKAGE_SET,
-        )[1]
-    )
-
-
 def _consumer_shapes() -> int:
     """Read the number of consumer shapes the packaged contract builds."""
     return int(
@@ -289,31 +274,6 @@ def test_the_boundary_allowance_buys_headroom() -> None:
     )
 
 
-def test_the_packaging_deadline_fits_inside_the_allowance() -> None:
-    """A bound above the allowance never fires, so it names nothing.
-
-    Scenario: a packaging invocation hangs on the package-cache lock.
-    Invariant: each packaging invocation can reach its own deadline before
-    nextest stops the test, so the failure names the invocation that hung
-    rather than reporting a bare timeout.
-
-    The deadline and the invocation count are both read from the fixture
-    rather than restated, so the arithmetic cannot drift from the code
-    that enforces it.
-    """
-    deadline = _seconds_declaration(PACKAGE_SET, "PACKAGE_DEADLINE")
-    invocations = _packaging_invocations()
-
-    allowance = _boundary_allowance()
-    assert deadline * invocations < allowance, (
-        f"each packaging invocation is bounded at {deadline}s and {invocations} "
-        f"share one test, so they need {deadline * invocations}s of a "
-        f"{allowance:.0f}s per-test allowance. A bound that does not fit is never "
-        f"reached: nextest stops the test first and the error naming the hung "
-        f"invocation is lost"
-    )
-
-
 def test_a_consumer_resolve_and_build_fit_inside_the_allowance() -> None:
     """The two nested Cargo calls one consumer contract makes must fit.
 
@@ -367,36 +327,34 @@ def test_each_per_call_cap_fits_inside_the_shared_allowance() -> None:
     its cap rather than blaming the contract's allowance.
     """
     scenario = _seconds_declaration(BUDGET, "SCENARIO_ALLOWANCE")
-    for path, name in ((ENVIRONMENT, "CARGO_DEADLINE"), (PACKAGE_SET, "PACKAGE_DEADLINE")):
-        cap = _seconds_declaration(path, name)
-        assert cap < scenario, (
-            f"{name} is {cap}s and the shared allowance is {scenario}s; the "
-            f"allowance would expire first and the error would not name the "
-            f"invocation whose own cap was exceeded"
-        )
+    cap = _seconds_declaration(ENVIRONMENT, "CARGO_DEADLINE")
+    assert cap < scenario, (
+        f"CARGO_DEADLINE is {cap}s and the shared allowance is {scenario}s; the "
+        f"allowance would expire first and the error would not name the "
+        f"invocation whose own cap was exceeded"
+    )
 
 
 def test_the_shared_allowance_bounds_the_complete_sequence() -> None:
     """Per-call caps cannot bound a contract that makes several calls.
 
-    The packaged consumer contract packages the set and then builds and
-    resolves every consumer shape. Each call has a cap that fits inside the
-    test on its own, but the calls together may spend far more than the
-    per-test allowance, so the *shared* allowance is what stops a later call
-    from being killed by nextest before it can report. If the complete
-    sequence were already shorter than the allowance, the shared budget
-    would be untested by this contract and this check would be vacuous.
+    The packaged consumer contract builds and resolves every consumer shape
+    (the two verified ``cargo package`` calls run in ``make boundary-prepare``,
+    outside the timed test). Each call has a cap that fits inside the test on
+    its own, but the calls together may spend far more than the per-test
+    allowance, so the *shared* allowance is what stops a later call from being
+    killed by nextest before it can report. If the complete sequence were
+    already shorter than the allowance, the shared budget would be untested by
+    this contract and this check would be vacuous.
     """
     scenario = _seconds_declaration(BUDGET, "SCENARIO_ALLOWANCE")
-    packaging = _seconds_declaration(PACKAGE_SET, "PACKAGE_DEADLINE")
     consumer = _seconds_declaration(ENVIRONMENT, "CARGO_DEADLINE")
-    invocations = _packaging_invocations()
     # Every shape both builds its consumer and resolves its metadata.
-    calls = invocations + 2 * _consumer_shapes()
-    worst_case = calls * max(packaging, consumer)
+    calls = 2 * _consumer_shapes()
+    worst_case = calls * consumer
     assert worst_case > scenario, (
         f"the packaged consumer contract makes {calls} bounded calls of at "
-        f"most {max(packaging, consumer)}s each, which is {worst_case}s "
-        f"against a {scenario}s shared allowance; if the caps alone already "
-        f"fit, this contract does not exercise the shared budget"
+        f"most {consumer}s each, which is {worst_case}s against a {scenario}s "
+        f"shared allowance; if the caps alone already fit, this contract does "
+        f"not exercise the shared budget"
     )

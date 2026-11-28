@@ -75,13 +75,15 @@ DEVELOPMENT_ROUTES: typ.Final[list[tuple[str, str, str]]] = [
     ("make_boundary", "boundary", "test"),
     ("make_test_warmup", "test-warmup", "test"),
     ("make_test_warmup_full", "test-warmup-full", "test"),
+    ("make_boundary_prepare", "boundary-prepare", "test"),
     ("make_build", "build", "build"),
 ]
 
 #: Prerequisites of a route that run Cargo and are judged as routes of their
 #: own, so expanding the route does not leave two Cargo lines for one subcommand.
 PREREQUISITE_ROUTES: typ.Final[dict[str, tuple[str, ...]]] = {
-    "test": ("test-warmup",),
+    "test": ("test-warmup", "boundary-prepare"),
+    "boundary": ("boundary-prepare",),
 }
 
 #: Routes that deny warnings as well as carrying the standard. ``build`` keeps
@@ -95,6 +97,7 @@ DENIES_WARNINGS: typ.Final[frozenset[str]] = frozenset(
         "make_boundary",
         "make_test_warmup",
         "make_test_warmup_full",
+        "make_boundary_prepare",
     }
 )
 
@@ -232,6 +235,10 @@ def test_the_encoded_flags_are_dropped_from_every_recipe_but_the_coverage_warmup
     )
     assert _encoded_flags_seen_by_a_recipe("test-warmup-full", "WARMUP_ENV=") == "-Cprobe", (
         "the nextest setup script's target must inherit the encoded flags"
+    )
+    assert _encoded_flags_seen_by_a_recipe("boundary-prepare", "WARMUP_ENV=") == "-Cprobe", (
+        "the boundary preparation runs as a nextest setup script too and must inherit "
+        "the encoded flags, or its builds differ from the timed boundary build"
     )
     assert _encoded_flags_seen_by_a_recipe("test-warmup", "WARMUP_ENV=RUSTFLAGS=-Cx") == "", (
         "a non-empty `WARMUP_ENV` assigns the flags itself, and an inherited encoded "

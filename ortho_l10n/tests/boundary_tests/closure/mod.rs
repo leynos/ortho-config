@@ -63,7 +63,7 @@ fn assert_runtime_closure(metadata: &Metadata) -> Result<()> {
 #[test]
 fn packaged_runtime_consumer_has_no_facade_closure() -> Result<()> {
     let budget = Budget::new();
-    prepare_packaged_set(budget)?;
+    prepare_packaged_set()?;
     let source = DependencySource::Packaged {
         unpacked: unpacked_directory()?,
     };
