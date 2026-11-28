@@ -11,16 +11,16 @@
 //! per-test deadline, and writes a record once both have succeeded. A timed
 //! contract then *checks* the record and reads the unpacked roots; it does not
 //! package. The record is evidence, not a switch: it names what was verified,
-//! binds that to a [fingerprint](super::fingerprint) of the sources, the
-//! lockfile, the toolchain and the recipe, and carries the digest of each
+//! binds that to a [digest per file](super::fingerprint) of the sources and the
+//! lockfile, to the toolchain and to the recipe, and carries the digest of each
 //! archive, so the roots a contract reads are the ones that passed
-//! verification.
+//! verification. A stale record names the files that changed.
 //!
 //! A missing or stale record is a refusal that names `make boundary-prepare`,
 //! not a timeout, and nothing here reaches the network.
 
 use super::super::fixture_cargo::{cargo_binary, inherited_toolchain};
-use super::fingerprint::{inputs, sha256_hex};
+use super::fingerprint::{file_digests, sha256_hex};
 use super::{PACKAGED_CRATES, PACKAGING_INVOCATIONS};
 use anyhow::{Context, Result, bail, ensure};
 use camino::{Utf8Path, Utf8PathBuf};
@@ -35,7 +35,7 @@ use std::sync::OnceLock;
 const RECORD_FILE: &str = "prepared.json";
 
 /// Bump when a field of the record, or what the fingerprint covers, changes.
-const RECORD_FORMAT: u32 = 1;
+const RECORD_FORMAT: u32 = 2;
 
 /// What `cargo package` is asked to do, spelled out for the fingerprint.
 ///
@@ -70,10 +70,12 @@ struct Record {
     format: u32,
     /// The release version every packaged crate shares.
     version: String,
-    /// Fingerprint of the sources, lockfile, toolchain and recipe.
-    inputs: String,
-    /// The compiler and Cargo that verified the packages, for the reader.
+    /// What `cargo package` was asked to do.
+    recipe: String,
+    /// The compiler and Cargo that verified the packages.
     toolchain: String,
+    /// Digest of every source, manifest and lock file the recipe read.
+    files: BTreeMap<String, String>,
     /// One entry per `cargo package --verify` invocation that exited zero.
     verified: Vec<String>,
     /// SHA-256 of each `.crate` archive and unpacked manifest verification produced.
@@ -149,8 +151,9 @@ pub(super) fn write(repository: &Utf8Path, target: &Utf8Path, toolchain: &str) -
     let record = Record {
         format: RECORD_FORMAT,
         version: super::PACKAGED_VERSION.to_owned(),
-        inputs: inputs(repository, &recipe(), toolchain)?,
+        recipe: recipe(),
         toolchain: toolchain.to_owned(),
+        files: file_digests(repository)?,
         verified: invocation_descriptions(),
         artefacts: artefact_digests(target)?,
     };
@@ -266,14 +269,58 @@ fn matches_current(
         "it does not record every verified packaging invocation",
     );
     ensure!(
-        record.inputs == inputs(repository, &recipe(), toolchain)?,
-        "the sources, lockfile, toolchain or packaging recipe changed since it was written",
+        record.recipe == recipe(),
+        "the packaging recipe changed since it was written",
+    );
+    ensure!(
+        record.toolchain == toolchain,
+        "the toolchain differs: it was written under {:?} and this process sees {toolchain:?}",
+        record.toolchain,
+    );
+    let changes = describe_changes(&record.files, &file_digests(repository)?);
+    ensure!(
+        changes.is_empty(),
+        "files the packaging reads changed since it was written ({changes})",
     );
     ensure!(
         record.artefacts == artefact_digests(target)?,
         "a packaged archive or manifest differs from the one that passed verification",
     );
     Ok(())
+}
+
+/// How many changed paths a stale-record message names before it summarizes.
+const NAMED_CHANGES: usize = 8;
+
+/// Say which files differ between a record and the sources now, or nothing.
+///
+/// A stale record is only useful if it says what made it stale: a source the
+/// developer edited, and a file some other process left in a packaged member,
+/// call for different fixes.
+fn describe_changes(
+    recorded: &BTreeMap<String, String>,
+    current: &BTreeMap<String, String>,
+) -> String {
+    let mut changes: Vec<String> = Vec::new();
+    for (path, digest) in current {
+        match recorded.get(path) {
+            None => changes.push(format!("added {path}")),
+            Some(before) if before != digest => changes.push(format!("changed {path}")),
+            Some(_unchanged) => {}
+        }
+    }
+    changes.extend(
+        recorded
+            .keys()
+            .filter(|path| !current.contains_key(*path))
+            .map(|path| format!("removed {path}")),
+    );
+    let more = changes.len().saturating_sub(NAMED_CHANGES);
+    changes.truncate(NAMED_CHANGES);
+    if more > 0 {
+        changes.push(format!("and {more} more"));
+    }
+    changes.join(", ")
 }
 
 #[cfg(test)]

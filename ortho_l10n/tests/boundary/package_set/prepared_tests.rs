@@ -119,8 +119,10 @@ fn a_changed_source_makes_the_record_stale() -> Result<()> {
     scene.put("ortho_l10n/src/lib.rs", "// edited\n")?;
     let message = refusal(scene.check(TOOLCHAIN))?;
     ensure!(
-        message.contains("stale") && message.contains("make boundary-prepare"),
-        "an edited source should read as stale: {message}",
+        message.contains("stale")
+            && message.contains("make boundary-prepare")
+            && message.contains("changed ortho_l10n/src/lib.rs"),
+        "an edited source should read as stale and be named: {message}",
     );
     Ok(())
 }
@@ -131,7 +133,28 @@ fn a_new_packaged_file_makes_the_record_stale() -> Result<()> {
     let scene = Scene::new()?;
     scene.prepare()?;
     scene.put("ortho_config/locales/en/extra.ftl", "key = value\n")?;
-    refusal(scene.check(TOOLCHAIN)).map(|_message| ())
+    let message = refusal(scene.check(TOOLCHAIN))?;
+    ensure!(
+        message.contains("added ortho_config/locales/en/extra.ftl"),
+        "an added file should be named: {message}",
+    );
+    Ok(())
+}
+
+/// A stale record names at most a handful of paths and counts the rest.
+#[test]
+fn a_long_list_of_changes_is_summarized() -> Result<()> {
+    let scene = Scene::new()?;
+    scene.prepare()?;
+    for index in 0..20 {
+        scene.put(&format!("ortho_config/extra/file-{index}.txt"), "new\n")?;
+    }
+    let message = refusal(scene.check(TOOLCHAIN))?;
+    ensure!(
+        message.contains("and 12 more"),
+        "twenty added files should name eight and count twelve: {message}",
+    );
+    Ok(())
 }
 
 /// The lockfile decides what verification resolved.
@@ -148,7 +171,12 @@ fn a_changed_lockfile_makes_the_record_stale() -> Result<()> {
 fn a_different_toolchain_makes_the_record_stale() -> Result<()> {
     let scene = Scene::new()?;
     scene.prepare()?;
-    refusal(scene.check("cargo 2.0.0; rustc 2.0.0")).map(|_message| ())
+    let message = refusal(scene.check("cargo 2.0.0; rustc 2.0.0"))?;
+    ensure!(
+        message.contains("toolchain differs"),
+        "a different toolchain should be named: {message}",
+    );
+    Ok(())
 }
 
 /// Build output and hidden entries are not packaged, so they do not count.

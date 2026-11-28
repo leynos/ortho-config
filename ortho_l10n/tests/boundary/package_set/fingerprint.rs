@@ -1,12 +1,12 @@
-//! A content fingerprint of everything the packaging recipe reads.
+//! A per-file digest of everything the packaging recipe reads.
 //!
 //! The preparation record claims "`cargo package --verify` passed for these
 //! sources". That claim is only as good as the binding between the record and
-//! the sources, so the fingerprint covers what Cargo packages and resolves:
-//! every file of each packaged or patched member (Cargo packages a directory
-//! whole unless a manifest narrows it, and none does), the workspace manifest
-//! and lockfile, the pinned toolchain file, the Cargo configuration, and the
-//! identity of the compiler and Cargo that did the verifying.
+//! the sources, so the digests cover what Cargo packages and resolves: every
+//! file of each packaged or patched member (Cargo packages a directory whole
+//! unless a manifest narrows it, and none does), the workspace manifest and
+//! lockfile, the pinned toolchain file, and the Cargo configuration. One digest
+//! per file, not one over all of them, so a stale record can name what changed.
 //!
 //! The walk skips `target` and hidden entries, which Cargo does not package
 //! either. It reads bytes through `cap_std`, so a symlink cannot lead it out of
@@ -16,6 +16,7 @@ use anyhow::{Context, Result};
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::fs_utf8::Dir;
 use sha2::{Digest, Sha256};
+use std::collections::BTreeMap;
 
 /// Workspace members the packaging recipe packages or patches, by directory.
 const MEMBER_DIRECTORIES: [&str; 4] = [
@@ -47,10 +48,10 @@ pub(super) fn sha256_hex(bytes: &[u8]) -> String {
     hex(&Sha256::digest(bytes))
 }
 
-/// Fingerprint the recipe's inputs.
+/// The digest of every file the recipe reads, keyed by repository-relative path.
 ///
-/// `recipe` and `toolchain` are folded in so a change to either, not only to a
-/// source file, invalidates a record. A missing root file is hashed as absent
+/// A file per entry rather than one hash over all of them, so a stale record can
+/// name the files that changed. A missing root file is recorded as absent
 /// rather than skipped: a repository that gains a `.cargo/config.toml` has
 /// changed how it builds.
 ///
@@ -58,22 +59,21 @@ pub(super) fn sha256_hex(bytes: &[u8]) -> String {
 ///
 /// Returns an error when the repository cannot be opened or a file cannot be
 /// read.
-pub(super) fn inputs(repository: &Utf8Path, recipe: &str, toolchain: &str) -> Result<String> {
+pub(super) fn file_digests(repository: &Utf8Path) -> Result<BTreeMap<String, String>> {
     let root = Dir::open_ambient_dir(repository, cap_std::ambient_authority())
         .with_context(|| format!("open repository {repository}"))?;
-    let mut hasher = Sha256::new();
-    absorb(&mut hasher, "recipe", recipe.as_bytes());
-    absorb(&mut hasher, "toolchain", toolchain.as_bytes());
-    for path in listed_files(&root)? {
-        let bytes = read_if_present(&root, &path)?;
-        absorb(
-            &mut hasher,
-            path.as_str(),
-            bytes.as_deref().unwrap_or_default(),
-        );
-    }
-    Ok(hex(&hasher.finalize()))
+    listed_files(&root)?
+        .into_iter()
+        .map(|path| {
+            let digest = read_if_present(&root, &path)?
+                .map_or_else(|| ABSENT.to_owned(), |bytes| sha256_hex(&bytes));
+            Ok((path.into_string(), digest))
+        })
+        .collect()
 }
+
+/// The digest recorded for a root file that does not exist.
+const ABSENT: &str = "absent";
 
 /// Every file the fingerprint covers, in a stable order.
 fn listed_files(root: &Dir) -> Result<Vec<Utf8PathBuf>> {
@@ -124,16 +124,4 @@ fn read_if_present(root: &Dir, path: &Utf8Path) -> Result<Option<Vec<u8>>> {
     root.read(path)
         .map(Some)
         .with_context(|| format!("read {path}"))
-}
-
-/// Fold one labelled value into the hash, unambiguously.
-///
-/// A decimal length and a colon precede each part, which keeps `("ab", "c")`
-/// apart from `("a", "bc")` without depending on a byte order.
-fn absorb(hasher: &mut Sha256, label: &str, bytes: &[u8]) {
-    for part in [label.as_bytes(), bytes] {
-        hasher.update(part.len().to_string().as_bytes());
-        hasher.update(b":");
-        hasher.update(part);
-    }
 }
