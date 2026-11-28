@@ -477,16 +477,19 @@ share two lists, and two entry points call them:
   other flags warms nothing. The Makefile lifts its
   `unexport CARGO_ENCODED_RUSTFLAGS` for that call (`cargo-llvm-cov` passes its
   flags that way when they cannot be space-encoded), so the warm-up inherits
-  them whole. `WARMUP_FEATURES` carries the feature selection the same way: it
-  defaults to `--all-features`, and each coverage step in
-  `.github/workflows/ci.yml` sets it to that leg's `--features`, because
-  trybuild derives its scratch build's features from the test binary. Do not
-  clear `WARMUP_ENV` for `make test`: the warm-up would then build under other
-  flags from the gate it warms. The heavy list holds the binaries whose test
-  bodies are long on a warm host (the generated documentation workspaces and
-  the cargo-orthohelp scenarios) or whose cold build is a few seconds; nextest
-  needs them because it terminates a test at its own allowance, and `make test`
-  does not pay to run them twice.
+  them whole. The exception is defined by the call's shape: `WARMUP_ENV` given
+  empty on the command line and no goal but the two warm-up targets. Any other
+  goal, or a non-empty `WARMUP_ENV` (an inherited encoded value would override
+  its assignment), still drops the variable. `WARMUP_FEATURES` carries the
+  feature selection the same way: it defaults to `--all-features`, and each
+  coverage step in `.github/workflows/ci.yml` sets it to that leg's
+  `--features`, because trybuild derives its scratch build's features from the
+  test binary. Do not clear `WARMUP_ENV` for `make test`: the warm-up would
+  then build under other flags from the gate it warms. The heavy list holds the
+  binaries whose test bodies are long on a warm host (the generated
+  documentation workspaces and the cargo-orthohelp scenarios) or whose cold
+  build is a few seconds; nextest needs them because it terminates a test at
+  its own allowance, and `make test` does not pay to run them twice.
 
 A failing test in the warm-up fails the run with that test's own output, before
 any timed test starts; `--no-fail-fast` makes the warm-up run every binary

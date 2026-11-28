@@ -38,16 +38,18 @@ BUILD_STANDARD ?= 1
 # `unexport` keeps the variable out of the recipes' environment, so the routes
 # this file states are the routes that run.
 #
-# The one exception is the warm-up run as nextest's setup script: `WARMUP_ENV=`
-# on the command line and no goal but the warm-up targets (see `test-warmup`
+# The one exception is the warm-up run as nextest's setup script, and it is
+# defined by its shape, not by who calls it: `WARMUP_ENV` given on the command
+# line and empty, and no goal but the warm-up targets (see `test-warmup`
 # below). There the coverage run supplies the flags, and `cargo-llvm-cov` hands
 # them over as `CARGO_ENCODED_RUSTFLAGS` when they cannot be space-encoded, so
 # dropping the variable would warm a different artefact from the run it warms.
-# Any other goal, alone or beside the warm-up, still drops it, so the release
-# and MSRV routes keep their own `RUSTFLAGS`.
+# Any other goal, alone or beside the warm-up, and any non-empty `WARMUP_ENV`
+# (whose assignment an inherited encoded value would override), still drops it,
+# so the release and MSRV routes keep their own `RUSTFLAGS`.
 # tests/workflow_contracts/build_standard_routing_test.py holds both halves.
 WARMUP_ONLY_GOALS = test-warmup test-warmup-full
-COVERAGE_WARMUP_CALL = $(and $(filter command line,$(origin WARMUP_ENV)),$(MAKECMDGOALS),$(if $(filter-out $(WARMUP_ONLY_GOALS),$(MAKECMDGOALS)),,yes))
+COVERAGE_WARMUP_CALL = $(and $(filter command line,$(origin WARMUP_ENV)),$(if $(strip $(WARMUP_ENV)),,yes),$(MAKECMDGOALS),$(if $(filter-out $(WARMUP_ONLY_GOALS),$(MAKECMDGOALS)),,yes))
 ifeq ($(COVERAGE_WARMUP_CALL),)
 unexport CARGO_ENCODED_RUSTFLAGS
 endif
@@ -227,7 +229,8 @@ test: check-build-tools python-test-deps test-warmup ## Run tests with warnings 
 # dependency graph, so it pays a full dependency compile (and compile-admission
 # queueing) inside the test's own deadline. `test-warmup` runs the cheapest
 # binaries that fill the trybuild scratch trees once, sequentially, before the
-# timed run, so the timed run finds those target directories warm. The
+# timed run, so a timed run whose flags and features match the warm-up's finds
+# those target directories warm (see `WARMUP_ENV` and `WARMUP_FEATURES`). The
 # binaries are run rather than only built because trybuild builds its scratch
 # project when it runs and offers no build-only mode.
 #
