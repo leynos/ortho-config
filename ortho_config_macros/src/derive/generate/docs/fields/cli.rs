@@ -27,6 +27,13 @@ pub(super) fn build_cli_tokens(
     generated: Option<&CliFieldMetadata>,
     krate: &TokenStream,
 ) -> syn::Result<TokenStream> {
+    // A flattened container surfaces its children's arguments under the
+    // parent command; the container's own name is not an argument. Projecting
+    // those children is roadmap 12.3.1, so the container publishes no CLI
+    // metadata rather than a flag clap does not accept.
+    if clap_field_is_flattened(context.field)? {
+        return Ok(quote! { None });
+    }
     if let Some(decl) = clap {
         if decl.is_skipped {
             return Ok(quote! { None });
@@ -182,4 +189,46 @@ fn generated_tokens(
 fn has_unreadable_declaration(field: &syn::Field) -> syn::Result<bool> {
     let declared = field.attrs.iter().any(is_clap_attribute);
     Ok(declared && !clap_field_is_flattened(field)?)
+}
+
+#[cfg(test)]
+mod tests {
+    //! Unit tests for the CLI metadata fallbacks.
+
+    use super::*;
+    use crate::derive::parse::{ClapRenameAll, parse_field_attrs};
+    use proc_macro2::TokenStream;
+
+    /// Builds a field context from a field declaration.
+    fn context<'a>(
+        field: &'a syn::Field,
+        attrs: &'a crate::derive::parse::FieldAttrs,
+    ) -> FieldContext<'a> {
+        FieldContext {
+            name: field.ident.as_ref().expect("named field"),
+            field_name: "shared",
+            field,
+            attrs,
+            value_type: None,
+        }
+    }
+
+    /// A flattened container publishes no CLI metadata of its own.
+    #[test]
+    fn a_flattened_container_has_no_cli_metadata() {
+        let field: syn::Field = syn::parse_quote! {
+            #[command(flatten)]
+            shared: Shared
+        };
+        let attrs = parse_field_attrs(&field, ClapRenameAll::default())
+            .expect("the field attributes should parse");
+        let krate: TokenStream = quote! { ortho_config };
+        let tokens = build_cli_tokens(&context(&field, &attrs), None, None, &krate)
+            .expect("the CLI metadata should build");
+        assert_eq!(
+            tokens.to_string(),
+            "None",
+            "a flattened container must not advertise a generated flag"
+        );
+    }
 }

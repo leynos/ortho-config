@@ -133,7 +133,7 @@ impl DocTokens {
             prefix: args.struct_attrs.prefix.as_deref(),
             fields: args.fields,
             field_attrs: args.field_attrs,
-            serde_rename_all: args.serde_rename_all,
+            serde_deserialize_rename_all: args.serde_deserialize_rename_all,
             cli_fields: args.cli_fields,
             localization_ids: args.localization_ids,
             krate,

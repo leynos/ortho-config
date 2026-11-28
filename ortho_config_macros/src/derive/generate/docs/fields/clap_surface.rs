@@ -79,6 +79,10 @@ pub(super) fn resolve_clap_args(
             continue;
         };
         if let Some(decl) = &field_attrs.clap_arg {
+            if decl.is_unreadable {
+                advance_unreadable_operand(field, decl, &mut next_index)?;
+                continue;
+            }
             let argument = resolve_declared_argument(field, decl, &mut next_index)?;
             resolved.insert(name.to_string(), argument);
             continue;
@@ -119,6 +123,28 @@ fn resolve_declared_argument(
         required: decl.required,
         is_skipped: decl.is_skipped,
     })
+}
+
+/// Advances the implicit index counter for an unreadable operand.
+///
+/// The field's CLI metadata is omitted because part of its declaration could
+/// not be read, but clap still assigns it the next implicit index when it names
+/// no index of its own. Later declared operands must count it, or their
+/// documented index drifts from the index clap parses.
+fn advance_unreadable_operand(
+    field: &syn::Field,
+    decl: &ClapArgDecl,
+    next_index: &mut u16,
+) -> syn::Result<()> {
+    let implicit_operand = !decl.is_skipped
+        && decl
+            .positional
+            .as_ref()
+            .is_some_and(|positional| positional.index.is_none());
+    if implicit_operand {
+        advance_index(field, next_index)?;
+    }
+    Ok(())
 }
 
 /// Infers an argument only for an undeclared field of a clap command.
@@ -205,17 +231,9 @@ fn resolve_positional(
     positional: &ClapPositionalDecl,
     next_index: &mut u16,
 ) -> syn::Result<ResolvedPositional> {
-    let index = if let Some(index) = positional.index {
-        index
-    } else {
-        let index = *next_index;
-        *next_index = next_index.checked_add(1).ok_or_else(|| {
-            syn::Error::new_spanned(
-                field,
-                "too many positional arguments; the documentation IR stores clap indices as u16",
-            )
-        })?;
-        index
+    let index = match positional.index {
+        Some(index) => index,
+        None => advance_index(field, next_index)?,
     };
 
     Ok(ResolvedPositional {
@@ -224,6 +242,18 @@ fn resolve_positional(
         var_arg: positional.var_arg,
         last: positional.last,
     })
+}
+
+/// Assigns clap's next implicit positional index.
+fn advance_index(field: &syn::Field, next_index: &mut u16) -> syn::Result<u16> {
+    let index = *next_index;
+    *next_index = next_index.checked_add(1).ok_or_else(|| {
+        syn::Error::new_spanned(
+            field,
+            "too many positional arguments; the documentation IR stores clap indices as u16",
+        )
+    })?;
+    Ok(index)
 }
 
 #[cfg(test)]

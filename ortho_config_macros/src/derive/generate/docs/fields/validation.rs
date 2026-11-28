@@ -12,18 +12,22 @@ pub(super) fn validate_env_name(field: &Ident, env_name: &str) -> syn::Result<()
             "environment variable names must be non-empty",
         ));
     }
-    if env_name
-        .chars()
-        .all(|ch| ch.is_ascii_alphanumeric() || ch == '_')
-    {
+    if env_name_is_well_formed(env_name) {
         return Ok(());
     }
     Err(syn::Error::new_spanned(
         field,
         format!(
-            "environment variable '{env_name}' must contain only ASCII alphanumeric characters or '_'",
+            "environment variable '{env_name}' must contain only ASCII alphanumeric characters, '_', or '-'",
         ),
     ))
+}
+
+/// Reports whether an environment name uses only permitted characters.
+fn env_name_is_well_formed(env_name: &str) -> bool {
+    env_name
+        .chars()
+        .all(|ch| ch.is_ascii_alphanumeric() || ch == '_' || ch == '-')
 }
 
 /// Validates that a file key path is well-formed.

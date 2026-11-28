@@ -37,16 +37,23 @@ fn empty_clap_attributes_declare_a_positional() {
 }
 
 #[test]
-fn an_unreadable_id_falls_back_to_the_generated_surface() {
+fn an_unreadable_id_keeps_the_known_shape() {
     let field = super::parse_field(&quote::quote! {
         #[arg(id = ARG_ID, long)]
         host: String
     });
+    let decl = super::parse_clap_arg_decl(&field, ClapRenameAll::default())
+        .expect("the declaration should parse")
+        .expect("an unreadable declaration is retained for index accounting");
+    assert!(decl.is_unreadable, "the identifier could not be read");
+    assert_eq!(
+        decl.long.as_deref(),
+        Some("host"),
+        "the readable long spelling still describes the argument's shape"
+    );
     assert!(
-        super::parse_clap_arg_decl(&field, ClapRenameAll::default())
-            .expect("the declaration should parse")
-            .is_none(),
-        "an unreadable id should leave the declaration unmodelled"
+        decl.positional.is_none(),
+        "a long option does not consume a positional index"
     );
 }
 
@@ -152,7 +159,7 @@ fn nested_option_accepts_a_bare_flag() {
 }
 
 #[test]
-fn unreadable_num_args_falls_back_to_the_generated_surface() {
+fn unreadable_num_args_keeps_the_known_shape() {
     let literal = declaration(&quote::quote! {
         #[arg(long, num_args = 0..=1)]
         colour: String
@@ -167,11 +174,18 @@ fn unreadable_num_args_falls_back_to_the_generated_surface() {
         quote::quote! { #[arg(long, num_args = LIMIT)] colour: Option<Option<String>> },
     ] {
         let field = super::parse_field(&tokens);
+        let decl = super::parse_clap_arg_decl(&field, ClapRenameAll::default())
+            .expect("the declaration should parse")
+            .expect("an unreadable declaration is retained for index accounting");
+        assert!(decl.is_unreadable, "the value count could not be read");
+        assert_eq!(
+            decl.long.as_deref(),
+            Some("colour"),
+            "the readable long spelling still describes the argument's shape"
+        );
         assert!(
-            super::parse_clap_arg_decl(&field, ClapRenameAll::default())
-                .expect("the declaration should parse")
-                .is_none(),
-            "an unreadable num_args should leave the declaration unmodelled"
+            decl.positional.is_none(),
+            "a long option does not consume a positional index"
         );
     }
 }

@@ -2124,10 +2124,13 @@ label. Generated environment suffixes and file keys follow Serde's
 _deserialization_ name, including `#[serde(rename = "...")]`,
 `#[serde(rename(deserialize = "..."))]`, and the container `rename_all` rule,
 because the loader deserializes those layers; a serialization-only rename does
-not move the input name. The subcommand's `about_id` and field help identifiers
-agree with its `ABOUT_ID` and `ARG_IDS` when the argument type declares a
-`localization_base`; with a parent path they follow the mount path that
-`LocalizeCmd` resolves.
+not move the input name. A generated environment name is published only when
+the provider's transforms read it back as that key. A camel-case, dotted, or
+double-underscore key keeps its file key but has no environment route, because
+the provider would map such a variable to a different key. The subcommand's
+`about_id` and field help identifiers agree with its `ABOUT_ID` and `ARG_IDS`
+when the argument type declares a `localization_base`; with a parent path they
+follow the mount path that `LocalizeCmd` resolves.
 
 Agent context lists a positional operand as an input without a long flag,
 orders operands first by their one-based index, and carries both the index and

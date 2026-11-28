@@ -53,6 +53,14 @@ pub(crate) struct ClapArgDecl {
     pub(crate) required: bool,
     /// Whether clap skips the field entirely.
     pub(crate) is_skipped: bool,
+    /// Whether a clap key could not be read statically.
+    ///
+    /// The declaration still describes the argument's shape when every
+    /// unreadable key is a value rather than `long` or `short`, so positional
+    /// index accounting remains possible. `is_unreadable` suppresses CLI
+    /// metadata, which would otherwise claim a value name or arity the derive
+    /// has not read.
+    pub(crate) is_unreadable: bool,
 }
 
 /// Positional settings declared for one clap argument.
@@ -82,9 +90,7 @@ pub(crate) fn parse_clap_arg_decl(
     if clap_field_is_subcommand(field)? || clap_field_is_flattened(field)? {
         return Ok(None);
     }
-    if has_unreadable_clap_arg_id(field)? {
-        return Ok(None);
-    }
+    let id_unreadable = has_unreadable_clap_arg_id(field)?;
 
     let mut builder = ClapArgBuilder::default();
     for attr in field.attrs.iter().filter(|attr| is_clap_attribute(attr)) {
@@ -100,5 +106,5 @@ pub(crate) fn parse_clap_arg_decl(
     if builder.should_ignore() {
         return Ok(None);
     }
-    builder.finish(field, rename_all).map(Some)
+    builder.finish(field, rename_all, id_unreadable).map(Some)
 }

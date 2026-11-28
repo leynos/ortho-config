@@ -34,7 +34,7 @@ use derive::generate::localization::{
 };
 use derive::generate::ortho_impl::generate_trait_implementation;
 use derive::generate::required_schema::RequiredSchemaSource;
-use derive::parse::{parse_input, parse_schema_input, serde_rename_all};
+use derive::parse::{parse_input, parse_schema_input, serde_rename_rules};
 
 /// Derive macro for the
 /// [`OrthoConfig`](https://docs.rs/ortho_config/latest/ortho_config/trait.OrthoConfig.html)
@@ -58,7 +58,8 @@ pub fn derive_ortho_config(input_tokens: TokenStream) -> TokenStream {
 /// convert them into a `compile_error!` invocation.
 fn expand_ortho_config(derive_input: &DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
     let (ident, fields, struct_attrs, field_attrs) = parse_input(derive_input)?;
-    let serde_rename_all = serde_rename_all(&derive_input.attrs)?;
+    let serde_rename_rules = serde_rename_rules(&derive_input.attrs)?;
+    let serde_rename_all = serde_rename_rules.serialize;
     let krate = derive::crate_path::resolve(struct_attrs.crate_path.as_ref());
     let component_args = MacroComponentArgs {
         ident: &ident,
@@ -94,7 +95,7 @@ fn expand_ortho_config(derive_input: &DeriveInput) -> syn::Result<proc_macro2::T
         fields: &fields,
         field_attrs: &field_attrs,
         struct_attrs: &struct_attrs,
-        serde_rename_all,
+        serde_deserialize_rename_all: serde_rename_rules.deserialize,
         cli_fields: &components.cli_field_metadata,
         localization_ids: &localization_ids,
         krate: &krate,

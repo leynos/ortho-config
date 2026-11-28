@@ -93,7 +93,10 @@ flag surface.
 - Generated environment suffixes and file keys follow Serde's deserialization
   key, so `#[serde(rename = "...")]`, `#[serde(rename(deserialize = "..."))]`,
   and a container `rename_all` rule change the documented names. A
-  serialization-only rename does not.
+  serialization-only rename does not. A kebab-case key keeps its hyphen in the
+  environment spelling; a camel-case, dotted, or double-underscore key keeps
+  its file key but has no environment route, because the provider cannot read
+  such a variable back as that key.
 - A clap declaration the derive cannot read statically, such as
   `value_name = SOME_CONST`, is documented without CLI metadata. Use a literal
   value name when the placeholder must appear.

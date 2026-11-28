@@ -96,8 +96,8 @@ fn test_field_log_level(docs_metadata: DocMetadata) -> Result<()> {
         "expected log_level string value"
     );
     ensure!(
-        log_level.env.as_ref().map(|value| value.var_name.as_str()) == Some("APP_LOGLEVEL"),
-        "expected the deserialized key to drive the env name"
+        log_level.env.is_none(),
+        "a camel-case key has no environment spelling the provider reads back"
     );
     ensure!(
         log_level.file.as_ref().map(|value| value.key_path.as_str()) == Some("logLevel"),

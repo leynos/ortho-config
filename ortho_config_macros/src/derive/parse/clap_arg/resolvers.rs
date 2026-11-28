@@ -9,7 +9,7 @@ use heck::ToShoutySnakeCase;
 use syn::Type;
 
 use super::super::ClapRenameAll;
-use super::value_syntax::{ValueRange, clap_option_inner};
+use super::value_syntax::{ValueRange, clap_option_inner, is_bare_bool, is_vec_field};
 
 /// A name that either follows clap's casing rule or is written literally.
 #[derive(Debug, Clone)]
@@ -143,4 +143,39 @@ pub(super) const fn variadic(is_vec: bool, num_args: Option<ValueRange>) -> bool
 /// valid spelling even though the type is not a plain boolean.
 fn is_nested_option(ty: &Type) -> bool {
     clap_option_inner(ty).is_some_and(|inner| clap_option_inner(inner).is_some())
+}
+
+/// Signals carried into clap's requiredness decision.
+#[derive(Clone, Copy)]
+pub(super) struct RequirednessSignals {
+    /// Explicit `required` setting, which wins over every inference.
+    pub(super) explicit: Option<bool>,
+    /// Whether a clap default supplies the value when it is absent.
+    pub(super) has_default: bool,
+    /// Whether the declared action consumes a value, after arity overrides.
+    pub(super) action_takes_value: Option<bool>,
+}
+
+/// Resolves clap's requiredness from explicit and inferred signals.
+///
+/// An argument with no clap default is required, except that `Option` and
+/// `Vec` shapes and the value-free actions clap infers for a bare boolean are
+/// never required. Requiredness therefore does not follow an `num_args` arity
+/// override. The configuration loader's Serde defaults do not relax a clap
+/// declaration, so a declared argument must not fall back to those when it is
+/// missing a value.
+pub(super) fn required(signals: RequirednessSignals, ty: &Type) -> bool {
+    if let Some(required) = signals.explicit {
+        return required;
+    }
+    if signals.has_default {
+        return false;
+    }
+    if signals.action_takes_value == Some(false) {
+        return false;
+    }
+    if signals.action_takes_value.is_none() && is_bare_bool(ty) {
+        return false;
+    }
+    !(is_vec_field(ty) || clap_option_inner(ty).is_some())
 }

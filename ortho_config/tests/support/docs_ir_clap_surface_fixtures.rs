@@ -123,3 +123,30 @@ pub(super) struct PartlyDeclaredArgs {
     #[arg(long)]
     verbose: bool,
 }
+
+/// Arguments whose first operand has an unreadable value name.
+///
+/// clap still parses the operand and places `second` at index 2, so the
+/// documentation must count the field it does not describe.
+#[derive(Debug, Clone, Default, Parser, Serialize, Deserialize, OrthoConfig)]
+#[ortho_config(prefix = "SPLITTERS")]
+pub(super) struct UnreadableOperandArgs {
+    /// Operand whose placeholder is a constant.
+    #[arg(value_name = PROPOSAL_VALUE_NAME)]
+    proposal: String,
+    /// Operand that follows it.
+    #[arg(value_name = "SECOND")]
+    second: String,
+}
+
+/// Arguments whose first argument is an unreadable named option.
+#[derive(Debug, Clone, Default, Parser, Serialize, Deserialize, OrthoConfig)]
+#[ortho_config(prefix = "SPLITTERS")]
+pub(super) struct UnreadableOptionArgs {
+    /// Named option whose placeholder is a constant.
+    #[arg(long, value_name = PROPOSAL_VALUE_NAME)]
+    check: Option<String>,
+    /// Operand that follows the named option.
+    #[arg(value_name = "INPUT")]
+    input: String,
+}

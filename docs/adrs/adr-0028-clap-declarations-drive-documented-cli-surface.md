@@ -161,7 +161,12 @@ generated names. The generated `<FIELD>` suffix and `<key>` use Serde's
 *deserialization* name — a field-level `#[serde(rename = "...")]` or
 `#[serde(rename(deserialize = "..."))]`, plus the container `rename_all` rule —
 because the loader deserializes those layers. A serialization-only rename does
-not move the input name.
+not move the input name. A generated environment name is published only when
+replaying the provider's prefix strip, uppercase, `__` split, and lowercase
+transforms reproduces the key exactly. A camel-case, dotted, or
+double-underscore key keeps its file key but receives no environment route,
+because advertising a variable that populates a different key would mislead
+callers.
 
 The generated selector no longer rebuilds identifiers. It calls
 `get_doc_metadata_for_subcommand`, so handwritten `OrthoConfigDocs` payloads

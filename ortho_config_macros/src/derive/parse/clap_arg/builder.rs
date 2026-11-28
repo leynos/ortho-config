@@ -11,11 +11,12 @@ use syn::meta::ParseNestedMeta;
 use syn::spanned::Spanned;
 use syn::{Expr, Lit, Type};
 
+use super::super::clap_attrs::clap_arg_id;
 use super::super::{ClapRenameAll, discard_unknown};
 use super::resolvers::{self, NameChoice, RepetitionFlags, ShortChoice};
 use super::value_syntax::{
-    ValueRange, action_name, argument, clap_option_inner, is_bare_bool, is_default_value_key,
-    is_vec_field, parse_bool, parse_lit_str, parse_usize, parse_value_range, single_char,
+    ValueRange, action_name, argument, is_bare_bool, is_default_value_key, is_vec_field,
+    parse_bool, parse_lit_str, parse_usize, parse_value_range, single_char,
 };
 use super::{ClapArgDecl, ClapPositionalDecl};
 
@@ -64,15 +65,16 @@ pub(super) struct ClapArgBuilder {
     flatten: bool,
     /// Whether the field selects a subcommand.
     subcommand: bool,
-    /// Whether a value could not be understood and the declaration must be
-    /// ignored in favour of the generated surface.
+    /// Whether a clap key could not be understood.
     unparsed: bool,
 }
 
 impl ClapArgBuilder {
-    /// Reports whether the declaration cannot describe one source field.
+    /// Reports whether the attributes declare no field-local argument.
+    ///
+    /// An unreadable key leaves the declaration unreadable, not absent.
     pub(super) const fn should_ignore(&self) -> bool {
-        !self.seen || self.unparsed || self.flatten || self.subcommand
+        !self.seen || self.flatten || self.subcommand
     }
 
     /// Records that a clap argument attribute was present.
@@ -300,8 +302,13 @@ impl ClapArgBuilder {
         self,
         field: &syn::Field,
         rename_all: ClapRenameAll,
+        id_unreadable: bool,
     ) -> syn::Result<ClapArgDecl> {
-        let explicit_id = super::super::clap_attrs::clap_arg_id(field)?;
+        let explicit_id = if id_unreadable {
+            None
+        } else {
+            clap_arg_id(field)?
+        };
         let field_ident = field.ident.as_ref().ok_or_else(|| {
             syn::Error::new_spanned(field, "tuple fields cannot declare clap arguments")
         })?;
@@ -333,13 +340,7 @@ impl ClapArgBuilder {
             },
             num_args,
         );
-        let variadic = is_positional && resolvers::variadic(is_vec, num_args);
-        let positional = is_positional.then_some(ClapPositionalDecl {
-            index: self.index,
-            variadic,
-            var_arg: self.var_arg,
-            last: self.last,
-        });
+        let positional = self.positional(is_positional, is_vec, num_args);
 
         Ok(ClapArgDecl {
             long,
@@ -350,8 +351,31 @@ impl ClapArgBuilder {
             value_optional,
             multiple,
             hide_in_help: self.hide,
-            required: self.resolve_required(&field.ty),
+            required: resolvers::required(
+                resolvers::RequirednessSignals {
+                    explicit: self.required,
+                    has_default: self.has_default,
+                    action_takes_value: self.action_takes_value,
+                },
+                &field.ty,
+            ),
             is_skipped: self.skipped,
+            is_unreadable: self.unparsed || id_unreadable,
+        })
+    }
+
+    /// Builds the positional settings when the argument is an operand.
+    fn positional(
+        &self,
+        is_positional: bool,
+        is_vec: bool,
+        num_args: Option<ValueRange>,
+    ) -> Option<ClapPositionalDecl> {
+        is_positional.then(|| ClapPositionalDecl {
+            index: self.index,
+            variadic: resolvers::variadic(is_vec, num_args),
+            var_arg: self.var_arg,
+            last: self.last,
         })
     }
 
@@ -367,29 +391,5 @@ impl ClapArgBuilder {
             return value;
         }
         !is_bare_bool(ty)
-    }
-
-    /// Resolves clap's requiredness from explicit and inferred signals.
-    ///
-    /// An argument with no clap default is required, except that `Option` and
-    /// `Vec` shapes and the value-free actions clap infers for a bare boolean
-    /// are never required. Requiredness therefore does not follow an
-    /// `num_args` arity override. The configuration loader's Serde defaults do
-    /// not relax a clap declaration, so a declared argument must not fall back
-    /// to those when it is missing a value.
-    fn resolve_required(&self, ty: &Type) -> bool {
-        if let Some(required) = self.required {
-            return required;
-        }
-        if self.has_default {
-            return false;
-        }
-        if self.action_takes_value == Some(false) {
-            return false;
-        }
-        if self.action_takes_value.is_none() && is_bare_bool(ty) {
-            return false;
-        }
-        !(is_vec_field(ty) || clap_option_inner(ty).is_some())
     }
 }

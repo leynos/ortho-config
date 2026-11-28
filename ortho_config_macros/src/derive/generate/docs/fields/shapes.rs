@@ -31,7 +31,7 @@ pub(crate) struct FieldDocArgs<'a> {
     /// One parsed attribute set per entry in `fields`.
     pub field_attrs: &'a [FieldAttrs],
     /// Container-level renaming applied when deriving a field's file key.
-    pub serde_rename_all: Option<SerdeRenameAll>,
+    pub serde_deserialize_rename_all: Option<SerdeRenameAll>,
     /// CLI metadata already collected for this struct's fields.
     pub cli_fields: &'a [CliFieldMetadata],
     /// Catalogue identifiers generated for this struct.

@@ -44,7 +44,7 @@ pub(crate) struct DocsArgs<'a> {
     /// Container settings that supply names, headings, and platform metadata.
     pub struct_attrs: &'a StructAttrs,
     /// Serde naming policy used to identify serialized configuration keys.
-    pub serde_rename_all: Option<SerdeRenameAll>,
+    pub serde_deserialize_rename_all: Option<SerdeRenameAll>,
     /// CLI details used to keep generated help metadata in sync with parsing.
     pub cli_fields: &'a [CliFieldMetadata],
     /// Localisation identifiers determine which field defaults follow the

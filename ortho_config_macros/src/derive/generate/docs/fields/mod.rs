@@ -34,7 +34,7 @@ use self::shapes::{
 use super::AppName;
 use super::sections::string_tokens;
 use super::{example_tokens, link_tokens, note_tokens};
-use defaults::{default_env_name, default_field_id};
+use defaults::{default_field_id, generated_env_suffix, join_env_prefix};
 use tokens::{default_tokens, deprecated_tokens};
 use validation::{ensure_unique, validate_env_name, validate_file_key};
 use value_types::value_type_tokens;
@@ -78,17 +78,15 @@ pub(super) fn build_fields_metadata(args: &FieldDocArgs<'_>) -> syn::Result<Fiel
         .iter()
         .zip(args.field_attrs)
         .filter(|(_, attrs)| !attrs.cli.is_subcommand());
-    let mut needs_env_projection = false;
     let mut needs_file_projection = false;
     for (_, attrs) in documented.clone() {
-        needs_env_projection |= attrs.doc.env_name.is_none();
         needs_file_projection |= attrs.doc.file_key_path.is_none();
     }
 
     let mut builder = FieldMetaBuilder {
         app_name: args.app_name,
         prefix: args.prefix,
-        serde_rename_all: args.serde_rename_all,
+        serde_rename_all: args.serde_deserialize_rename_all,
         cli_lookup,
         clap_lookup,
         localization_args: args
@@ -99,6 +97,7 @@ pub(super) fn build_fields_metadata(args: &FieldDocArgs<'_>) -> syn::Result<Fiel
             .collect(),
         env_seen: HashMap::new(),
         file_seen: HashMap::new(),
+        needs_env_projection: false,
         krate: args.krate,
     };
 
@@ -109,7 +108,7 @@ pub(super) fn build_fields_metadata(args: &FieldDocArgs<'_>) -> syn::Result<Fiel
 
     Ok(FieldsMetadata {
         records,
-        needs_env_projection,
+        needs_env_projection: builder.needs_env_projection,
         needs_file_projection,
     })
 }
@@ -135,6 +134,8 @@ struct FieldMetaBuilder<'a> {
     env_seen: HashMap<String, proc_macro2::Span>,
     /// File keys already claimed, with the span to blame.
     file_seen: HashMap<String, proc_macro2::Span>,
+    /// Whether any emitted generated environment name needs projection.
+    needs_env_projection: bool,
     /// Resolved crate path for generated code references.
     krate: &'a proc_macro2::TokenStream,
 }
@@ -252,40 +253,46 @@ impl<'a> FieldMetaBuilder<'a> {
         )
     }
 
-    /// Resolves and validates the field's environment name before tokenizing it.
+    /// Resolves and validates the field's environment metadata expression.
     ///
     /// An explicit documentation override takes precedence over the generated
-    /// prefix-and-field name. Duplicate names are errors, with spans retained
-    /// so diagnostics can point back to the source fields.
+    /// prefix-and-field name. A generated name is emitted only when the
+    /// provider can read it back as Serde's *deserialization* key; otherwise
+    /// the field has no environment route, so `None` is emitted rather than a
+    /// variable that would populate a different key. Duplicate names are
+    /// errors, with spans retained so diagnostics can point back to the source
+    /// fields.
     fn build_env_tokens(&mut self, context: &FieldContext<'_>) -> syn::Result<TokenStream> {
         let explicit = context.attrs.doc.env_name.as_deref();
         // The loader deserializes the environment layer, so the generated name
         // must follow Serde's *deserialization* key, including renames.
         let serde_key = serde_deserialized_field_key(context.field, self.serde_rename_all)?;
-        let env_name =
-            explicit.map_or_else(|| default_env_name(self.prefix, &serde_key), str::to_owned);
-        validate_env_name(context.name, &env_name)?;
-        ensure_unique("env", context.name, &env_name, &mut self.env_seen)?;
-        let lit = syn::LitStr::new(&env_name, proc_macro2::Span::call_site());
         let krate = self.krate;
-        if explicit.is_some() {
+        if let Some(env_name) = explicit {
+            validate_env_name(context.name, env_name)?;
+            ensure_unique("env", context.name, env_name, &mut self.env_seen)?;
+            let lit = syn::LitStr::new(env_name, proc_macro2::Span::call_site());
             return Ok(quote! {
-                #krate::docs::EnvMetadata {
+                Some(#krate::docs::EnvMetadata {
                     var_name: String::from(#lit),
-                }
+                })
             });
         }
 
-        let suffix = syn::LitStr::new(
-            &default_env_name(None, &serde_key),
-            proc_macro2::Span::call_site(),
-        );
+        let Some(suffix) = generated_env_suffix(&serde_key) else {
+            return Ok(quote! { None });
+        };
+        let env_name = join_env_prefix(self.prefix, &suffix);
+        ensure_unique("env", context.name, &env_name, &mut self.env_seen)?;
+        self.needs_env_projection = true;
+        let full = syn::LitStr::new(&env_name, proc_macro2::Span::call_site());
+        let suffix_lit = syn::LitStr::new(&suffix, proc_macro2::Span::call_site());
         Ok(quote! {
-            #krate::docs::EnvMetadata {
+            Some(#krate::docs::EnvMetadata {
                 var_name: doc_env_prefix
                     .as_ref()
-                    .map_or_else(|| String::from(#lit), |prefix| format!("{prefix}{}", #suffix)),
-            }
+                    .map_or_else(|| String::from(#full), |prefix| format!("{prefix}{}", #suffix_lit)),
+            })
         })
     }
 

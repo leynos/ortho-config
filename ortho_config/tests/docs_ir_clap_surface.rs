@@ -17,7 +17,8 @@ mod fixtures;
 
 use fixtures::{
     Commands, GlobalArgs, HostArgs, PartlyDeclaredArgs, PurgeArgs, SkippedArgs, SnakeCaseArgs,
-    UnnamedArgs, UnnamedCommands, UnreadableArgs, ValidateArgs,
+    UnnamedArgs, UnnamedCommands, UnreadableArgs, UnreadableOperandArgs, UnreadableOptionArgs,
+    ValidateArgs,
 };
 
 /// Returns one field's metadata by name.
@@ -279,6 +280,43 @@ fn an_undeclared_operand_receives_claps_positional_index() -> Result<()> {
     ensure!(
         verbose_cli.long.as_deref() == Some("verbose") && verbose_cli.positional.is_none(),
         "a declared switch should stay a named flag, got {verbose_cli:?}"
+    );
+    Ok(())
+}
+
+/// Returns the index clap assigns to an argument id after building the command.
+fn clap_positional_index<T: clap::CommandFactory>(id: &str) -> Option<u16> {
+    let mut command = T::command();
+    command.build();
+    command
+        .get_arguments()
+        .find(|argument| argument.get_id() == id)
+        .and_then(clap::Arg::get_index)
+        .and_then(|index| u16::try_from(index).ok())
+}
+
+#[test]
+fn unreadable_declarations_do_not_shift_clap_indices() -> Result<()> {
+    let operand_metadata = UnreadableOperandArgs::get_doc_metadata();
+    ensure!(
+        field(&operand_metadata, "proposal")?.cli.is_none(),
+        "an unreadable operand publishes no CLI metadata"
+    );
+    ensure_positional(field(&operand_metadata, "second")?, 2, "SECOND")?;
+    ensure!(
+        clap_positional_index::<UnreadableOperandArgs>("second") == Some(2),
+        "clap should place the declared operand at index 2"
+    );
+
+    let option_metadata = UnreadableOptionArgs::get_doc_metadata();
+    ensure!(
+        field(&option_metadata, "check")?.cli.is_none(),
+        "an unreadable option publishes no CLI metadata"
+    );
+    ensure_positional(field(&option_metadata, "input")?, 1, "INPUT")?;
+    ensure!(
+        clap_positional_index::<UnreadableOptionArgs>("input") == Some(1),
+        "a named option should not consume a positional index"
     );
     Ok(())
 }
