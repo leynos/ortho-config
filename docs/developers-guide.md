@@ -507,8 +507,10 @@ described below. Two targets share two lists, and two entry points call them:
 - `make test` depends on `test-warmup`, which runs `NESTED_WARM_TESTS`: the
   binaries whose cold nested build is the most expensive and whose warm run is
   short (`boolean_cli_trybuild`, `compile_fail`, `evidence_trybuild`, and the
-  two `compile_time` binaries). A contributor's gate warms them under the
-  gate's own compiler flags.
+  two `compile_time` binaries). By default a contributor's gate warms them
+  under the gate's own compiler flags; a `WARMUP_ENV` inherited from the
+  environment or given on the command line changes the warm-up's flags without
+  changing the workspace run's, so do not set it for `make test`.
 - The `nested-cargo-builds` setup script in `.config/nextest.toml` runs
   `make test-warmup-full WARMUP_ENV=`, which adds `NESTED_WARM_TESTS_HEAVY`,
   before nextest starts any test whose binary the `[[profile.default.scripts]]`
@@ -5458,15 +5460,15 @@ is caught well inside the whole-run budget.
 
 The trybuild class outgrew its 600 s. It is budgeted apart from the base
 allowance because each of these binaries spawns a child `cargo` in a separate
-target directory, so none shares cargo-llvm-cov's warmed cache and, without a
-warm-up that matches the run's flags and features, each pays a cold dependency
-build (the setup script described under "The nested builds are warmed before
-any timed test starts" supplies one for the binaries the Makefile lists; the
-allowance was sized from runs that predate it). They also share one package
-cache and so block on its lock while their neighbours build, which the logs
-show directly: run 36070786646 recorded four
-`Blocking waiting for file lock on package cache` lines, and run 36068184976
-recorded none.
+target directory, so none shares cargo-llvm-cov's warmed cache and, unless
+matching artefacts are already present, each can pay a cold dependency build
+(the setup script described under "The nested builds are warmed before any
+timed test starts" supplies a warm-up for the binaries the Makefile lists, and
+an earlier run may have left them; the allowance was sized from runs that
+predate it). They also share one package cache and so block on its lock while
+their neighbours build, which the logs show directly: run 36070786646 recorded
+four `Blocking waiting for file lock on package cache` lines, and run
+36068184976 recorded none.
 
 Two measurements set the new figure:
 

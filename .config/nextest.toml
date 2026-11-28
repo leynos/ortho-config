@@ -113,11 +113,11 @@ slow-timeout = { period = "120s", terminate-after = 5 }
 
 # Every trybuild binary, not two of them. These spawn child cargo processes
 # in a separate target directory, so they do not share cargo-llvm-cov's
-# warmed llvm-cov target cache and, without a warm-up that matches the
-# run's flags and features (the setup script below supplies one for the
-# binaries the Makefile lists), each pays a cold dependency build; they
-# also share one package cache, so they block on its lock while their
-# neighbours build.
+# warmed llvm-cov target cache and, unless matching artefacts are already
+# present (the setup script below supplies a warm-up for the binaries the
+# Makefile lists, and an earlier run may have left them), each can pay a cold
+# dependency build; they also share one package cache, so they block on its
+# lock while their neighbours build.
 #
 # The names are listed rather than globbed. There is no single pattern for
 # them -- eight end in `trybuild` and `compile_fail` and `compile_time` do

@@ -264,11 +264,13 @@ NESTED_WARM_TESTS_HEAVY = \
 	-p cargo-orthohelp --test rstest_bdd
 # `WARMUP_ENV` is the compiler-flag assignment the warm-up builds under. It must
 # match the run it warms: a nested build under other flags is a different
-# artefact. `make test` passes the gate's flags; nextest's setup script clears
-# it, because the coverage run supplies its own instrumented flags, and then
-# inherits them whole (the `unexport` above is lifted for that case). Do not
-# clear it for `make test`: the warm-up would build under other flags from the
-# gate it warms.
+# artefact. By default `make test` passes the gate's flags; nextest's setup
+# script clears it, because the coverage run supplies its own instrumented
+# flags, and then inherits them whole (the `unexport` above is lifted for that
+# case). A value inherited from the environment or given on the command line
+# changes the warm-up's flags without changing the workspace run's, so do not
+# set or clear it for `make test`: the warm-up would build under other flags
+# from the gate it warms.
 WARMUP_ENV ?= $(GATE_RUSTFLAGS)
 # `WARMUP_FEATURES` is the feature selection the warm-up builds with, for the
 # same reason: trybuild derives the features of its scratch build from the test
