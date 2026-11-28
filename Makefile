@@ -38,14 +38,17 @@ BUILD_STANDARD ?= 1
 # `unexport` keeps the variable out of the recipes' environment, so the routes
 # this file states are the routes that run.
 #
-# The one exception is the warm-up run as nextest's setup script, which passes
-# `WARMUP_ENV=` on the command line (see `test-warmup` below). There the
-# coverage run supplies the flags, and `cargo-llvm-cov` hands them over as
-# `CARGO_ENCODED_RUSTFLAGS` when they cannot be space-encoded, so dropping the
-# variable would warm a different artefact from the run it warms. The
-# directive stays unconditional for every other way of running this file.
+# The one exception is the warm-up run as nextest's setup script: `WARMUP_ENV=`
+# on the command line and no goal but the warm-up targets (see `test-warmup`
+# below). There the coverage run supplies the flags, and `cargo-llvm-cov` hands
+# them over as `CARGO_ENCODED_RUSTFLAGS` when they cannot be space-encoded, so
+# dropping the variable would warm a different artefact from the run it warms.
+# Any other goal, alone or beside the warm-up, still drops it, so the release
+# and MSRV routes keep their own `RUSTFLAGS`.
 # tests/workflow_contracts/build_standard_routing_test.py holds both halves.
-ifneq ($(origin WARMUP_ENV),command line)
+WARMUP_ONLY_GOALS = test-warmup test-warmup-full
+COVERAGE_WARMUP_CALL = $(and $(filter command line,$(origin WARMUP_ENV)),$(MAKECMDGOALS),$(if $(filter-out $(WARMUP_ONLY_GOALS),$(MAKECMDGOALS)),,yes))
+ifeq ($(COVERAGE_WARMUP_CALL),)
 unexport CARGO_ENCODED_RUSTFLAGS
 endif
 STANDARD_THREADS_FLAG ?= -Zthreads=8
@@ -269,7 +272,10 @@ WARMUP_ENV ?= $(GATE_RUSTFLAGS)
 # binary, so a warm-up built with other features warms a different artefact. The
 # default is the gate's. A coverage leg that selects features states them to
 # the setup script through this variable (see the `env:` of its step in
-# `.github/workflows/ci.yml`).
+# `.github/workflows/ci.yml`). Two limits follow. A local `cargo nextest run`
+# with default features warms with `--all-features` unless this is set to match
+# it. And make reads this variable from the environment, so a stray value there
+# changes `make test`'s warm-up without changing its workspace run: unset it.
 WARMUP_FEATURES ?= --all-features
 test-warmup: ## Fill the nested Cargo target directories the timed tests start builds in
 	$(WARMUP_ENV) $(CARGO) fetch --locked
