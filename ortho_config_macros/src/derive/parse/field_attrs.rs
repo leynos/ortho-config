@@ -10,9 +10,10 @@ use syn::Token;
 use super::literals::{lit_char, lit_str};
 use super::localization::reject_localized_default;
 use super::{
-    CliFieldMode, FieldAttrs, MergeStrategy, apply_field_doc_attr, clap_default_value,
-    clap_field_is_flattened, clap_field_is_subcommand, discard_unknown, parse_ortho_config,
-    reject_subcommand_ortho_config_attrs, serde_field_is_flattened,
+    ClapRenameAll, CliFieldMode, FieldAttrs, MergeStrategy, apply_field_doc_attr,
+    clap_default_value, clap_field_is_flattened, clap_field_is_subcommand, discard_unknown,
+    parse_clap_arg_decl, parse_ortho_config, reject_subcommand_ortho_config_attrs,
+    serde_field_is_flattened,
 };
 
 /// The two disclosure classifications an author may declare on a field.
@@ -67,8 +68,34 @@ pub(crate) struct ProfileFieldAnnotation {
 /// code can reproduce clap's conversion at runtime.
 ///
 /// Used internally by the derive macro to extract configuration metadata
-/// from field-level attributes.
-pub(crate) fn parse_field_attrs(field: &syn::Field) -> Result<FieldAttrs, syn::Error> {
+/// from field-level attributes. `rename_all` is the container's clap casing
+/// rule, applied only to spellings clap derives from the field name.
+pub(crate) fn parse_field_attrs(
+    field: &syn::Field,
+    rename_all: ClapRenameAll,
+) -> Result<FieldAttrs, syn::Error> {
+    parse_field_attrs_inner(field, rename_all, true)
+}
+
+/// Parses field attributes for a schema-only derive.
+///
+/// The schema-only expansion emits no CLI documentation, so it does not
+/// inspect the clap argument declaration. That keeps declarations clap accepts
+/// but the derive cannot resolve statically — such as a constant `id` — from
+/// failing an expansion that never describes them.
+pub(crate) fn parse_schema_field_attrs(
+    field: &syn::Field,
+    rename_all: ClapRenameAll,
+) -> Result<FieldAttrs, syn::Error> {
+    parse_field_attrs_inner(field, rename_all, false)
+}
+
+/// Parses field attributes, optionally reading the clap argument declaration.
+fn parse_field_attrs_inner(
+    field: &syn::Field,
+    rename_all: ClapRenameAll,
+    parse_clap_surface: bool,
+) -> Result<FieldAttrs, syn::Error> {
     let mut out = FieldAttrs {
         cli: if clap_field_is_subcommand(field)? {
             CliFieldMode::SubcommandSelector
@@ -80,6 +107,9 @@ pub(crate) fn parse_field_attrs(field: &syn::Field) -> Result<FieldAttrs, syn::E
     if out.cli.is_subcommand() {
         reject_subcommand_ortho_config_attrs(field)?;
         return Ok(out);
+    }
+    if parse_clap_surface {
+        out.clap_arg = parse_clap_arg_decl(field, rename_all)?;
     }
     parse_ortho_config(&field.attrs, |meta| {
         if !apply_field_attr(meta, &mut out)? {

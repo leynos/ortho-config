@@ -59,51 +59,6 @@ pub fn name_section(headings: &LocalizedHeadings, name: &str, about: &str) -> St
     )
 }
 
-/// Generates the SYNOPSIS section content.
-pub fn synopsis_section(
-    headings: &LocalizedHeadings,
-    bin_name: &str,
-    synopsis: Option<&str>,
-    fields: &[LocalizedFieldMetadata],
-) -> String {
-    let mut output = format!(
-        ".SH {}\n.B {bin_name}\n",
-        escape_macro_arg(&headings.synopsis)
-    );
-
-    if let Some(syn) = synopsis {
-        output.push_str(&escape_text(syn));
-        output.push('\n');
-    } else {
-        let visible_cli_fields = fields
-            .iter()
-            .filter_map(|f| f.cli.as_ref().filter(|c| !c.hide_in_help).map(|c| (f, c)));
-        for (field, cli) in visible_cli_fields {
-            output.push_str(&format_synopsis_option(field, cli));
-        }
-    }
-
-    output
-}
-
-/// Formats a synopsis flag and brackets it unless the corresponding field is required.
-fn format_synopsis_option(
-    field: &LocalizedFieldMetadata,
-    cli: &crate::schema::CliMetadata,
-) -> String {
-    let placeholder = field
-        .value
-        .as_ref()
-        .map(super::escape::value_type_placeholder);
-    let flag = super::escape::format_option(cli, placeholder.as_deref(), "VALUE");
-
-    if field.required {
-        format!("{flag}\n")
-    } else {
-        format!("[{flag}]\n")
-    }
-}
-
 /// Generates the DESCRIPTION section content.
 pub fn description_section(headings: &LocalizedHeadings, about: &str) -> String {
     let escaped = escape_text(about);

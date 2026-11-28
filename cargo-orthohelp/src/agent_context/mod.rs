@@ -12,7 +12,6 @@ use crate::policy::vocabulary::CANONICAL_VERBS;
 use crate::schema::{DocMetadata, InteractionKind, MutationKind};
 
 mod input;
-use input::build_input;
 
 mod renderer;
 use renderer::map_renderer;
@@ -110,7 +109,7 @@ pub fn bridge_ir_to_agent_context(
     context.profiles = profiles_declaration(&projected)?;
     walk(&projected, &[], &mut context.commands, localizer);
     expose_profile_selector(&context.profiles, &mut context.commands);
-    sort_commands(&mut context.commands);
+    input::sort_commands(&mut context.commands);
     log_bridge_complete(package, context.commands.len());
     Ok(context)
 }
@@ -130,16 +129,6 @@ fn profiles_declaration(projected: &DocMetadata) -> OrthoResult<ProfilesDeclarat
         env_var: profiles.env_var.clone(),
     })
     .with_redaction(records)
-}
-
-/// Orders commands by path and each command's inputs by name.
-fn sort_commands(commands: &mut [AgentCommand]) {
-    commands.sort_by(|left, right| left.path.cmp(&right.path));
-    for command in commands {
-        command
-            .inputs
-            .sort_by(|left, right| left.name.cmp(&right.name));
-    }
 }
 
 /// Collects the public identity of every protected field in the tree.
@@ -265,6 +254,8 @@ fn profile_selector_input(flag: SelectorFlag<'_>) -> AgentInput {
         required: false,
         default: None,
         enum_values: Vec::new(),
+        positional: None,
+        value_name: None,
     }
 }
 
@@ -286,7 +277,7 @@ fn walk(
         path: path.clone(),
         summary: resolve_summary(meta, localizer),
         canonical_verb: last_segment.and_then(canonical_verb_for),
-        inputs: meta.fields.iter().filter_map(build_input).collect(),
+        inputs: input::build_inputs(meta),
         output_modes: Vec::new(),
         interaction_mode: map_interaction(meta.behaviour.as_ref()),
         mutation_effect: map_mutation(meta.behaviour.as_ref()),

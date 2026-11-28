@@ -91,6 +91,7 @@ fn field_metadata(name: &str) -> FieldMetadata {
             value_optional: false,
             possible_values: Vec::new(),
             hide_in_help: false,
+            positional: None,
         }),
         env: None,
         file: None,

@@ -5,11 +5,15 @@
 
 mod behaviour;
 
+mod entry;
+
 mod discovery;
 
 mod fields;
 
 mod output;
+
+mod projection;
 
 mod renderer;
 
@@ -40,7 +44,9 @@ pub(crate) struct DocsArgs<'a> {
     /// Container settings that supply names, headings, and platform metadata.
     pub struct_attrs: &'a StructAttrs,
     /// Serde naming policy used to identify serialized configuration keys.
-    pub serde_rename_all: Option<SerdeRenameAll>,
+    pub serde_deserialize_rename_all: Option<SerdeRenameAll>,
+    /// Whether the struct itself carries a clap container helper.
+    pub has_clap_container: bool,
     /// CLI details used to keep generated help metadata in sync with parsing.
     pub cli_fields: &'a [CliFieldMetadata],
     /// Localisation identifiers determine which field defaults follow the
@@ -54,65 +60,12 @@ pub(crate) struct DocsArgs<'a> {
 /// Emits an `OrthoConfigDocs` implementation whose IR combines parsed
 /// attributes with the same CLI and Serde names used by runtime loading.
 pub(crate) fn generate_docs_impl(args: &DocsArgs<'_>) -> syn::Result<TokenStream> {
-    let krate = args.krate;
-    let app_name = sections::resolve_app_name(args.struct_attrs, args.ident);
-    let app_name_value = AppName::new(app_name);
-    let headings = sections::build_sections_metadata(&app_name_value, args.struct_attrs, krate)?;
-    let windows = sections::build_windows_metadata(args.struct_attrs, krate);
-    let fields = fields::build_fields_metadata(&fields::FieldDocArgs {
-        app_name: &app_name_value,
-        prefix: args.struct_attrs.prefix.as_deref(),
-        fields: args.fields,
-        field_attrs: args.field_attrs,
-        serde_rename_all: args.serde_rename_all,
-        cli_fields: args.cli_fields,
-        localization_ids: args.localization_ids,
-        krate,
-    })?;
-    let subcommands = build_subcommands_metadata(args)?;
-    let behaviour = behaviour::build_behaviour_metadata(&args.struct_attrs.doc, krate);
-    let renderer = renderer::build_renderer_metadata(&args.struct_attrs.doc, krate);
-    let output = output::build_output_metadata(&args.struct_attrs.doc, krate);
-
-    let app_name_lit = syn::LitStr::new(&app_name_value, proc_macro2::Span::call_site());
-    let about_id = sections::about_id_tokens(&args.struct_attrs.doc, krate);
-    let bin_name_tokens = option_string_tokens(args.struct_attrs.doc.bin_name.as_deref());
-    let synopsis_tokens = sections::synopsis_id_tokens(&args.struct_attrs.doc, krate);
-    let profiles_tokens = build_profiles_meta(args, krate);
-
-    let ident = args.ident;
-
+    let tokens = entry::DocTokens::build(args)?;
+    let helper = tokens.render_helper(args.ident);
+    let trait_impl = tokens.render_trait_impl(args.ident);
     Ok(quote! {
-        impl #krate::docs::OrthoConfigDocs for #ident {
-            fn get_doc_metadata() -> #krate::docs::DocMetadata {
-                let command_path = <Self as #krate::OrthoConfigLocalization>::LOCALIZATION_BASE
-                    .split('.')
-                    .map(String::from)
-                    .collect::<Vec<_>>();
-                Self::get_doc_metadata_for_path(&command_path)
-            }
-
-            fn get_doc_metadata_for_path(
-                command_path: &[String],
-            ) -> #krate::docs::DocMetadata {
-                #krate::docs::DocMetadata {
-                    ir_version: #krate::docs::ORTHO_DOCS_IR_VERSION.to_string(),
-                    app_name: #app_name_lit.to_string(),
-                    bin_name: #bin_name_tokens,
-                    about_id: #about_id,
-                    synopsis_id: #synopsis_tokens,
-                    sections: #headings,
-                    fields: vec![ #( #fields ),* ],
-                    subcommands: #subcommands,
-                    windows: #windows,
-                    behaviour: #behaviour,
-                    renderer: #renderer,
-                    output: #output,
-                    profiles: #profiles_tokens,
-                }
-                .into_redacted_for_output()
-            }
-        }
+        #helper
+        #trait_impl
     })
 }
 

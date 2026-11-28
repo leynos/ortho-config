@@ -200,6 +200,7 @@ pub(crate) fn cli_field_with_possible_values<const N: usize>(
             value_optional: false,
             possible_values: possible_values.map(str::to_owned).to_vec(),
             hide_in_help: spec.hide_in_help,
+            positional: None,
         }),
     })
 }

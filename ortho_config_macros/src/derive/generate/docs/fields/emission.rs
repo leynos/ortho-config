@@ -67,7 +67,7 @@ fn render_io_block(io: IoTokens) -> TokenStream {
     let file = io.file;
     quote! {
         cli: #cli,
-        env: Some(#env),
+        env: #env,
         file: Some(#file),
     }
 }

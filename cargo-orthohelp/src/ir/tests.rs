@@ -71,6 +71,7 @@ fn protected_field() -> FieldMetadata {
             value_optional: false,
             possible_values: vec![SECRET_DEFAULT.to_owned()],
             hide_in_help: false,
+            positional: None,
         }),
         env: None,
         file: None,
@@ -92,7 +93,7 @@ fn protected_field() -> FieldMetadata {
 /// visible in the nested artefact.
 fn unprojected_tree() -> DocMetadata {
     let child = DocMetadata {
-        ir_version: "2.0".to_owned(),
+        ir_version: "2.1".to_owned(),
         app_name: "child".to_owned(),
         bin_name: None,
         about_id: "child.about".to_owned(),
@@ -108,7 +109,7 @@ fn unprojected_tree() -> DocMetadata {
     };
 
     DocMetadata {
-        ir_version: "2.0".to_owned(),
+        ir_version: "2.1".to_owned(),
         app_name: "demo".to_owned(),
         bin_name: None,
         about_id: "demo.about".to_owned(),

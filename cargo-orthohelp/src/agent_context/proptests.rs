@@ -10,9 +10,11 @@
 //!   input tree, so a dropped or invented command fails rather than satisfying
 //!   a weaker "everything present is ordered" assertion.
 //!
-//! The remaining properties state their own limits. The input-name ordering
-//! property is adjacency-based and only the root receives generated fields, so
-//! an empty or singleton input list satisfies it. The normalization property
+//! The remaining properties state their own limits. The input-ordering property
+//! is adjacency-based and only the root receives generated fields, so an empty
+//! or singleton input list satisfies it; its generator mixes operands and named
+//! flags so the operand branch is exercised rather than assumed. The
+//! normalization property
 //! generates ordinary strings only; character literals, raw strings, escaped
 //! quotes, and lifetimes are covered by the example table in the sibling
 //! `tests` module rather than generated here.
@@ -65,13 +67,18 @@ proptest! {
         }
     }
 
+    /// Operands lead in index order; named flags follow in name order.
     #[test]
-    fn command_inputs_are_sorted_by_name(tree in metadata_tree_with_fields()) {
+    fn command_inputs_order_operands_then_flags(tree in metadata_tree_with_fields()) {
         let context = bridge_ir_to_agent_context(&tree, "demo_pkg", None).expect("bridge succeeds");
 
         for command in context.commands {
             for (left, right) in command.inputs.iter().zip(command.inputs.iter().skip(1)) {
-                prop_assert!(left.name <= right.name);
+                let left_key = (left.positional.is_none(), left.positional.unwrap_or(0));
+                let right_key = (right.positional.is_none(), right.positional.unwrap_or(0));
+                prop_assert!(
+                    left_key < right_key || (left_key == right_key && left.name <= right.name)
+                );
             }
         }
     }
@@ -92,7 +99,7 @@ proptest! {
     #[test]
     fn hidden_fields_are_omitted_from_inputs(hidden_name in field_name("hidden")) {
         let mut tree = doc("root", Some("demo"), Vec::new());
-        tree.fields = vec![field(&hidden_name, true)];
+        tree.fields = vec![field(&hidden_name, true, None)];
 
         let context = bridge_ir_to_agent_context(&tree, "demo_pkg", None).expect("bridge succeeds");
 
@@ -210,12 +217,16 @@ fn unordered_names(prefix: &'static str, max: usize) -> impl Strategy<Value = Ve
 fn metadata_tree_with_fields() -> impl Strategy<Value = DocMetadata> {
     (
         metadata_tree(),
-        prop::collection::vec(field_name("field"), 1..8),
+        prop::collection::vec((field_name("field"), any::<bool>()), 1..8),
     )
-        .prop_map(|(mut tree, field_names)| {
-            tree.fields = field_names
+        .prop_map(|(mut tree, fields)| {
+            tree.fields = fields
                 .into_iter()
-                .map(|name| field(&name, false))
+                .enumerate()
+                .map(|(offset, (name, is_positional))| {
+                    let index = u16::try_from(offset + 1).unwrap_or(u16::MAX);
+                    field(&name, false, is_positional.then_some(index))
+                })
                 .collect();
             tree
         })
@@ -247,7 +258,7 @@ fn doc(app_name: &str, bin_name: Option<&str>, subcommands: Vec<DocMetadata>) ->
     }
 }
 
-fn field(name: &str, hide_in_help: bool) -> FieldMetadata {
+fn field(name: &str, hide_in_help: bool, positional_index: Option<u16>) -> FieldMetadata {
     FieldMetadata {
         name: name.to_owned(),
         help_id: format!("{name}.help"),
@@ -257,7 +268,7 @@ fn field(name: &str, hide_in_help: bool) -> FieldMetadata {
         required: false,
         deprecated: None,
         cli: Some(CliMetadata {
-            long: Some(name.to_owned()),
+            long: positional_index.is_none().then(|| name.to_owned()),
             short: None,
             value_name: Some("VALUE".to_owned()),
             multiple: false,
@@ -265,6 +276,7 @@ fn field(name: &str, hide_in_help: bool) -> FieldMetadata {
             value_optional: false,
             possible_values: Vec::new(),
             hide_in_help,
+            positional: positional_index.map(crate::schema::PositionalMetadata::new),
         }),
         env: None,
         file: None,

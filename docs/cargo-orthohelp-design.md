@@ -170,14 +170,14 @@ Key choices:
   `ortho_config::agent_context`, and policy reports in
   `cargo_orthohelp::policy` until a later extraction is approved.
 
-## 2. Documentation IR (schema v2.0)
+## 2. Documentation IR (schema v2.1)
 
 ### 2.1 Top-level metadata
 
 ```rust
 #[derive(Debug, Serialize)]
 pub struct DocMetadata {
-    pub ir_version: String,            // e.g., "2.0"
+    pub ir_version: String,            // e.g., "2.1"
     pub app_name: String,              // binary or display name
     pub bin_name: Option<String>,      // override for man page or wrapper name
     pub about_id: String,              // Fluent ID for app description
@@ -319,15 +319,28 @@ follow:
 
 - `long` and `short` are both `None` for a positional argument. The derive must
   not emit a synthesized long flag to keep the field addressable.
-- Generators order positionals by `index` in SYNOPSIS output, and by
-  `index - 1` in the PowerShell `position` attribute, because clap `index` is
-  1-based while PowerShell `Position` is 0-based; they render `value_name`
-  rather than a flag spelling.
+- Generators order positionals by `index` in SYNOPSIS output and emit the same
+  `index` as the PowerShell MAML `position` attribute, because both number the
+  first unnamed operand `1`; they render `value_name` rather than a flag
+  spelling.
 - The agent-context contract emits a positional input only when `positional`
-  is `Some`, ordering emitted positional inputs by the positional metadata's
-  `index`. A field with CLI metadata, no flag spelling, and no `positional`
-  entry is configuration surface exposed through environment variables or files
-  rather than invocation surface, and agent-facing output omits it.
+  is `Some`, ordering operands ahead of named flags by the positional metadata's
+  `index` and carrying both `positional` and `value_name` on the input. A
+  field with CLI metadata, no flag spelling, and no `positional` entry is
+  configuration surface exposed through environment variables or files rather
+  than invocation surface, and agent-facing output omits it.
+
+A struct carrying any clap helper attribute — a struct-level `#[command(...)]`,
+an argument declaration, a flattened container, or a subcommand selector — is a
+clap command throughout: the derive documents every undeclared field as the
+positional operand clap derives for it. A struct with no clap helper attribute
+at all keeps the generated parser's flags for every field, because the
+configuration loader is the only surface it exposes. A bare `bool` without a
+declaration is left on that generated surface, because clap rejects a
+value-less positional switch. A flattened container and a subcommand selector
+publish no CLI metadata of their own. A sibling field before a flattened
+container keeps its clap index; an implicit positional index after one is
+suppressed because the child's operand count is unknown.
 
 Adding `positional` is an additive optional field: it bumps the IR minor
 version and leaves existing `ir`, `man`, and `ps` output unchanged for command
@@ -675,7 +688,33 @@ Deterministic IDs when omitted:
   and `insta` snapshots in
   `cargo-orthohelp/tests/golden/nested_subcommand_snapshots.rs`.
 - CLI metadata emits `long` only for fields that actually have a long flag.
-  Positional fields emit `positional` instead; see §2.2.
+  Positional fields emit `positional` instead; see §2.2. A field with an
+  explicit clap `#[arg(...)]`/`#[clap(...)]` declaration is documented from
+  that declaration: its flag spellings, value name, positional index, value
+  consumption, and requiredness come from clap rather than from the derive's
+  generated parser. Bare `long` and `short` spellings follow the container's
+  `#[command(rename_all = "...")]` casing; literal spellings and an assigned
+  `id` stay verbatim. Requiredness follows clap's inference: `Option<T>` and
+  `Vec<T>` are non-required, while a value-taking scalar with no optional
+  wrapper and no clap default is required by default even when Serde supplies a
+  `#[serde(default)]` for configuration loading. An explicit `required` setting
+  overrides the inference. Fields without a clap declaration retain the
+  generated `long` and `short` flags, because those are the surface the
+  OrthoConfig loader itself parses. A configuration root that also declares
+  clap arguments documents the declared command line while
+  `OrthoConfig::load_from_iter` keeps the generated flag form.
+- Subcommand metadata uses the names the subcommand merge reads:
+  `<PREFIX>_CMDS_<NAME>_` for environment variables and `cmds.<name>` for file
+  keys. `<NAME>` is the payload's clap command name when it implements
+  `CommandFactory` (its `#[command(name = "...")]` or clap's package-name
+  default), or the selector label for a docs-only `Args` payload. `about_id`
+  and field help identifiers follow the struct's declared `localization_base`
+  when no parent path is supplied, and the mounted parent path otherwise. See
+  [ADR-0028](adrs/adr-0028-clap-declarations-drive-documented-cli-surface.md).
+- Roff SYNOPSIS places ordinary positionals first, sorted by clap index. An
+  operand that consumes the rest of the command line (`trailing_var_arg`) or is
+  reachable only after `--` (`last`) follows the named flags, and a `last`
+  operand is preceded by the `--` delimiter.
 
 ### 3.6 Constructors and additive evolution
 
@@ -1030,14 +1069,15 @@ For the first `--format agent-context` implementation, the adapter emits an
 optional `AgentCommand.summary` from the short chosen command description. It
 does not emit Fluent identifiers, long help text, roff fragments, or PowerShell
 help structures. The adapter emits a positional input only when
-`CliMetadata.positional` is `Some`, ordering emitted positional inputs by
-`CliMetadata.positional.index` and leaving `AgentInput.long` absent. A field
-with CLI metadata but no flag spelling or `positional` metadata is
-non-invocable configuration surface and is not emitted. The output is written
-as exactly one file at `<out>/agent-context.json` and is also emitted as one
-compact JSON document to stdout, followed by a newline. `--format all` includes
-the same agent-context document beside IR, man pages, and PowerShell artefacts
-and emits that JSON to stdout.
+`CliMetadata.positional` is `Some`, ordering operands ahead of named flags by
+`CliMetadata.positional.index` and leaving `AgentInput.long` absent while
+carrying `AgentInput.positional` and `AgentInput.value_name`. A field with CLI
+metadata but no flag spelling or `positional` metadata is non-invocable
+configuration surface and is not emitted. The output is written as exactly one
+file at `<out>/agent-context.json` and is also emitted as one compact JSON
+document to stdout, followed by a newline. `--format all` includes the same
+agent-context document beside IR, man pages, and PowerShell artefacts and emits
+that JSON to stdout.
 
 #### 6.3.1.1 Summary locale selection
 
@@ -1274,7 +1314,7 @@ sentinel so generators can surface gaps during development.
 
 ```json
 {
-  "ir_version": "2.0",
+  "ir_version": "2.1",
   "locale": "en-US",
   "app_name": "my-app",
   "bin_name": "my-app",
@@ -1433,8 +1473,9 @@ MAML mapping:
   - Switches map to `SwitchParameter`.
   - Values map to `String`, `Int32`, `Double`, and so on inferred from
     `ValueType`.
-  - Required or position heuristics: position only when unambiguous; otherwise
-    named.
+  - `position` is the one-based `CliMetadata.positional.index` clap assigns,
+    and syntax items are ordered by that index; an argument without positional
+    metadata is named.
 - Field descriptions come from `help_id` or `long_help_id`.
 - Enum allowed values are appended to the description.
 - Environment or file exposure is documented in Notes per parameter.
@@ -1509,13 +1550,18 @@ installs the executable in a different location.
 
 ## 12. Versioning and compatibility
 
-- IR: `ir_version = "2.0"`. Generated default identifiers now use mounted
-  command paths rather than dotted ones, so 2.0 is a major bump for consumers
-  keyed on the old identifier values; the optional `profiles` metadata rides
-  the same version. `1.2` added optional `behaviour` metadata and `1.1` added
-  Windows metadata, both additive minor bumps. Additive optional fields bump
-  the minor version; future breaking schema changes bump the major version. All
-  three versions are unreleased: `v0.9.1` still carries `"1.1"`.
+- IR: `ir_version = "2.1"`. Version 2.0 changed generated default identifiers
+  to use mounted command paths rather than dotted ones, so it is a major bump
+  for consumers keyed on the old identifier values. Version 2.1 adds the
+  optional `CliMetadata.positional` block, omitted for flag-only surfaces, so
+  existing readers accept the same JSON shape; corrected clap metadata can
+  still change values on fields with explicit declarations, because a boolean
+  switch no longer advertises an optional value and requiredness follows clap.
+  The optional `profiles` metadata rides version 2.0. `1.2` added optional
+  `behaviour` metadata and `1.1` added Windows metadata, both additive minor
+  bumps. Additive optional fields bump the minor version; future breaking
+  schema changes bump the major version. All these versions are unreleased:
+  `v0.9.1` still carries `"1.1"`.
 - Tooling: `cargo-orthohelp` tracks the IR major.
 - Runtime: `clap` v4.x unchanged; PowerShell targets 5.1+ and 7+.
 
@@ -1579,11 +1625,11 @@ variant with `#[serde(other)]`. Two consequences are part of the contract:
 
 ## 13. Worked example (abridged)
 
-### 13.1 IR JSON (excerpt, 2.0)
+### 13.1 IR JSON (excerpt, 2.1)
 
 ```json
 {
-  "ir_version": "2.0",
+  "ir_version": "2.1",
   "app_name": "my-app",
   "bin_name": "my-app",
   "about_id": "my-app.about",
@@ -1630,14 +1676,14 @@ variant with `#[serde(other)]`. Two consequences are part of the contract:
   },
   "subcommands": [
     {
-      "ir_version": "2.0",
+      "ir_version": "2.1",
       "app_name": "run",
       "about_id": "run.about",
       "fields": [],
       "windows": null,
       "subcommands": [
         {
-          "ir_version": "2.0",
+          "ir_version": "2.1",
           "app_name": "audit",
           "about_id": "audit.about",
           "fields": [],

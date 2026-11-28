@@ -5,6 +5,8 @@
 
 use syn::ext::IdentExt;
 
+use super::clap_command::{clap_argument, literal_string};
+
 /// Returns `true` when the attribute is `#[arg(...)]` or `#[clap(...)]`.
 pub(crate) fn is_clap_attribute(attr: &syn::Attribute) -> bool {
     attr.path().is_ident("arg") || attr.path().is_ident("clap")
@@ -26,9 +28,17 @@ pub(crate) fn parse_id_from_meta(
     existing_id: &mut Option<syn::LitStr>,
 ) -> syn::Result<()> {
     if !meta.path.is_ident("id") {
+        // Consume the value of an unrelated key so the enclosing nested-meta
+        // loop stays positioned on the next comma. clap accepts both
+        // `key = expr` and `key(expr)`; an unconsumed parenthesized group
+        // makes the loop report a spurious missing comma.
         if meta.input.peek(syn::Token![=]) {
             let value = meta.value()?;
             let _: syn::Expr = value.parse()?;
+        } else if meta.input.peek(syn::token::Paren) {
+            let content;
+            syn::parenthesized!(content in meta.input);
+            content.parse::<proc_macro2::TokenStream>()?;
         }
         return Ok(());
     }
@@ -40,14 +50,35 @@ pub(crate) fn parse_id_from_meta(
         ));
     }
 
-    let Ok(value) = meta.value() else {
+    let Some(lit) = parse_id_literal(meta)? else {
         return Ok(());
     };
-    let lit: syn::LitStr = value.parse().map_err(|_| {
-        syn::Error::new_spanned(&meta.path, "clap argument `id` must be a string literal")
-    })?;
     *existing_id = Some(lit);
     Ok(())
+}
+
+/// Reads the string literal an `id` key assigns.
+///
+/// clap accepts both `id = "name"` and the method-call form `id("name")`.
+fn parse_id_literal(meta: &syn::meta::ParseNestedMeta<'_>) -> syn::Result<Option<syn::LitStr>> {
+    let invalid =
+        || syn::Error::new_spanned(&meta.path, "clap argument `id` must be a string literal");
+    if meta.input.peek(syn::Token![=]) {
+        let value = meta.value()?;
+        return value.parse().map(Some).map_err(|_| invalid());
+    }
+    if meta.input.peek(syn::token::Paren) {
+        let content;
+        syn::parenthesized!(content in meta.input);
+        let mut arguments =
+            syn::punctuated::Punctuated::<syn::LitStr, syn::Token![,]>::parse_terminated(&content)
+                .map_err(|_| invalid())?;
+        if arguments.len() != 1 {
+            return Err(invalid());
+        }
+        return Ok(arguments.pop());
+    }
+    Ok(None)
 }
 
 /// Merge an `id` override from one `arg` or `clap` attribute into the field's
@@ -63,12 +94,38 @@ pub(crate) fn clap_arg_id_from_attribute(
     list.parse_nested_meta(|meta| parse_id_from_meta(&meta, existing_id))
 }
 
+/// Reports whether a field declares an `id` the derive cannot read statically.
+///
+/// The documentation derive falls back to the generated surface for an
+/// unreadable declaration rather than rejecting clap code it cannot resolve.
+/// Literal ids and absent ids report `false`.
+pub(crate) fn has_unreadable_clap_arg_id(field: &syn::Field) -> syn::Result<bool> {
+    let mut unreadable = false;
+    for attr in field.attrs.iter().filter(|attr| is_clap_attribute(attr)) {
+        let syn::Meta::List(list) = &attr.meta else {
+            continue;
+        };
+        list.parse_nested_meta(|meta| {
+            if !meta.path.is_ident("id") {
+                return consume_unknown_meta(&meta);
+            }
+            // Consume the whole argument before judging it, so an unreadable
+            // expression cannot leave tokens behind for the next key.
+            if literal_string(clap_argument(&meta)?).is_none() {
+                unreadable = true;
+            }
+            Ok(())
+        })?;
+    }
+    Ok(unreadable)
+}
+
 /// Reads the explicit `id = "..."` override for a field, when one is written.
 ///
 /// Only [`clap_arg_id_or_field_name`] should need this: callers that want the
 /// id clap will actually record must go through the resolver, so the fallback
 /// is applied in one place.
-fn clap_arg_id(field: &syn::Field) -> syn::Result<Option<String>> {
+pub(crate) fn clap_arg_id(field: &syn::Field) -> syn::Result<Option<String>> {
     let mut arg_id: Option<syn::LitStr> = None;
     for attr in field.attrs.iter().filter(|attr| is_clap_attribute(attr)) {
         clap_arg_id_from_attribute(attr, &mut arg_id)?;
@@ -91,6 +148,16 @@ pub(crate) fn clap_arg_id_or_field_name(field: &syn::Field) -> syn::Result<Strin
     if let Some(explicit) = clap_arg_id(field)? {
         return Ok(explicit);
     }
+    clap_field_name(field)
+}
+
+/// Returns the field name clap derives an argument id from.
+///
+/// `clap_derive` builds the id from `ident.unraw().to_string()`. This helper
+/// exposes that spelling without resolving an explicit `id` override, so a
+/// declaration whose `id` is not a literal can still describe its argument's
+/// shape.
+pub(crate) fn clap_field_name(field: &syn::Field) -> syn::Result<String> {
     let ident = field
         .ident
         .as_ref()
@@ -100,37 +167,8 @@ pub(crate) fn clap_arg_id_or_field_name(field: &syn::Field) -> syn::Result<Strin
 
 /// Consume the value or parenthesized tokens of an unrelated clap key so the
 /// nested-meta parser can continue without interpreting clap's full grammar.
-fn consume_unknown_meta(meta: &syn::meta::ParseNestedMeta<'_>) -> syn::Result<()> {
-    if meta.input.peek(syn::Token![=]) {
-        let value = meta.value()?;
-        let _: syn::Expr = value.parse()?;
-    } else if meta.input.peek(syn::token::Paren) {
-        let content;
-        syn::parenthesized!(content in meta.input);
-        content.parse::<proc_macro2::TokenStream>()?;
-    }
-    Ok(())
-}
-
-/// Parse a clap command `name = "..."` override from an enum variant.
-pub(crate) fn clap_variant_name(variant: &syn::Variant) -> syn::Result<Option<syn::LitStr>> {
-    let mut name = None;
-    for attr in variant
-        .attrs
-        .iter()
-        .filter(|attr| is_clap_command_attribute(attr))
-    {
-        attr.parse_nested_meta(|meta| {
-            if meta.path.is_ident("name") {
-                let value = meta.value()?;
-                let lit: syn::LitStr = value.parse()?;
-                name = Some(lit);
-                return Ok(());
-            }
-            consume_unknown_meta(&meta)
-        })?;
-    }
-    Ok(name)
+pub(super) fn consume_unknown_meta(meta: &syn::meta::ParseNestedMeta<'_>) -> syn::Result<()> {
+    clap_argument(meta).map(drop)
 }
 
 /// Record one nested meta item for [`clap_field_env`].

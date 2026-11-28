@@ -34,6 +34,8 @@ fn agent_input(long: &str) -> AgentInput {
         required: false,
         default: None,
         enum_values: Vec::new(),
+        positional: None,
+        value_name: None,
     }
 }
 

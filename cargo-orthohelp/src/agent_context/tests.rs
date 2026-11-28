@@ -302,6 +302,9 @@ fn transform_omits_missing_or_blank_summaries(
 
 #[path = "tests_support.rs"]
 pub(crate) mod support;
+
+#[path = "tests_positional.rs"]
+mod positional;
 use support::*;
 
 #[path = "tests_nested_support.rs"]

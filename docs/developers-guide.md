@@ -821,6 +821,20 @@ its siblings, with nothing to keep aligned and no second copy to compare.
 correctly, as ADR-0003 requires; ADR-0026 records the re-export boundary and
 the redaction projection it enables.
 
+A generated `OrthoConfigDocs` implementation documents the command line each
+field actually exposes. A field with an explicit clap `#[arg(...)]` or
+`#[clap(...)]` declaration is described from that declaration: positional
+operands carry `CliMetadata.positional`, use clap's value name, and omit long
+and short flags; a clap boolean flag is a switch; bare `long` and `short`
+spellings follow `#[command(rename_all = "...")]`; and requiredness follows
+clap, so a Serde default does not relax it. A field without a clap declaration
+keeps the generated parser's long and short flags. The
+`OrthoConfigSubcommandDocs` selector must not rebuild identifiers itself; it
+calls `OrthoConfigDocs::get_doc_metadata_for_subcommand`, which owns the
+declaration-specific identifier path and the `<PREFIX>_CMDS_<NAME>_` /
+`cmds.<name>` projection. See
+[ADR-0028](adrs/adr-0028-clap-declarations-drive-documented-cli-surface.md).
+
 Add compact agent invocation fields to `ortho_config::agent_context` when
 downstream applications need a reusable machine-readable command contract. Use
 `ORTHO_AGENT_CONTEXT_SCHEMA_VERSION` for compatibility. Do not add Fluent

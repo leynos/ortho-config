@@ -305,6 +305,35 @@ pub(super) fn first_array_item(value: &Value) -> Result<&Value> {
         .ok_or_else(|| anyhow!("JSON value should be a non-empty array"))
 }
 
+/// Builds one named input and one positional input for the wire contract.
+///
+/// The positional input pins the optional `positional` and `value_name` fields,
+/// which are omitted when absent.
+fn sample_agent_inputs() -> Vec<AgentInput> {
+    vec![
+        AgentInput {
+            name: "format".to_owned(),
+            long: Some("format".to_owned()),
+            value_type: Some("string".to_owned()),
+            required: false,
+            default: Some("json".to_owned()),
+            enum_values: vec!["json".to_owned()],
+            positional: None,
+            value_name: None,
+        },
+        AgentInput {
+            name: "target".to_owned(),
+            long: None,
+            value_type: Some("string".to_owned()),
+            required: true,
+            default: None,
+            enum_values: Vec::new(),
+            positional: Some(1),
+            value_name: Some("TARGET".to_owned()),
+        },
+    ]
+}
+
 /// Builds a fully populated context used by serialization and round-trip
 /// contract tests.
 pub(super) fn sample_agent_context() -> AgentContext {
@@ -316,14 +345,7 @@ pub(super) fn sample_agent_context() -> AgentContext {
             path: vec!["example-cli".to_owned(), "list".to_owned()],
             summary: Some("List configured resources.".to_owned()),
             canonical_verb: Some("list".to_owned()),
-            inputs: vec![AgentInput {
-                name: "format".to_owned(),
-                long: Some("format".to_owned()),
-                value_type: Some("string".to_owned()),
-                required: false,
-                default: Some("json".to_owned()),
-                enum_values: vec!["json".to_owned()],
-            }],
+            inputs: sample_agent_inputs(),
             output_modes: vec!["json".to_owned()],
             interaction_mode: InteractionMode::NonInteractive,
             mutation_effect: MutationEffect::ReadOnly,

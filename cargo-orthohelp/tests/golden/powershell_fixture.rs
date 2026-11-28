@@ -56,6 +56,7 @@ pub(crate) fn minimal_doc() -> LocalizedDocMetadata {
                 value_optional: false,
                 possible_values: vec![],
                 hide_in_help: false,
+                positional: None,
             }),
             env: Some(EnvMetadata {
                 var_name: "FIXTURE_PORT".to_owned(),

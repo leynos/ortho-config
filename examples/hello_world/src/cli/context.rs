@@ -132,6 +132,8 @@ fn take_leave_command_context() -> AgentCommand {
                 required: false,
                 default: None,
                 enum_values: Vec::new(),
+                positional: None,
+                value_name: None,
             },
             string_input("gift", "gift", None, Vec::new()),
             AgentInput {
@@ -141,6 +143,8 @@ fn take_leave_command_context() -> AgentCommand {
                 required: false,
                 default: Some("false".to_owned()),
                 enum_values: Vec::new(),
+                positional: None,
+                value_name: None,
             },
         ],
         output_modes: vec!["text".to_owned()],
@@ -177,5 +181,7 @@ fn string_input(
         required: false,
         default: default.map(str::to_owned),
         enum_values: enum_values.into_iter().map(str::to_owned).collect(),
+        positional: None,
+        value_name: None,
     }
 }

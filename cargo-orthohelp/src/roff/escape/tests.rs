@@ -133,6 +133,7 @@ fn bool_flag(value_name: Option<&str>) -> CliMetadata {
         value_optional: true,
         possible_values: vec!["true".to_owned(), "false".to_owned()],
         hide_in_help: false,
+        positional: None,
     }
 }
 

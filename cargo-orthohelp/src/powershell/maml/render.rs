@@ -1,7 +1,7 @@
 //! Core rendering routines for MAML output.
 
 use crate::ir::{LocalizedFieldMetadata, LocalizedLink};
-use crate::schema::ValueType;
+use crate::schema::{CliMetadata, ValueType};
 use std::borrow::Cow;
 
 use super::paragraphs::parameter_paragraphs;
@@ -68,12 +68,24 @@ fn render_syntax(writer: &mut XmlWriter, command: &CommandSpec<'_>) {
         "<maml:name>{}</maml:name>",
         escape_xml(&command.name)
     ));
+    let mut positionals = Vec::new();
+    let mut others = Vec::new();
     for field in command
         .metadata
         .fields
         .iter()
         .filter(|field| should_render_parameter(field))
     {
+        match field.cli.as_ref().and_then(|cli| cli.positional.as_ref()) {
+            Some(positional) => positionals.push((positional.index, field)),
+            None => others.push(field),
+        }
+    }
+    positionals.sort_by_key(|(index, _)| *index);
+    for (_, field) in positionals {
+        render_syntax_parameter(writer, field);
+    }
+    for field in others {
         render_syntax_parameter(writer, field);
     }
     writer.outdent();
@@ -82,9 +94,12 @@ fn render_syntax(writer: &mut XmlWriter, command: &CommandSpec<'_>) {
     writer.line("</command:syntax>");
 }
 
-/// Describe one named CLI parameter in the syntax declaration.
+/// Describe one CLI parameter in the syntax declaration.
 ///
 /// Fields without CLI metadata are omitted, and switches have no value node.
+/// A positional operand carries its clap index as the MAML `position`; MAML
+/// numbers the first unnamed operand `1`, matching clap's one-based index.
+/// Named flags keep `position="named"`.
 fn render_syntax_parameter(writer: &mut XmlWriter, field: &LocalizedFieldMetadata) {
     let Some(cli) = field.cli.as_ref() else {
         return;
@@ -93,9 +108,10 @@ fn render_syntax_parameter(writer: &mut XmlWriter, field: &LocalizedFieldMetadat
     let (value_type, is_switch) = parameter_value_type(field);
 
     writer.line(&format!(
-        "<command:parameter required=\"{}\" position=\"named\" variableLength=\"{}\">",
+        "<command:parameter required=\"{}\" position=\"{}\" variableLength=\"{}\">",
         bool_attr(field.required),
-        bool_attr(cli.multiple)
+        parameter_position(cli),
+        bool_attr(has_variable_length(cli))
     ));
     writer.indent();
     writer.line(&format!("<maml:name>{}</maml:name>", escape_xml(&name)));
@@ -133,11 +149,16 @@ fn render_parameters(writer: &mut XmlWriter, command: &CommandSpec<'_>, options:
 fn render_parameter_detail(writer: &mut XmlWriter, field: &LocalizedFieldMetadata) {
     let name = parameter_display_name(field);
     let (value_type, is_switch) = parameter_value_type(field);
-    let is_variable_length = field.cli.as_ref().is_some_and(|cli| cli.multiple);
+    let position = field
+        .cli
+        .as_ref()
+        .map_or_else(|| String::from("named"), parameter_position);
+    let is_variable_length = field.cli.as_ref().is_some_and(has_variable_length);
 
     writer.line(&format!(
-        "<command:parameter required=\"{}\" position=\"named\" variableLength=\"{}\">",
+        "<command:parameter required=\"{}\" position=\"{}\" variableLength=\"{}\">",
         bool_attr(field.required),
+        position,
         bool_attr(is_variable_length)
     ));
     writer.indent();
@@ -236,9 +257,40 @@ fn should_render_parameter(field: &LocalizedFieldMetadata) -> bool {
     field.cli.as_ref().is_some_and(|cli| !cli.hide_in_help)
 }
 
+/// Select the MAML `position` attribute for a CLI parameter.
+///
+/// Both clap and MAML number the first unnamed operand `1`, so the resolved
+/// index is emitted unchanged; named flags report `"named"`.
+fn parameter_position(cli: &CliMetadata) -> String {
+    cli.positional.as_ref().map_or_else(
+        || String::from("named"),
+        |positional| positional.index.to_string(),
+    )
+}
+
+/// Report whether a parameter accepts a variable number of values.
+fn has_variable_length(cli: &CliMetadata) -> bool {
+    cli.multiple
+        || cli
+            .positional
+            .as_ref()
+            .is_some_and(|positional| positional.variadic)
+}
+
 /// Choose the displayed option spelling, falling back to the configuration key.
+///
+/// A positional operand has no flag spelling, so its value name is the only
+/// meaningful display name; the Rust field name remains the fallback when the
+/// metadata carries no value name.
 fn parameter_display_name(field: &LocalizedFieldMetadata) -> String {
     if let Some(cli) = field.cli.as_ref() {
+        if cli.positional.is_some() {
+            return cli
+                .value_name
+                .clone()
+                .filter(|name| !name.is_empty())
+                .unwrap_or_else(|| field.name.clone());
+        }
         if let Some(long) = cli.long.as_ref() {
             return format!("--{long}");
         }

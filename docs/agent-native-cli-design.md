@@ -986,10 +986,16 @@ change.
 
 `AgentCommand.summary` is intentionally omitted when absent, as are the optional
 `ProfilesDeclaration` fields (`selection` and `list_command`) added by roadmap
-9.1.1 and `AgentCommand.output` together with every undeclared member inside a
-present block. Other optional schema v1 fields serialize as explicit `null`
-when absent. This asymmetry is part of the wire contract; changing it is
-breaking.
+9.1.1, `AgentCommand.output` together with every undeclared member inside a
+present block, and `AgentInput.positional` and `AgentInput.value_name`. Other
+optional schema v1 fields serialize as explicit `null` when absent. This
+asymmetry is part of the wire contract; changing it is breaking.
+
+`AgentInput.positional` is the one-based index clap assigns to a positional
+operand, and `AgentInput.value_name` is the CLI value placeholder. The adapter
+orders operands ahead of named flags by `positional`, so a consumer can
+reconstruct argument order from the context alone. Both fields are additive and
+omitted when absent, so the schema version stays `1`.
 
 `AgentInput.default` is a best-effort human-readable display. It is useful for
 selection and review, but it is not normative, executable, or
@@ -1016,6 +1022,10 @@ Schema v1 history:
   optional fields `selection` and `list_command` follow the omitted-when-absent
   rule, and the unsupported case remains byte-identical to
   `{ "supported": false }`.
+- `1` (extended by issue 717): `AgentInput.positional` and
+  `AgentInput.value_name` describe positional operands and their placeholders.
+  Both are optional and omitted when absent, so a flag-only command keeps its
+  previous byte encoding.
 
 ## 9. Current gaps to resolve
 
@@ -1041,9 +1051,10 @@ and 12 for the intended contracts:
 - unit subcommand variants and named-field subcommand variants are rejected by
   the documentation derive, which excludes both service-style command sets and
   the canonical clap idiom for three-level command trees;
-- positional arguments are unrepresentable: the IR models only long and short
-  flags, so `<url>`-style and `<src> <dst>`-style commands cannot be described
-  or emitted into agent context;
+- a struct that derives a clap trait but declares no clap argument is
+  indistinguishable from a configuration-only type, so its fields are
+  documented as generated flags until any one argument is declared (roadmap
+  12.3.1);
 - `OrthoConfigDocs` cannot be derived independently of `OrthoConfig`, so
   documenting a type also requires making it loadable from configuration
   layers, which excludes most subcommand argument structs;

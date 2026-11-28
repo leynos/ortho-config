@@ -79,6 +79,10 @@ pub struct RedactionFixtureConfig {
     pub inferred_secret: String,
 
     /// Reference only configurable through a file.
+    ///
+    /// `#[arg(skip)]` keeps clap from treating the field as an operand;
+    /// `skip_cli` alone only hides it from the generated loader parser.
+    #[arg(skip)]
     #[ortho_config(
         skip_cli,
         profile_field = "reference_only",

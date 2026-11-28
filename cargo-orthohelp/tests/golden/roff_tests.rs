@@ -14,6 +14,9 @@ use cargo_orthohelp::schema::{
 };
 use rstest::{fixture, rstest};
 
+#[path = "roff_positional_tests.rs"]
+mod positional_tests;
+
 #[fixture]
 fn default_headings() -> LocalizedHeadings {
     LocalizedHeadings {
@@ -143,6 +146,7 @@ fn golden_enum_rendering(mut minimal_metadata: LocalizedDocMetadata) {
                 "error".to_owned(),
             ],
             hide_in_help: false,
+            positional: None,
         }),
         env: None,
         file: None,
@@ -198,6 +202,7 @@ fn golden_environment_section(mut minimal_metadata: LocalizedDocMetadata) {
             value_optional: false,
             possible_values: vec![],
             hide_in_help: false,
+            positional: None,
         }),
         env: Some(EnvMetadata {
             var_name: "TEST_APP_PORT".to_owned(),

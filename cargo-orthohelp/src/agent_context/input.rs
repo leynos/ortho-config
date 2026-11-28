@@ -17,6 +17,9 @@ use super::default_display::normalize_default_display;
 /// non-positional fields with no long or short flag. Returned inputs populate
 /// name, long flag, value type, required state, default display, and enum
 /// values.
+///
+/// A positional operand is still invocable, so it is retained with
+/// `long: None` and the one-based `positional` index clap assigns.
 pub(super) fn build_input(field: &FieldMetadata) -> Option<ortho_config::AgentInput> {
     let cli = field.cli.as_ref()?;
     if cli.hide_in_help {
@@ -36,7 +39,39 @@ pub(super) fn build_input(field: &FieldMetadata) -> Option<ortho_config::AgentIn
             .as_ref()
             .map(|default| normalize_default_display(&default.display)),
         enum_values: enum_values(field),
+        positional: cli.positional.as_ref().map(|positional| positional.index),
+        value_name: if cli.takes_value {
+            cli.value_name.clone()
+        } else {
+            None
+        },
     })
+}
+
+/// Builds the input list for one command with operands first.
+///
+/// Positional operands lead in clap index order; named flags follow. The
+/// caller applies the final deterministic flag ordering, so this function only
+/// separates the two groups. An agent therefore reads operand order directly
+/// from the list rather than reconstructing it from the IR.
+pub(super) fn build_inputs(meta: &crate::schema::DocMetadata) -> Vec<ortho_config::AgentInput> {
+    let mut positionals: Vec<(u16, ortho_config::AgentInput)> = Vec::new();
+    let mut flags = Vec::new();
+    for field in &meta.fields {
+        let Some(input) = build_input(field) else {
+            continue;
+        };
+        match field.cli.as_ref().and_then(|cli| cli.positional.as_ref()) {
+            Some(positional) => positionals.push((positional.index, input)),
+            None => flags.push(input),
+        }
+    }
+    positionals.sort_by_key(|(index, _)| *index);
+    positionals
+        .into_iter()
+        .map(|(_, input)| input)
+        .chain(flags)
+        .collect()
 }
 
 /// Warn that a CLI-visible field has no invocable surface, so is dropped.
@@ -133,5 +168,23 @@ fn enum_values(field: &FieldMetadata) -> Vec<String> {
             .as_ref()
             .map(|cli| cli.possible_values.clone())
             .unwrap_or_default(),
+    }
+}
+
+/// Orders commands by path and each command's inputs for deterministic output.
+///
+/// Positional operands lead in clap index order, because a caller must supply
+/// them in that order; named flags follow, sorted by name. Without the index
+/// key, an agent could only infer operand order from the documentation IR.
+pub(super) fn sort_commands(commands: &mut [ortho_config::AgentCommand]) {
+    commands.sort_by(|left, right| left.path.cmp(&right.path));
+    for command in commands {
+        command.inputs.sort_by(|left, right| {
+            let left_key = (left.positional.is_none(), left.positional.unwrap_or(0));
+            let right_key = (right.positional.is_none(), right.positional.unwrap_or(0));
+            left_key
+                .cmp(&right_key)
+                .then_with(|| left.name.cmp(&right.name))
+        });
     }
 }

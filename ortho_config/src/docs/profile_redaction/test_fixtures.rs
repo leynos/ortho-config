@@ -55,6 +55,7 @@ fn cli(possible_values: &[&str]) -> CliMetadata {
         value_optional: false,
         possible_values: possible_values.iter().map(ToString::to_string).collect(),
         hide_in_help: false,
+        positional: None,
     }
 }
 
@@ -85,7 +86,7 @@ pub(super) fn doc(
     subcommands: Vec<DocMetadata>,
 ) -> DocMetadata {
     DocMetadata {
-        ir_version: "2.0".into(),
+        ir_version: "2.1".into(),
         app_name: app.into(),
         bin_name: None,
         about_id: format!("{app}.about"),

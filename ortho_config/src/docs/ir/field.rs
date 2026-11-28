@@ -88,6 +88,70 @@ pub struct CliMetadata {
     pub possible_values: Vec<String>,
     /// Whether the flag is hidden from help output.
     pub hide_in_help: bool,
+    /// Positional operand metadata, set only when the field is an operand.
+    ///
+    /// A positional has neither a long nor a short flag; renderers print its
+    /// value name instead of a flag spelling and order operands by `index`.
+    /// Omitted from the wire when absent so flag-only surfaces stay
+    /// byte-compatible with earlier IR, per ADR-0003.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub positional: Option<PositionalMetadata>,
+}
+
+/// Metadata describing one positional CLI operand.
+///
+/// The leaves model independent clap settings: an operand may accept several
+/// values, consume the remaining arguments without requiring `--`, and remain
+/// reachable only after `--`. Keeping them separate preserves every
+/// combination the underlying parser can declare.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct PositionalMetadata {
+    /// One-based positional index assigned by clap.
+    pub index: u16,
+    /// Whether the operand accepts more than one value.
+    pub variadic: bool,
+    /// Whether the operand consumes trailing arguments without requiring `--`.
+    pub var_arg: bool,
+    /// Whether the operand is reachable only through `--`.
+    pub last: bool,
+}
+
+impl PositionalMetadata {
+    /// Builds metadata for an ordinary positional at `index`.
+    ///
+    /// The independent clap settings default to `false`; apply the `with_*`
+    /// builders for a variadic, trailing-var-arg, or `--`-only operand.
+    #[must_use]
+    pub const fn new(index: u16) -> Self {
+        Self {
+            index,
+            variadic: false,
+            var_arg: false,
+            last: false,
+        }
+    }
+
+    /// Marks the operand as accepting more than one value.
+    #[must_use]
+    pub const fn with_variadic(mut self, variadic: bool) -> Self {
+        self.variadic = variadic;
+        self
+    }
+
+    /// Marks the operand as consuming trailing arguments without `--`.
+    #[must_use]
+    pub const fn with_var_arg(mut self, var_arg: bool) -> Self {
+        self.var_arg = var_arg;
+        self
+    }
+
+    /// Marks the operand as reachable only through `--`.
+    #[must_use]
+    pub const fn with_last(mut self, last: bool) -> Self {
+        self.last = last;
+        self
+    }
 }
 
 /// Environment variable documentation metadata.

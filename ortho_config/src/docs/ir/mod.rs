@@ -22,7 +22,8 @@ mod renderer;
 pub use behaviour::{BehaviourMetadata, InteractionKind, MutationKind};
 pub use content::{Example, Link, Note};
 pub use field::{
-    CliMetadata, DefaultValue, Deprecation, EnvMetadata, FieldMetadata, FileMetadata, ValueType,
+    CliMetadata, DefaultValue, Deprecation, EnvMetadata, FieldMetadata, FileMetadata,
+    PositionalMetadata, ValueType,
 };
 pub use output::{ExitClass, OutputMetadata, StdoutPurpose};
 pub use renderer::{
@@ -34,7 +35,7 @@ pub use renderer::{
 /// Top-level documentation metadata for a configuration command.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct DocMetadata {
-    /// IR schema version string (for example, "2.0").
+    /// IR schema version string (for example, "2.1").
     pub ir_version: String,
     /// Application name used for display and identifier generation.
     pub app_name: String,

@@ -15,23 +15,36 @@ expression: snapshot
       "canonical_verb": null,
       "inputs": [
         {
-          "name": "locator",
-          "long": "locator",
-          "value_type": "enum",
+          "name": "region",
+          "long": null,
+          "value_type": "string",
           "required": true,
-          "default": null,
-          "enum_values": []
+          "default": "String::from(\"eu-west\")",
+          "enum_values": [],
+          "positional": 1,
+          "value_name": "REGION"
         },
         {
           "name": "mode",
-          "long": "mode",
+          "long": null,
           "value_type": "enum",
-          "required": false,
+          "required": true,
           "default": "String::from(\"fast\")",
           "enum_values": [
             "fast",
             "safe"
-          ]
+          ],
+          "positional": 2,
+          "value_name": "MODE"
+        },
+        {
+          "name": "locator",
+          "long": "locator",
+          "value_type": "enum",
+          "required": false,
+          "default": null,
+          "enum_values": [],
+          "value_name": "LOCATOR"
         },
         {
           "name": "profile",
@@ -42,20 +55,13 @@ expression: snapshot
           "enum_values": []
         },
         {
-          "name": "region",
-          "long": "region",
-          "value_type": "string",
-          "required": false,
-          "default": "String::from(\"eu-west\")",
-          "enum_values": []
-        },
-        {
           "name": "token",
           "long": "token",
           "value_type": "enum",
-          "required": true,
+          "required": false,
           "default": null,
-          "enum_values": []
+          "enum_values": [],
+          "value_name": "TOKEN"
         }
       ],
       "output_modes": [],
@@ -90,7 +96,8 @@ expression: snapshot
           "value_type": "bool",
           "required": false,
           "default": "false",
-          "enum_values": []
+          "enum_values": [],
+          "value_name": "BOOL"
         },
         {
           "name": "profile",
@@ -104,9 +111,10 @@ expression: snapshot
           "name": "replacement",
           "long": "replacement",
           "value_type": "enum",
-          "required": true,
+          "required": false,
           "default": null,
-          "enum_values": []
+          "enum_values": [],
+          "value_name": "REPLACEMENT"
         }
       ],
       "output_modes": [],
@@ -224,7 +232,7 @@ expression: snapshot
           "rotate"
         ],
         "field_name": "replacement",
-        "key_path": "replacement",
+        "key_path": "cmds.orthohelp_fixture.replacement",
         "exposure": "secret"
       }
     ]

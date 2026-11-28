@@ -57,8 +57,10 @@ impl<'a> Validator<'a> {
                         codes::EXAMPLE_AMBIGUOUS_MANIFEST,
                         None,
                         format!(
-                            "manifest ID '{}' is declared more than once; \
-                             the example owner is ambiguous",
+                            concat!(
+                                "manifest ID '{}' is declared more than once; ",
+                                "the example owner is ambiguous",
+                            ),
                             example.manifest_id
                         ),
                     ),

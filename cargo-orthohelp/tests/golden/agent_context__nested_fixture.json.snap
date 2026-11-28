@@ -16,11 +16,13 @@ expression: snapshot
       "inputs": [
         {
           "name": "global",
-          "long": "global",
+          "long": null,
           "value_type": "string",
-          "required": false,
+          "required": true,
           "default": "String::from(\"workspace\")",
-          "enum_values": []
+          "enum_values": [],
+          "positional": 1,
+          "value_name": "GLOBAL"
         }
       ],
       "output_modes": [],
@@ -51,11 +53,13 @@ expression: snapshot
       "inputs": [
         {
           "name": "scope",
-          "long": "scope",
+          "long": null,
           "value_type": "string",
-          "required": false,
+          "required": true,
           "default": "String::from(\"local\")",
-          "enum_values": []
+          "enum_values": [],
+          "positional": 1,
+          "value_name": "SCOPE"
         }
       ],
       "output_modes": [],
@@ -91,7 +95,8 @@ expression: snapshot
           "value_type": "bool",
           "required": false,
           "default": "false",
-          "enum_values": []
+          "enum_values": [],
+          "value_name": "BOOL"
         }
       ],
       "output_modes": [],
@@ -196,17 +201,19 @@ expression: snapshot
       "canonical_verb": null,
       "inputs": [
         {
+          "name": "target",
+          "long": null,
+          "value_type": "string",
+          "required": false,
+          "default": null,
+          "enum_values": [],
+          "positional": 1,
+          "value_name": "TARGET"
+        },
+        {
           "name": "force",
           "long": "force",
           "value_type": "bool",
-          "required": true,
-          "default": null,
-          "enum_values": []
-        },
-        {
-          "name": "target",
-          "long": "target",
-          "value_type": "string",
           "required": false,
           "default": null,
           "enum_values": []
@@ -244,7 +251,8 @@ expression: snapshot
           "value_type": "bool",
           "required": false,
           "default": "false",
-          "enum_values": []
+          "enum_values": [],
+          "value_name": "BOOL"
         },
         {
           "name": "recipient",

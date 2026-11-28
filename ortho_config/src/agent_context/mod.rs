@@ -231,6 +231,19 @@ pub struct AgentInput {
     /// Allowed values for enum-like inputs.
     #[serde(default)]
     pub enum_values: Vec<String>,
+    /// One-based positional index when the input is an operand.
+    ///
+    /// Absent for named flags. An agent that supplies operands must order them
+    /// by this index, which is the same one-based index clap assigns.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub positional: Option<u16>,
+    /// CLI value placeholder when the input takes a value.
+    ///
+    /// Populated from `CliMetadata.value_name`, so an agent can show the
+    /// operand or option placeholder the documentation uses. Absent for
+    /// switches and for inputs with no declared placeholder.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub value_name: Option<String>,
 }
 
 /// Compact example command line and optional expected output mode.

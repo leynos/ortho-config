@@ -4,6 +4,23 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### Fixed (documentation metadata)
+
+- **Subcommand documentation metadata now describes the command line that
+  executes.** A field with an explicit clap `#[arg(...)]` declaration is
+  documented from that declaration, so positional operands are no longer
+  rendered as invented long flags and clap value names are preserved. Bare
+  `long` and `short` spellings follow the container's
+  `#[command(rename_all = "...")]` casing, and requiredness follows clap rather
+  than a Serde default. `OrthoConfigSubcommandDocs` now scopes environment
+  variables to `<PREFIX>_CMDS_<NAME>_` and file keys to `cmds.<name>`, and its
+  `about_id` follows the struct's declared `localization_base` (or the mounted
+  command path) so it agrees with `ABOUT_ID` and `ARG_IDS`. Roff synopses place
+  named flags before operands that consume the rest of the command line, with a
+  `--` delimiter before a `last` operand. The documentation IR gains optional
+  positional metadata and reports version `2.1`
+  ([#717](https://github.com/leynos/ortho-config/issues/717)).
+
 ### Fixed (root type validation)
 
 - **Bridge source injection through `root_type`.** `cargo-orthohelp` now

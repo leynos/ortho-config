@@ -134,7 +134,7 @@ impl DocMetadata {
     /// }
     ///
     /// let metadata = DocMetadata {
-    ///     ir_version: "2.0".into(),
+    ///     ir_version: "2.1".into(),
     ///     app_name: "demo".into(),
     ///     bin_name: None,
     ///     about_id: "demo.about".into(),
@@ -157,6 +157,7 @@ impl DocMetadata {
     ///             value_optional: false,
     ///             possible_values: vec!["hunter2".into()],
     ///             hide_in_help: false,
+    ///             positional: None,
     ///         }),
     ///         env: None,
     ///         file: None,

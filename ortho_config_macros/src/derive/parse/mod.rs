@@ -13,8 +13,11 @@
 use syn::{Attribute, Expr, LitStr};
 
 mod behaviour_attrs;
+mod clap_arg;
 mod clap_attrs;
+mod clap_command;
 mod clap_defaults;
+mod clap_rename;
 mod discovery_attrs;
 mod doc_attrs;
 mod doc_attrs_common;
@@ -33,11 +36,17 @@ mod tests;
 mod type_utils;
 
 pub(crate) use behaviour_attrs::parse_behaviour_meta;
+pub(crate) use clap_arg::{
+    ClapArgDecl, ClapPositionalDecl, inferred_argument_shape, parse_clap_arg_decl, value_name,
+};
 pub(crate) use clap_attrs::{
     clap_arg_id_from_attribute, clap_arg_id_or_field_name, clap_field_env, clap_field_is_flattened,
-    clap_field_is_subcommand, clap_variant_name, reject_subcommand_ortho_config_attrs,
+    clap_field_is_subcommand, is_clap_attribute, is_clap_command_attribute,
+    reject_subcommand_ortho_config_attrs,
 };
+pub(crate) use clap_command::{clap_rename_all, clap_variant_name};
 pub(crate) use clap_defaults::{ClapDefaultValue, ClapInferredDefault, clap_default_value};
+pub(crate) use clap_rename::ClapRenameAll;
 pub(crate) use discovery_attrs::{DiscoveryAttrs, MergeStrategy, parse_prefix};
 use doc_attrs::apply_field_doc_attr;
 pub(crate) use doc_types::{
@@ -45,8 +54,10 @@ pub(crate) use doc_types::{
     ExitClassAttr, HeadingOverrides, OutputAttrs, RenderWidthAttr, RendererFieldAttr,
     RendererRecordAttrs,
 };
-pub(crate) use field_attrs::{ProfileFieldAnnotation, ProfileFieldLabel, parse_field_attrs};
-pub(crate) use input::parse_input;
+pub(crate) use field_attrs::{
+    ProfileFieldAnnotation, ProfileFieldLabel, parse_field_attrs, parse_schema_field_attrs,
+};
+pub(crate) use input::{parse_input, parse_schema_input};
 #[cfg(any(test, doctest))]
 pub(crate) use literals::__doc_lit_str;
 /// Re-exported for the `lit` tests, which reach the helpers through this
@@ -61,8 +72,8 @@ pub(crate) use renderer_attrs::parse_renderer_meta;
 pub(crate) use serde_attrs::{
     SerdeRenameAll, serde_container_is_transparent, serde_deserialized_field_key,
     serde_field_aliases, serde_field_has_custom_deserializer, serde_field_is_flattened,
-    serde_field_rename, serde_field_skips_deserialization, serde_has_default, serde_rename_all,
-    serde_rename_rules, serde_serialized_field_key,
+    serde_field_rename, serde_field_skips_deserialization, serde_has_default, serde_rename_rules,
+    serde_serialized_field_key,
 };
 pub(crate) use struct_attrs::{discard_unknown, parse_ortho_config, parse_struct_attrs};
 pub(crate) use type_utils::{
@@ -93,6 +104,11 @@ pub(crate) struct StructAttrs {
     /// `--profile` flag, the `<PREFIX>PROFILE` selector, the profile merge
     /// layer, and `profiles.supported = true` in agent context.
     pub profiles: bool,
+    /// Container-level casing clap applies to derived argument names.
+    ///
+    /// Parsed from `#[command(rename_all = "...")]`; fields with literal
+    /// `long`/`short` spellings or an assigned `id` keep those verbatim.
+    pub clap_rename_all: ClapRenameAll,
     /// Documentation metadata copied into generated API documentation.
     pub doc: DocStructAttrs,
     /// Overrides the generated crate path for dependency aliasing.
@@ -170,6 +186,12 @@ pub(crate) struct FieldAttrs {
     pub merge_strategy: Option<MergeStrategy>,
     /// How the field participates in command-line parsing.
     pub cli: CliFieldMode,
+    /// Explicit clap argument declaration written on the field.
+    ///
+    /// Present when the author declared `#[arg(...)]`/`#[clap(...)]`; the
+    /// documentation IR then describes clap's surface rather than the
+    /// generated `OrthoConfig` parser's synthesised flags.
+    pub clap_arg: Option<ClapArgDecl>,
     /// Omits a clap-provided default from the CLI merge layer.
     pub cli_default_as_absent: bool,
     /// Opts the field's type into required-value schema composition.

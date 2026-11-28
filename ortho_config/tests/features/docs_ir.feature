@@ -4,7 +4,7 @@ Feature: OrthoConfigDocs IR
 
   Scenario: Deterministic documentation IDs are emitted
     When I request the docs metadata
-    Then the IR version is 2.0
+    Then the IR version is 2.1
     And the about id is demo-app-about
     And the help id for field log_level is demo-app-args-log_level-help
     And the long help id for field log_level is demo-app-args-log_level-long_help

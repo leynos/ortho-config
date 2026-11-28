@@ -1013,50 +1013,50 @@ This step answers whether the IR can describe the argument shape that
 any claim that agent context describes a command's invocation surface. See
 cargo-orthohelp-design.md §2.2.
 
-- [ ] 12.2.1. Add positional metadata to the documentation IR and derive.
+- [x] 12.2.1. Add positional metadata to the documentation IR and derive.
   - See cargo-orthohelp-design.md §2.2 and §12.
-  - [ ] Add `CliMetadata.positional: Option<PositionalMetadata>` carrying
+  - [x] Add `CliMetadata.positional: Option<PositionalMetadata>` carrying
     `index`, `variadic`, `var_arg`, and `last`.
-  - [ ] Stop emitting `long` unconditionally; derive positional metadata from
+  - [x] Stop emitting `long` unconditionally; derive positional metadata from
     `#[arg(index = …)]`, from the absence of `long` and `short`, from
     `num_args` for `variadic`, from `Arg::trailing_var_arg` for `var_arg`, and
     from `Arg::last` for `last`.
-  - [ ] Bump the IR minor version and record the additive change in the design
+  - [x] Bump the IR minor version and record the additive change in the design
     document's versioning section.
-  - [ ] Skip-serialize `CliMetadata.positional` when absent, using
+  - [x] Skip-serialize `CliMetadata.positional` when absent, using
     `#[serde(skip_serializing_if = "Option::is_none")]` in both
     hand-maintained copies of the type, `ortho_config/src/docs/ir/field.rs` and
     `cargo-orthohelp/src/schema/field.rs`, so flags-only IR omits the
     `positional` key rather than emitting `null`.
-  - [ ] Success: `git clone <url>` and `cp <src> <dst>` shapes round-trip
+  - [x] Success: `git clone <url>` and `cp <src> <dst>` shapes round-trip
     through `--format ir` with correct indices, while a flags-only command
     surface produces IR byte-identical to the previous version apart from the
     version string, with no `positional` key emitted.
 
-- [ ] 12.2.2. Render positionals in man and PowerShell output.
+- [x] 12.2.2. Render positionals in man and PowerShell output.
   - Requires 12.2.1.
   - See cargo-orthohelp-design.md §7.1 and §7.2.
-  - [ ] Order positionals by index in SYNOPSIS ahead of the options summary and
+  - [x] Order positionals by index in SYNOPSIS ahead of the options summary and
     render `value_name` rather than a flag spelling.
-  - [ ] Emit MAML `position` attributes and preserve `variadic`, `var_arg`, and
+  - [x] Emit MAML `position` attributes and preserve `variadic`, `var_arg`, and
     `last` as independent attributes. Reserve “accepting remaining input” for
     `var_arg`; `last` requires `--` and does not consume trailing input.
-  - [ ] Success: golden snapshots show `cp <src> <dst>` synopsis ordering, and
+  - [x] Success: golden snapshots show `cp <src> <dst>` synopsis ordering, and
     `Get-Help` reports the arguments as positional parameters rather than named
     ones.
 
-- [ ] 12.2.3. Carry positionals into agent context.
+- [x] 12.2.3. Carry positionals into agent context.
   - Requires 12.2.1.
   - See agent-native-cli-design.md §3.2 and §8.2;
     cargo-orthohelp-design.md §6.3.1.
-  - [ ] Extend `AgentInput` with positional metadata and stop discarding
+  - [x] Extend `AgentInput` with positional metadata and stop discarding
     flagless inputs that carry it.
-  - [ ] Keep discarding flagless, non-positional inputs; those are part of the
+  - [x] Keep discarding flagless, non-positional inputs; those are part of the
     configuration surface rather than the invocation surface, and the
     existing warning stays for that case.
-  - [ ] Confirm the change is additive under the agent-context compatibility
+  - [x] Confirm the change is additive under the agent-context compatibility
     policy and update the frozen wire snapshot deliberately.
-  - [ ] Success: an agent reading context for a `cp`-shaped command can
+  - [x] Success: an agent reading context for a `cp`-shaped command can
     reconstruct argument order without consulting the man page.
 
 ### 12.3. Separate documenting a type from loading it
@@ -1079,10 +1079,12 @@ cargo-orthohelp-design.md §3.1.
     the field identifier in `resolve_cli_field`, and which never invents the
     short flag that `resolve_short_flag` derives from the field name.
   - [ ] Emit environment and file metadata only where explicitly declared,
-    replacing the unconditional `env: Some(..), file: Some(..)` that
-    `render_io_block` produces today.
+    replacing the generated `env` and `file` values that `render_io_block`
+    produces for every field today.
   - [ ] Emit no runtime loaders, no `DeserializeOwned` bound assertion, and no
     merge machinery.
+  - [ ] Expand a flattened container into its descendant field metadata, so
+    child operands contribute their indices to later parent operands.
   - [ ] Success: a `#[derive(clap::Args)]` struct with required fields, no
     `Default`, and no `Deserialize` derives documentation metadata and appears
     in generated IR, and a field declared `#[arg(long = "endpoint")]` documents

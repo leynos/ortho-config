@@ -12,9 +12,9 @@ pub use ortho_config::docs::{
     ConfigFormat, DefaultValue, Deprecation, DocMetadata, DocProfilesMeta, EnvMetadata, Example,
     ExitClass, FieldMetadata, FileMetadata, HeadingIds, InheritancePolicy, InteractionKind, Link,
     MutationKind, Note, ORTHO_DOCS_IR_VERSION, OutputMetadata, PathPattern, PlainPolicy,
-    PrecedenceMeta, ProfileFieldExposure, RenderWidth, RendererField, RendererFieldLocalization,
-    RendererMetadata, RendererRecord, SectionsMetadata, SourceKind, StdoutPurpose, StreamContent,
-    TogglePolicy, TtyPolicy, ValueType, WindowsMetadata,
+    PositionalMetadata, PrecedenceMeta, ProfileFieldExposure, RenderWidth, RendererField,
+    RendererFieldLocalization, RendererMetadata, RendererRecord, SectionsMetadata, SourceKind,
+    StdoutPurpose, StreamContent, TogglePolicy, TtyPolicy, ValueType, WindowsMetadata,
 };
 
 #[cfg(test)]
