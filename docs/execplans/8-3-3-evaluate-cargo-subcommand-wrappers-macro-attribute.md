@@ -210,7 +210,7 @@ separately under `AGENTS.md` §Spelling.
 ## Surprises & discoveries
 
 - Observation: the floated syntax already compiles and silently does
-  nothing. Evidence: `parse_struct_attrs` sends unrecognised struct-level keys
+  nothing. Evidence: `parse_struct_attrs` sends unrecognized struct-level keys
   to `discard_unknown`
   (`ortho_config_macros/src/derive/parse/struct_attrs.rs:365-373`, `43-52`).
   The unit test `parse/tests/ortho_attrs_unknown_keys.rs:9-19` asserts that
@@ -255,7 +255,7 @@ separately under `AGENTS.md` §Spelling.
   documented templates as the only supported abstraction. The plan treats this
   as a hypothesis that EP-M1 can falsify. If any candidate passes G1 to G5, the
   prediction is wrong and the acceptance path runs.
-- D1. Decision: prototype by hand-written expansion, not by implementing
+- D1. Decision: prototype by handwritten expansion, not by implementing
   the macro first. Each candidate's expansion, meaning the code the macro would
   emit, is written by hand in one disposable integration-test target
   (`ortho_config/tests/cargo_wrapper_prototype.rs`, with submodules under
@@ -474,7 +474,7 @@ shape, keeping every variance point (v1 to v7 below) and dropping business
 logic. They are `orthohelp.rs`, `bdd.rs`, and `theorem.rs`. Each keeps its
 baseline shape exactly as the consumer writes it today.
 
-The candidate expansions are hand-written as the macro would emit them for the
+The candidate expansions are handwritten as the macro would emit them for the
 port's options type:
 
 - Candidate A, companion wrapper parser. A visible, documented
