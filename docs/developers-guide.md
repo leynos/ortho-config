@@ -453,10 +453,13 @@ kept.
 
 The trybuild binaries and the binaries that drive a nested `cargo` build used
 to pay for a cold dependency build inside their own timed bodies, so a cold
-runner failed a sound assertion on its timeout. The Makefile now runs those
-binaries once, through `cargo test --locked --all-features --no-fail-fast`,
-before the timed run. Two targets share two lists, and two entry points call
-them:
+runner failed a sound assertion on its timeout. The Makefile now runs the
+binaries it lists once, through
+`cargo test --locked --all-features --no-fail-fast`, before the timed run. The
+lists cover the trybuild, documentation-workspace and BDD binaries; the
+cargo-orthohelp bridge binaries (`golden_tests`, `cli_dispatch` and the
+agent-context ones) and `ortho_l10n --test boundary` are not in them (issues
+759 and 700). Two targets share two lists, and two entry points call them:
 
 - `make test` depends on `test-warmup`, which runs `NESTED_WARM_TESTS`: the
   binaries whose cold nested build is the most expensive and whose warm run is
@@ -468,8 +471,16 @@ them:
   before nextest starts any test whose binary the `[[profile.default.scripts]]`
   filter names. The script is selected by that filter, so it runs only when
   such a binary is in the run. `WARMUP_ENV=` clears the gate flags because the
-  coverage run supplies its own instrumented `RUSTFLAGS`, and a warm-up built
-  under other flags warms nothing. The heavy list holds the binaries whose test
+  coverage run supplies its own instrumented flags, and a warm-up built under
+  other flags warms nothing. The Makefile lifts its
+  `unexport CARGO_ENCODED_RUSTFLAGS` for that call (`cargo-llvm-cov` passes its
+  flags that way when they cannot be space-encoded), so the warm-up inherits
+  them whole. `WARMUP_FEATURES` carries the feature selection the same way: it
+  defaults to `--all-features`, and each coverage step in
+  `.github/workflows/ci.yml` sets it to that leg's `--features`, because
+  trybuild derives its scratch build's features from the test binary. Do not
+  clear `WARMUP_ENV` for `make test`: the warm-up would then build under other
+  flags from the gate it warms. The heavy list holds the binaries whose test
   bodies are long on a warm host (the generated documentation workspaces and
   the cargo-orthohelp scenarios) or whose cold build is a few seconds; nextest
   needs them because it terminates a test at its own allowance, and `make test`
@@ -491,9 +502,11 @@ compile, so no cap smaller than its own allowance can warm it (#755).
 The warm-up runs the trybuild harnesses rather than only building them, because
 trybuild builds its scratch project when it runs and offers no build-only mode.
 
-`make test` also passes `--no-fail-fast` to its workspace run, so a single
-environmental failure inside one trybuild scratch build (#643) cannot hide the
-binaries after it.
+`make test` also passes `--no-fail-fast` to its workspace run, so once the
+warm-up has succeeded a single environmental failure inside one trybuild
+scratch build (#643) cannot hide the binaries after it. A failure inside the
+warm-up itself still stops `make test` before the workspace run starts, with
+that failing binary's own output.
 
 #### Packaging must resolve the way a clean runner resolves
 
@@ -5676,16 +5689,16 @@ though it were the file's fault. The grammar was measured against humantime
 2.3.0, which is what the lockfile of the pinned cargo-nextest release resolves,
 by compiling that parser and running the cases through it. Naming the version
 matters: an earlier note here cited 2.4.0, which is the newest release rather
-than the one the shared coverage action installs, `cargo-nextest@0.9.120`. A
-value may carry a fractional part, and whitespace is tolerated around the
-point, so `1.5m` and `1 . 5 m` are both ninety seconds. Whitespace inside the
-number is ignored too, so `1 0s` is ten seconds and `1 2 . 3 4 s` is 12.34. The
-short spellings `wk`, `wks`, `yr` and `yrs` are units alongside the longer
-ones. The bare `0` is the one duration humantime reads without a unit, and it
-is the exact text: its parser special-cases `0` before reading a character, so
-`" 0 "` is refused and a reader that stripped whitespace first would accept a
-duration nextest rejects. Case is significant, so `m` is minutes and `M` is
-months.
+than the one the shared coverage action installs, `cargo-nextest@0.9.145`,
+whose lockfile resolves the same humantime 2.3.0. A value may carry a
+fractional part, and whitespace is tolerated around the point, so `1.5m` and
+`1 . 5 m` are both ninety seconds. Whitespace inside the number is ignored too,
+so `1 0s` is ten seconds and `1 2 . 3 4 s` is 12.34. The short spellings `wk`,
+`wks`, `yr` and `yrs` are units alongside the longer ones. The bare `0` is the
+one duration humantime reads without a unit, and it is the exact text: its
+parser special-cases `0` before reading a character, so `" 0 "` is refused and
+a reader that stripped whitespace first would accept a duration nextest
+rejects. Case is significant, so `m` is minutes and `M` is months.
 
 The watchdog is resolved at the innermost scope that declares it, blank
 included. GitHub takes the most specific declaration of an environment

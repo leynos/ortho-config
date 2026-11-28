@@ -37,9 +37,17 @@ BUILD_STANDARD ?= 1
 # that assign `RUSTFLAGS` on purpose and the gates that restate the standard.
 # `unexport` keeps the variable out of the recipes' environment, so the routes
 # this file states are the routes that run.
-# tests/workflow_contracts/build_standard_routing_test.py holds this directive
-# in place.
+#
+# The one exception is the warm-up run as nextest's setup script, which passes
+# `WARMUP_ENV=` on the command line (see `test-warmup` below). There the
+# coverage run supplies the flags, and `cargo-llvm-cov` hands them over as
+# `CARGO_ENCODED_RUSTFLAGS` when they cannot be space-encoded, so dropping the
+# variable would warm a different artefact from the run it warms. The
+# directive stays unconditional for every other way of running this file.
+# tests/workflow_contracts/build_standard_routing_test.py holds both halves.
+ifneq ($(origin WARMUP_ENV),command line)
 unexport CARGO_ENCODED_RUSTFLAGS
+endif
 STANDARD_THREADS_FLAG ?= -Zthreads=8
 # Cranelift disabled estate-wide on 14 November 2026 (concordat ADR; review 14 May 2027). Uncomment to opt back in.
 # STANDARD_BACKEND_FLAG ?= -Zcodegen-backend=cranelift
@@ -226,13 +234,15 @@ test: check-build-tools python-test-deps test-warmup ## Run tests with warnings 
 # second holds the binaries whose test bodies are heavy (generated workspaces,
 # the cargo-orthohelp scenarios) or whose cold build is a few seconds;
 # nextest's setup script adds them, because nextest terminates a test at its
-# own allowance. `ortho_l10n --test boundary` is in neither: it has its own
-# preparation step.
+# own allowance. These lists cover the trybuild, documentation-workspace and
+# BDD binaries only; the cargo-orthohelp bridge binaries (`golden_tests`,
+# `cli_dispatch` and the agent-context ones) and `ortho_l10n --test boundary`
+# are in neither (#759, #700).
 #
 # `.config/nextest.toml` runs `test-warmup-full` as its setup script, so the
 # lists live in one place. A failure here fails the run with the failing
 # test's own output rather than a later timeout. `--no-fail-fast` runs every
-# binary first, so the failure list is complete.
+# warm-up binary first, so the failure list is complete.
 NESTED_WARM_TESTS = \
 	-p ortho_config --test boolean_cli_trybuild --test compile_fail \
 	-p ortho_config_macros --test evidence_trybuild \
@@ -249,15 +259,25 @@ NESTED_WARM_TESTS_HEAVY = \
 # `WARMUP_ENV` is the compiler-flag assignment the warm-up builds under. It must
 # match the run it warms: a nested build under other flags is a different
 # artefact. `make test` passes the gate's flags; nextest's setup script clears
-# it, because the coverage run supplies its own instrumented `RUSTFLAGS`.
+# it, because the coverage run supplies its own instrumented flags, and then
+# inherits them whole (the `unexport` above is lifted for that case). Do not
+# clear it for `make test`: the warm-up would build under other flags from the
+# gate it warms.
 WARMUP_ENV ?= $(GATE_RUSTFLAGS)
+# `WARMUP_FEATURES` is the feature selection the warm-up builds with, for the
+# same reason: trybuild derives the features of its scratch build from the test
+# binary, so a warm-up built with other features warms a different artefact. The
+# default is the gate's. A coverage leg that selects features states them to
+# the setup script through this variable (see the `env:` of its step in
+# `.github/workflows/ci.yml`).
+WARMUP_FEATURES ?= --all-features
 test-warmup: ## Fill the nested Cargo target directories the timed tests start builds in
 	$(WARMUP_ENV) $(CARGO) fetch --locked
-	$(WARMUP_ENV) $(CARGO) test --locked --all-features --no-fail-fast $(NESTED_WARM_TESTS)
+	$(WARMUP_ENV) $(CARGO) test --locked $(WARMUP_FEATURES) --no-fail-fast $(NESTED_WARM_TESTS)
 
 test-warmup-full: ## test-warmup plus the heavier nested builders (nextest's setup script)
 	$(WARMUP_ENV) $(CARGO) fetch --locked
-	$(WARMUP_ENV) $(CARGO) test --locked --all-features --no-fail-fast $(NESTED_WARM_TESTS) $(NESTED_WARM_TESTS_HEAVY)
+	$(WARMUP_ENV) $(CARGO) test --locked $(WARMUP_FEATURES) --no-fail-fast $(NESTED_WARM_TESTS) $(NESTED_WARM_TESTS_HEAVY)
 
 # The boundary contracts are the evidence that an application depending on the
 # localization runtime alone never resolves the configuration facade, the derive

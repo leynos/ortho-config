@@ -331,6 +331,11 @@ jobs:
         # `llvm-cov-target` again. Linux keeps nested trybuild projects outside
         # this checkout; Windows also keeps the compiler command line short.
         uses: leynos/shared-actions/.github/actions/generate-coverage@0eabb6bc07148981de5da395e30cd78d83f5c7c2
+        env:
+          # The nextest setup script (`make test-warmup-full`) warms the nested
+          # builds with the features this leg tests, because trybuild derives
+          # its scratch build's features from the test binary.
+          WARMUP_FEATURES: --features 'serde_json toml json5 yaml metrics'
         with:
           output-path: lcov-serde-saphyr.info
           format: lcov
@@ -350,6 +355,8 @@ jobs:
         # Same short Windows target root as the first leg, and from the same
         # place: the step that chooses it republishes through GITHUB_ENV.
         uses: leynos/shared-actions/.github/actions/generate-coverage@0eabb6bc07148981de5da395e30cd78d83f5c7c2
+        env:
+          WARMUP_FEATURES: --features 'serde_json toml json5'
         with:
           output-path: lcov-no-serde-saphyr.info
           format: lcov
